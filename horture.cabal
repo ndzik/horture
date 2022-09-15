@@ -43,4 +43,10 @@ executable horture-exe
                     , horture-lib
                     , X11
                     , text
+                    , OpenGL
+                    , mtl
+                    , GLFW-b
+                    , GLUtil
+                    , raw-strings-qq
+                    , bytestring
     default-language: Haskell2010
