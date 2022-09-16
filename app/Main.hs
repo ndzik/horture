@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TypeApplications #-}
@@ -11,6 +12,8 @@ module Main where
 --                -> Upload image to GPU with OpenGL
 --                -> Postprocess and draw to window
 
+import Control.DeepSeq (force)
+import Control.Exception (evaluate)
 import Control.Monad.Except
 import Data.ByteString.Char8 (ByteString, pack)
 import Data.Word
@@ -19,6 +22,7 @@ import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
+import GHC.ForeignPtr
 import Graphics.GLUtil as Util hiding (throwError)
 import Graphics.Rendering.OpenGL as GL hiding (Color)
 import Graphics.Rendering.OpenGL.GL.Shaders.Uniform
@@ -27,11 +31,77 @@ import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11 hiding (resizeWindow)
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
+import System.Clock
 import System.Exit
 import Text.RawString.QQ
 
 main :: IO ()
-main = do
+main = main'''
+
+main'' :: IO ()
+main'' = do
+  dp <- openDisplay ""
+  let ds = defaultScreen dp
+      cm = defaultColormap dp ds
+  w <- rootWindow dp ds
+  attr <- getWindowAttributes dp w
+
+  let ww = fromIntegral $ wa_width attr
+      wh = fromIntegral $ wa_height attr
+      n = 6
+      loop :: Int -> IO Int
+      loop i = do
+        !img <-
+          getImage
+            dp
+            w
+            0
+            0
+            (fromIntegral ww)
+            (fromIntegral wh)
+            0xFFFFFFFF
+            zPixmap
+
+        ximageBytesPerLine img >>= \m -> print $ "BytesPerLine: " <> show m
+        ximageOffset img >>= \m -> print $ "Offset: " <> show m
+        ximagebitsPerPixel img >>= \m -> print $ "BitsPerPixel: " <> show m
+
+        -- GetPixel query.
+        let x = 1
+            y = 0
+            px = getPixel img x y
+        queryColor dp cm (Color (fromIntegral px) 0 0 0 0)
+          >>= \(Color _ r g b _) -> print $ "GetPixel: " <> show (r, g, b)
+
+        -- Custom query.
+        buf <- ximageData img
+        let stride = 4
+            -- 3840x1080
+            idx = 3840 * 1080 * stride
+        peekByteOff @Word8 buf (idx + 0)
+          >>= \r ->
+            peekByteOff @Word8 buf (idx + 4)
+              >>= \g ->
+                peekByteOff @Word8 buf (idx + 8)
+                  >>= \b -> print $ "Image Inspect: " <> show (r, g, b)
+        if i < n then loop (i + 1) else return i
+
+  start <- getTime Monotonic
+  r <- loop 0
+  end <- getTime Monotonic
+
+  let dt = nsec (end - start)
+      frameTime = fromIntegral dt / fromIntegral n
+
+  print $ "r: " <> show r
+  print $ "dt: " <> show dt
+  print $ "n: " <> show n
+  print $ "FrameTime (ms): " <> show (frameTime / (10 ^ 6))
+
+  print "Done..."
+
+main''' :: IO ()
+main''' = do
   glW <- initGLFW
   (vao, vbo, veo, prog) <- initResources
   dp <- openDisplay ""
@@ -50,8 +120,8 @@ main = do
   bindBuffer ElementArrayBuffer $= Just veo
   withArray vertsElement $ \ptr -> bufferData ElementArrayBuffer $= (fromIntegral vertsElementSize, ptr, StaticDraw)
 
-  let ww = 512 -- wa_width attr
-      wh = 512 -- wa_height attr
+  let ww = fromIntegral $ wa_width attr
+      wh = fromIntegral $ wa_height attr
       update = do
         (glww, glwh) <- GLFW.getWindowSize glW
         i <-
@@ -63,7 +133,80 @@ main = do
             (fromIntegral ww)
             (fromIntegral wh)
             0xFFFFFFFF
-            xyPixmap
+            -- zPixmap required!
+            -- https://stackoverflow.com/questions/34662275/xgetimage-takes-a-lot-of-time-to-run
+            zPixmap
+
+        src <- ximageData i
+        let pixelData = PixelData RGBA UnsignedByte src
+
+        tex <- genObjectName @TextureObject
+        textureBinding Texture2D $= Just tex
+        texImage2D
+          Texture2D
+          NoProxy
+          0
+          RGBA'
+          (TextureSize2D (fromIntegral ww) (fromIntegral wh))
+          0
+          pixelData
+
+        generateMipmap' Texture2D
+        activeTexture $= TextureUnit 0
+        texUniform <- uniformLocation prog "texture1"
+        uniform @GLint texUniform $= 0
+
+        destroyImage i
+
+        GL.clearColor $= Color4 0.1 0.1 0.1 1
+        GL.clear [ColorBuffer]
+
+        bindVertexArrayObject $= Just vao
+        drawElements Triangles 6 UnsignedInt nullPtr
+
+        GLFW.swapBuffers glW
+        GLFW.pollEvents
+        update
+
+  update
+  print "Done..."
+
+main' :: IO ()
+main' = do
+  glW <- initGLFW
+  (vao, vbo, veo, prog) <- initResources
+  dp <- openDisplay ""
+  let ds = defaultScreen dp
+      cm = defaultColormap dp ds
+  w <- rootWindow dp ds
+  attr <- getWindowAttributes dp w
+
+  bindVertexArrayObject $= Just vao
+  bindBuffer ArrayBuffer $= Just vbo
+  withArray verts $ \ptr -> bufferData ArrayBuffer $= (fromIntegral planeVertsSize, ptr, StaticDraw)
+  vertexAttribPointer (AttribLocation 0) $= (ToFloat, VertexArrayDescriptor 3 Float (fromIntegral $ 5 * floatSize) (plusPtr nullPtr 0))
+  vertexAttribArray (AttribLocation 0) $= Enabled
+  vertexAttribPointer (AttribLocation 1) $= (ToFloat, VertexArrayDescriptor 2 Float (fromIntegral $ 5 * floatSize) (plusPtr nullPtr (3 * floatSize)))
+  vertexAttribArray (AttribLocation 1) $= Enabled
+  bindBuffer ElementArrayBuffer $= Just veo
+  withArray vertsElement $ \ptr -> bufferData ElementArrayBuffer $= (fromIntegral vertsElementSize, ptr, StaticDraw)
+
+  let ww = fromIntegral $ wa_width attr
+      wh = fromIntegral $ wa_height attr
+      update = do
+        (glww, glwh) <- GLFW.getWindowSize glW
+        i <-
+          getImage
+            dp
+            w
+            0
+            0
+            (fromIntegral ww)
+            (fromIntegral wh)
+            0xFFFFFFFF
+            -- zPixmap required!
+            -- https://stackoverflow.com/questions/34662275/xgetimage-takes-a-lot-of-time-to-run
+            zPixmap
 
         -- TODO: Make efficient...
         let sz = ww * wh
@@ -136,6 +279,44 @@ imgPtr (Image p) = p
 
 szCInt :: Int
 szCInt = sizeOf @CInt undefined
+
+ximageData :: Image -> IO (Ptr Word8)
+ximageData (Image p) = peek (plusPtr @Image @(Ptr CIntPtr) p xdataPtr) >>= \buf -> return . castPtr $ buf
+  where
+    szCint = sizeOf @CInt undefined
+    xdataPtr = 4 * szCint
+
+ximagebitsPerPixel :: Image -> IO CInt
+ximagebitsPerPixel (Image p) = peekByteOff @CInt (castPtr p) xbitsPerPixel
+  where
+    szCint = sizeOf @CInt undefined
+    szPtr = sizeOf @CIntPtr undefined
+    xbitsPerPixel = 4 * szCint + szPtr + 6 * szCint
+
+ximageBytesPerLine :: Image -> IO CInt
+ximageBytesPerLine (Image p) = peekByteOff @CInt (castPtr p) xbytesPerLine
+  where
+    szCint = sizeOf @CInt undefined
+    szPtr = sizeOf @CIntPtr undefined
+    xbytesPerLine = 4 * szCint + szPtr + 5 * szCint
+
+ximageOffset :: Image -> IO CInt
+ximageOffset (Image p) = peekByteOff @CInt (castPtr p) xoffset
+  where
+    szCint = sizeOf @CInt undefined
+    szPtr = sizeOf @CIntPtr undefined
+    xwidth = 0
+    xheight = szCint
+    xoffset = 2 * szCint
+    xformat = 3 * szCint
+    xdataPtr = 4 * szCint
+    xbyteorder = 4 * szCint + szPtr
+    xbitmapUnit = 4 * szCint + szPtr + szCint
+    xbitmapBitOrder = 4 * szCint + szPtr + 2 * szCint
+    xbitmapPad = 4 * szCint + szPtr + 3 * szCint
+    xdepth = 4 * szCint + szPtr + 4 * szCint
+    xbytesPerLine = 4 * szCint + szPtr + 5 * szCint
+    xbitsPerPixel = 4 * szCint + szPtr + 6 * szCint
 
 initGLFW :: IO GLFW.Window
 initGLFW = do
