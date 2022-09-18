@@ -27,8 +27,7 @@ library horture-lib
     -- Modules included in this library but not exported.
     -- other-modules:
 
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
+    -- LANGUAGE extensions used by modules in this package. other-extensions:
     build-depends:    base ^>=4.14.3.0
     ghc-options:
                     -Wall
@@ -39,6 +38,9 @@ library horture-lib
 executable horture-exe
     hs-source-dirs:   app
     main-is:          Main.hs
+    ghc-options:
+                    -fno-warn-name-shadowing
+                    -threaded
     build-depends:    base ^>=4.14.3.0
                     , horture-lib
                     , X11
@@ -51,4 +53,5 @@ executable horture-exe
                     , bytestring
                     , clock
                     , deepseq
+                    , synchronous-channels
     default-language: Haskell2010

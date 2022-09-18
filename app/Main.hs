@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Main where
@@ -12,10 +13,16 @@ module Main where
 --                -> Upload image to GPU with OpenGL
 --                -> Postprocess and draw to window
 
+import Control.Concurrent (forkIO, forkOS)
+import Control.Concurrent.Chan.Synchronous
 import Control.DeepSeq (force)
 import Control.Exception (evaluate)
 import Control.Monad.Except
+import Data.Bits
 import Data.ByteString.Char8 (ByteString, pack)
+import Data.Functor ((<&>))
+import Data.List (find)
+import Data.Maybe
 import Data.Word
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
@@ -36,7 +43,174 @@ import System.Exit
 import Text.RawString.QQ
 
 main :: IO ()
-main = main'''
+main = findTest
+
+updateTest :: IO ()
+updateTest = do
+  dp <- openDisplay ""
+  let ds = defaultScreen dp
+      cm = defaultColormap dp ds
+  w <- rootWindow dp ds
+  Just w <- findClassName dp w "private"
+  attr <- getWindowAttributes dp w
+  print $ "Window with ID: " <> show w
+  print $ "Initial window dimension: " <> show (wa_width attr, wa_height attr)
+  print $ "Window your event mask: " <> (show . wa_your_event_mask $ attr)
+  print $ "Window all event mask: " <> (show . wa_all_event_masks $ attr)
+  -- NOTE: Need to set the events we are interested in ON the window we are
+  -- listening on!
+  allocaSetWindowAttributes $ \ptr -> do
+    _ <- set_event_mask ptr structureNotifyMask
+    changeWindowAttributes dp w cWEventMask ptr
+
+  chan <- newChan @(CInt, CInt)
+  forkIO (listenResizeEvent dp w chan)
+
+  print "Trying to read..."
+  go dp w chan
+  print "Done..."
+  where
+    go dp w chan = do
+      tryReadChan chan >>= \case
+        Success newSize -> print newSize
+        _ -> return ()
+      go dp w chan
+
+findTest :: IO ()
+findTest = do
+  glW <- initGLFW
+  (vao, vbo, veo, prog) <- initResources
+  dp <- openDisplay ""
+  let ds = defaultScreen dp
+      cm = defaultColormap dp ds
+  w <- rootWindow dp ds
+  Just w <- findClassName dp w "private"
+  attr <- getWindowAttributes dp w
+
+  -- NOTE: Need to set the events we are interested in ON the window we are
+  -- listening on!
+  allocaSetWindowAttributes $ \ptr -> do
+    _ <- set_event_mask ptr structureNotifyMask
+    changeWindowAttributes dp w cWEventMask ptr
+
+  chan <- newChan @(CInt, CInt)
+  forkOS (listenResizeEvent dp w chan)
+
+  -- NOTE: A RUNNING compositemanager is ALSO required!
+  res <- xCompositeQueryExtension dp
+  when (isNothing res) $
+    print "xCompositeExtension is missing!" >> exitFailure
+
+  xCompositeRedirectWindow dp w CompositeRedirectAutomatic
+
+  bindVertexArrayObject $= Just vao
+  bindBuffer ArrayBuffer $= Just vbo
+  withArray verts $ \ptr -> bufferData ArrayBuffer $= (fromIntegral planeVertsSize, ptr, StaticDraw)
+  vertexAttribPointer (AttribLocation 0) $= (ToFloat, VertexArrayDescriptor 3 Float (fromIntegral $ 5 * floatSize) (plusPtr nullPtr 0))
+  vertexAttribArray (AttribLocation 0) $= Enabled
+  vertexAttribPointer (AttribLocation 1) $= (ToFloat, VertexArrayDescriptor 2 Float (fromIntegral $ 5 * floatSize) (plusPtr nullPtr (3 * floatSize)))
+  vertexAttribArray (AttribLocation 1) $= Enabled
+  bindBuffer ElementArrayBuffer $= Just veo
+  withArray vertsElement $ \ptr -> bufferData ElementArrayBuffer $= (fromIntegral vertsElementSize, ptr, StaticDraw)
+
+  tex <- genObjectName @TextureObject
+  pm <- xCompositeNameWindowPixmap dp w
+
+  -- Use compositeoverlaywindow for masking:
+  --     Window overlay_window = XCompositeGetOverlayWindow(display, root);
+  --     Make GLFW Window with proper size and location child of overlay_window
+  --     via reparenting.
+  --     DONE?!
+
+  let update pm (ww, wh) = do
+        start <- getTime Monotonic
+
+        (pm, (ww, wh)) <-
+          tryReadChan chan >>= \case
+            Success newSize -> do
+              print "Window update caught!"
+              freePixmap dp pm
+              pm <- xCompositeNameWindowPixmap dp w
+              return (pm, newSize)
+            _ -> return (pm, (ww, wh))
+
+        (glww, glwh) <- GLFW.getWindowSize glW
+        i <-
+          getImage
+            dp
+            pm
+            0
+            0
+            (fromIntegral ww)
+            (fromIntegral wh)
+            0xFFFFFFFF
+            -- zPixmap required!
+            -- https://stackoverflow.com/questions/34662275/xgetimage-takes-a-lot-of-time-to-run
+            zPixmap
+
+        src <- ximageData i
+        let pixelData = PixelData BGRA UnsignedByte src
+        textureBinding Texture2D $= Just tex
+        texImage2D
+          Texture2D
+          NoProxy
+          0
+          RGBA'
+          (TextureSize2D (fromIntegral ww) (fromIntegral wh))
+          0
+          pixelData
+
+        generateMipmap' Texture2D
+        activeTexture $= TextureUnit 0
+        texUniform <- uniformLocation prog "texture1"
+        uniform @GLint texUniform $= 0
+
+        destroyImage i
+
+        GL.clearColor $= Color4 0.1 0.1 0.1 1
+        GL.clear [ColorBuffer]
+
+        bindVertexArrayObject $= Just vao
+        drawElements Triangles 6 UnsignedInt nullPtr
+
+        GLFW.swapBuffers glW
+        GLFW.pollEvents
+
+        end <- getTime Monotonic
+        let dt = nsec (end - start)
+            frameTime = fromIntegral dt / (10 ^ 6)
+        print $ "Frametime: " <> show frameTime <> " ms"
+
+        update pm (ww, wh)
+
+  update pm (wa_width attr, wa_height attr)
+  print "Done..."
+
+xtest :: IO ()
+xtest = do
+  dp <- openDisplay ""
+  let ds = defaultScreen dp
+      cm = defaultColormap dp ds
+  w <- rootWindow dp ds
+  (root, parent, childs) <- queryTree dp w
+  res <-
+    mapM
+      ( \c ->
+          fetchName dp c >>= \case
+            Nothing -> return ("", c)
+            Just w -> return (w, c)
+      )
+      childs
+      <&> filter ((/=) "" . fst)
+
+  alloca $ \ptr -> do
+    mapM
+      ( \c -> do
+          s <- xGetTextProperty dp c ptr wM_CLASS
+          when (s /= 0) $ peek ptr >>= wcTextPropertyToTextList dp >>= print
+      )
+      childs
+  print "Done..."
 
 main'' :: IO ()
 main'' = do
@@ -138,7 +312,7 @@ main''' = do
             zPixmap
 
         src <- ximageData i
-        let pixelData = PixelData RGBA UnsignedByte src
+        let pixelData = PixelData BGRA UnsignedByte src
 
         tex <- genObjectName @TextureObject
         textureBinding Texture2D $= Just tex
@@ -399,3 +573,43 @@ void main() {
   frag_colour = texture(texture1, texCoord);
 }
     |]
+
+listenResizeEvent :: Display -> Window -> Chan (CInt, CInt) -> IO ()
+listenResizeEvent dp w c = go
+  where
+    go = do
+      allocaXEvent $ \evptr -> do
+        doIt <- checkWindowEvent dp w structureNotifyMask evptr
+        when doIt $ do
+          w' <- get_Window evptr
+          getEvent evptr >>= \case
+            ConfigureEvent {..} -> writeChan c (ev_width, ev_height)
+            _ -> return ()
+      go
+
+findClassName :: Display -> Window -> String -> IO (Maybe Window)
+findClassName dp w n = do
+  (root, parent, childs) <- queryTree dp w
+  alloca $ \ptr -> do
+    res <-
+      mapM
+        ( \c -> do
+            s <- xGetTextProperty dp c ptr wM_CLASS
+            if s /= 0
+              then
+                peek ptr
+                  >>= wcTextPropertyToTextList dp
+                  >>= \ss ->
+                    case find (n ==) ss of
+                      Nothing -> return (Nothing @Window)
+                      Just _ -> print ss >> return (Just c)
+              else return (Nothing @Window)
+        )
+        childs
+    case res of
+      [] -> return Nothing
+      fs -> case filter (/= Nothing) fs of
+        -- Xlib how to keep drawing unfocused window:
+        -- https://linux.die.net/man/3/xcompositenamewindowpixmap
+        xs@(_ : _) -> return . last $ xs
+        _ -> return Nothing
