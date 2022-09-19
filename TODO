@@ -1,0 +1,24 @@
+# Possible performance optimizations
+
+* Use getShmImage extension for X11 server.
+* TODO: Use double buffering when creating the texture, s.t. we do not
+  need to wait for OpenGL to finish drawing a frame before updating to
+  a new one?
+  Fetch xImage in separate thread -> push into pipeline for main
+  thread with ptr to preexisting texture?
+* Use compositeoverlaywindow for masking:
+   Window overlay_window = XCompositeGetOverlayWindow(display, root);
+   Make GLFW Window with proper size and location child of overlay_window
+   via reparenting.
+   DONE?!
+    -- overlay <- xCompositeGetOverlayWindow dp root
+    -- xCompositeRedirectWindow dp w CompositeRedirectAutomatic
+    -- mapWindow dp overlay
+    -- reparentWindow dp meW overlay 0 0
+
+# Notes
+* NOTE: Need to set the events we are interested in ON the window we are
+  listening on!
+* NOTE: A RUNNING compositemanager is ALSO required! MAYBE?
+* zPixmap required!
+  https://stackoverflow.com/questions/34662275/xgetimage-takes-a-lot-of-time-to-run
