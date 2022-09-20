@@ -41,6 +41,7 @@ library horture-lib
                     , deepseq
                     , synchronous-channels
                     , containers
+                    , linear
     ghc-options:
                     -Wall
                     -fno-warn-name-shadowing
@@ -70,4 +71,5 @@ executable horture-exe
                     , synchronous-channels
                     , containers
                     , optparse-applicative
+                    , linear
     default-language: Haskell2010

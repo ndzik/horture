@@ -8,7 +8,7 @@ module Horture
   ( SizeUpdate (..),
     hortureName,
     listenResizeEvent,
-    resizeWindow,
+    resizeWindow',
     verts,
     floatSize,
     planeVertsSize,
@@ -17,10 +17,17 @@ module Horture
     ximageData,
     initResources,
     initGLFW,
+    m44ToGLmatrix,
+    modelForAspectRatio,
+    projectionForAspectRatio,
+    degToRad,
+    identityM44,
+    x11UserGrabWindow,
   )
 where
 
 import Control.Monad.Except
+import Data.Bits
 import Data.ByteString.Char8 (ByteString, pack)
 import Data.Functor ((<&>))
 import Data.IORef
@@ -31,11 +38,14 @@ import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Foreign.Storable
 import Graphics.GLUtil as Util hiding (throwError)
+import Graphics.GLUtil.Camera3D as Util
 import Graphics.Rendering.OpenGL as GL hiding (Color, flush)
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11 hiding (resizeWindow)
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
+import Linear.Matrix
+import Linear.V4
 import System.Clock
 import System.Exit
 import Text.RawString.QQ
@@ -129,7 +139,7 @@ xtest = do
   print "Done..."
 
 verts :: [Float]
-verts = [-1, -1, 0, 0, 1, -1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, -1, 0, 1, 1]
+verts = [-1, -1, -1, 0, 1, -1, 1, -1, 0, 0, 1, 1, -1, 1, 0, 1, -1, -1, 1, 1]
 
 vertsElement :: [GLuint]
 vertsElement = [0, 1, 2, 0, 2, 3]
@@ -200,6 +210,7 @@ initGLFW = do
   GLFW.windowHint $ GLFW.WindowHint'FocusOnShow False
   GLFW.windowHint $ GLFW.WindowHint'Focused False
   GLFW.windowHint $ GLFW.WindowHint'Decorated False
+  GLFW.windowHint $ GLFW.WindowHint'MousePassthrough True
   win <-
     GLFW.createWindow 1024 1024 hortureName Nothing Nothing >>= \case
       Nothing -> throwError . userError $ "Failed to create GLFW window"
@@ -209,8 +220,8 @@ initGLFW = do
 
   return win
 
-resizeWindow :: GLFW.WindowSizeCallback
-resizeWindow _ w h = do
+resizeWindow' :: GLFW.WindowSizeCallback
+resizeWindow' _ w h = do
   -- TODO: GLFW.resizeWindow here?
   GL.viewport $= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
 
@@ -239,12 +250,6 @@ initResources = do
   bindBuffer ArrayBuffer $= Just veo
   return (vao, vbo, veo, prog)
 
-iterate' :: Monad m => (Int -> Bool) -> (Int -> m ()) -> m ()
-iterate' b f = go 0 b f
-  where
-    go :: Monad m => Int -> (Int -> Bool) -> (Int -> m ()) -> m ()
-    go n b f = when (b n) $ f n >> go (n + 1) b f
-
 hortureVertexShader :: ByteString
 hortureVertexShader =
   pack
@@ -253,11 +258,14 @@ hortureVertexShader =
 
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aTexCoord;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 proj;
 
 out vec2 texCoord;
 
 void main() {
-  gl_Position = vec4(aPos, 1.0);
+  gl_Position = proj * view * model * vec4(aPos, 1.0);
   texCoord = aTexCoord;
 }
    |]
@@ -280,6 +288,25 @@ void main() {
     |]
 
 data SizeUpdate = GLFWUpdate (Int, Int) | XUpdate (CInt, CInt) deriving (Show, Eq)
+
+x11UserGrabWindow :: IO (Maybe Window)
+x11UserGrabWindow = do
+  dp <- openDisplay ""
+  let ds = defaultScreen dp
+  root <- rootWindow dp ds
+  cursor <- createFontCursor dp xC_crosshair
+  grabPointer dp root False (buttonMotionMask .|. buttonPressMask .|. buttonReleaseMask) grabModeAsync grabModeAsync root cursor currentTime
+
+  userDecision <- allocaXEvent $ \evptr -> do
+    nextEvent dp evptr
+    getEvent evptr >>= \case
+      ButtonEvent {..} -> return . Just $ ev_subwindow
+      _ -> return Nothing
+
+  ungrabPointer dp currentTime
+  freeCursor dp cursor
+  closeDisplay dp
+  return userDecision
 
 listenResizeEvent :: Display -> Window -> GLFW.Window -> IORef (Drawable, (CInt, CInt)) -> IO ()
 listenResizeEvent dp w glW r = go
@@ -331,3 +358,37 @@ findClassName dp w n = do
 
 hortureName :: String
 hortureName = "horture"
+
+identityM44 :: M44 Float
+identityM44 =
+  V4
+    (V4 1 0 0 0)
+    (V4 0 1 0 0)
+    (V4 0 0 1 0)
+    (V4 0 0 0 1)
+
+m44ToGLmatrix :: (Show a, MatrixComponent a) => M44 a -> IO (GLmatrix a)
+m44ToGLmatrix m = withNewMatrix ColumnMajor (\p -> poke (castPtr p) m')
+  where
+    m' = transpose m
+
+degToRad :: Float -> Float
+degToRad = (*) (pi / 180)
+
+modelForAspectRatio :: (Float, Float) -> M44 Float
+modelForAspectRatio (ww, wh) = model
+  where
+    ident = identityM44
+    aspectRatio = ww / wh
+    scaling =
+      V4
+        (V4 aspectRatio 0 0 0)
+        (V4 0 1 0 0)
+        (V4 0 0 1 0)
+        (V4 0 0 0 1)
+    model = scaling * ident
+
+projectionForAspectRatio :: (Float, Float) -> M44 Float
+projectionForAspectRatio (ww, wh) = proj
+  where
+    proj = Util.projectionMatrix (degToRad 90) (ww / wh) 1 100

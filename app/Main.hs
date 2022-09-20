@@ -24,55 +24,27 @@ import Foreign.Ptr
 import Foreign.Storable
 import GHC.ForeignPtr
 import Graphics.GLUtil as Util hiding (throwError)
+import Graphics.GLUtil.Camera3D as Util
 import Graphics.Rendering.OpenGL as GL hiding (Color, flush)
 import qualified Graphics.UI.GLFW as GLFW
-import Graphics.X11 hiding (resizeWindow)
+import Graphics.X11
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
 import Horture
-import Options.Applicative
-  ( Parser,
-    argument,
-    auto,
-    execParser,
-    fullDesc,
-    help,
-    helper,
-    info,
-    long,
-    metavar,
-    progDesc,
-    short,
-    (<**>),
-  )
+import Linear.Matrix
+import Linear.V4
 import System.Clock
 import System.Exit
 import Text.RawString.QQ
 
-newtype CmdLineArgs = CLA
-  { target :: Window
-  }
-
 main :: IO ()
-main = execParser opts >>= main'
-  where
-    opts =
-      info
-        (cmdLineParser <**> helper)
-        (fullDesc <> progDesc "Horture yourself 🤡")
+main =
+  x11UserGrabWindow >>= \case
+    Nothing -> print "No window to horture yourself on selected 🤨, aborting" >> exitFailure
+    Just w -> main' w
 
-cmdLineParser :: Parser CmdLineArgs
-cmdLineParser =
-  CLA
-    <$> argument
-      (auto @Window)
-      ( metavar "WINDOW_ID"
-          <> help
-            "Target window id to 'horture'."
-      )
-
-main' :: CmdLineArgs -> IO ()
-main' (CLA w) = do
+main' :: Window -> IO ()
+main' w = do
   glW <- initGLFW
   (vao, vbo, veo, prog) <- initResources
   dp <- openDisplay ""
@@ -82,8 +54,13 @@ main' (CLA w) = do
 
   Just (_, meW) <- findMe root dp hortureName
   allocaSetWindowAttributes $ \ptr -> do
-    _ <- set_override_redirect ptr True
+    set_event_mask ptr noEventMask
     changeWindowAttributes dp meW cWEventMask ptr
+    set_border_pixel ptr 0
+    changeWindowAttributes dp meW cWBorderPixel ptr
+  GLFW.setCursorInputMode glW GLFW.CursorInputMode'Hidden
+  GLFW.setStickyKeysInputMode glW GLFW.StickyKeysInputMode'Disabled
+  GLFW.setStickyMouseButtonsInputMode glW GLFW.StickyMouseButtonsInputMode'Disabled
 
   attr <- getWindowAttributes dp w
   allocaSetWindowAttributes $ \ptr -> do
@@ -114,7 +91,7 @@ main' (CLA w) = do
 
   let ww = wa_width attr
       wh = wa_height attr
-  GLFW.setFramebufferSizeCallback glW (Just resizeWindow)
+  GLFW.setFramebufferSizeCallback glW (Just resizeWindow')
 
   let !anyPixelData = PixelData BGRA UnsignedInt8888Rev nullPtr
   textureBinding Texture2D $= Just tex01
@@ -127,7 +104,19 @@ main' (CLA w) = do
     0
     anyPixelData
 
-  GLFW.setWindowSize glW (fromIntegral $ wa_width attr) (fromIntegral $ wa_height attr)
+  let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
+  projectionUniform <- uniformLocation prog "proj"
+  m44ToGLmatrix proj >>= (uniform projectionUniform $=)
+
+  let view = Util.camMatrix (Util.fpsCamera @Float)
+  viewUniform <- uniformLocation prog "view"
+  m44ToGLmatrix view >>= (uniform viewUniform $=)
+
+  let model = curry modelForAspectRatio (fromIntegral ww) (fromIntegral wh)
+  modelUniform <- uniformLocation prog "model"
+  m44ToGLmatrix model >>= (uniform modelUniform $=)
+
+  GLFW.setWindowSize glW (fromIntegral . wa_width $ attr) (fromIntegral . wa_height $ attr)
   GLFW.setWindowPos glW (fromIntegral . wa_x $ attr) (fromIntegral . wa_y $ attr)
   let update pm (ww, wh) = do
         i <-
@@ -190,6 +179,16 @@ main' (CLA w) = do
                     (TextureSize2D (fromIntegral ev_width) (fromIntegral ev_height))
                     0
                     anyPixelData
+
+
+                  let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
+                  projectionUniform <- uniformLocation prog "proj"
+                  m44ToGLmatrix proj >>= (uniform projectionUniform $=)
+
+                  let model = curry modelForAspectRatio (fromIntegral ww) (fromIntegral wh)
+                  modelUniform <- uniformLocation prog "model"
+                  m44ToGLmatrix model >>= (uniform modelUniform $=)
+
                   return (newPm, (ev_width, ev_height))
                 _ -> return (pm, (ww, wh))
             else return (pm, (ww, wh))

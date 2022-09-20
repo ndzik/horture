@@ -15,6 +15,9 @@
     -- xCompositeRedirectWindow dp w CompositeRedirectAutomatic
     -- mapWindow dp overlay
     -- reparentWindow dp meW overlay 0 0
+* Use compositor instead of GLFW workaround...
+    -- set_override_redirect ptr True
+    -- changeWindowAttributes dp meW cWOverrideRedirect ptr
 
 # Notes
 * NOTE: Need to set the events we are interested in ON the window we are
