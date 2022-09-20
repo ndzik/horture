@@ -18,7 +18,7 @@ module Horture
     initResources,
     initGLFW,
     m44ToGLmatrix,
-    modelForAspectRatio,
+    scaleForAspectRatio,
     projectionForAspectRatio,
     degToRad,
     identityM44,
@@ -261,11 +261,12 @@ layout (location = 1) in vec2 aTexCoord;
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 proj;
+uniform float dt;
 
 out vec2 texCoord;
 
 void main() {
-  gl_Position = proj * view * model * vec4(aPos, 1.0);
+  gl_Position = proj * view * model * vec4(aPos.x, aPos.y, aPos.z, 1.0);
   texCoord = aTexCoord;
 }
    |]
@@ -278,6 +279,7 @@ hortureFragmentShader =
 
 in vec2 texCoord;
 
+uniform float dt;
 uniform sampler2D texture1;
 
 out vec4 frag_colour;
@@ -375,8 +377,8 @@ m44ToGLmatrix m = withNewMatrix ColumnMajor (\p -> poke (castPtr p) m')
 degToRad :: Float -> Float
 degToRad = (*) (pi / 180)
 
-modelForAspectRatio :: (Float, Float) -> M44 Float
-modelForAspectRatio (ww, wh) = model
+scaleForAspectRatio :: (Float, Float) -> M44 Float
+scaleForAspectRatio (ww, wh) = model
   where
     ident = identityM44
     aspectRatio = ww / wh
@@ -386,7 +388,7 @@ modelForAspectRatio (ww, wh) = model
         (V4 0 1 0 0)
         (V4 0 0 1 0)
         (V4 0 0 0 1)
-    model = scaling * ident
+    model = scaling !*! ident
 
 projectionForAspectRatio :: (Float, Float) -> M44 Float
 projectionForAspectRatio (ww, wh) = proj

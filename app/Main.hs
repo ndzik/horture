@@ -13,7 +13,7 @@ module Main where
 --                -> Postprocess and draw to window
 
 import Control.Monad.Except
-import Data.Bits
+import Data.Bits hiding (rotate)
 import Data.List (elem, find)
 import Data.Maybe
 import Data.Word
@@ -24,17 +24,22 @@ import Foreign.Ptr
 import Foreign.Storable
 import GHC.ForeignPtr
 import Graphics.GLUtil as Util hiding (throwError)
-import Graphics.GLUtil.Camera3D as Util
-import Graphics.Rendering.OpenGL as GL hiding (Color, flush)
+import Graphics.GLUtil.Camera2D as Cam2D
+import Graphics.GLUtil.Camera3D as Cam3D
+import Graphics.Rendering.OpenGL as GL hiding (Color, flush, rotate)
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
 import Horture
 import Linear.Matrix
+import Linear.Quaternion
+import Linear.V2
+import Linear.V3
 import Linear.V4
 import System.Clock
 import System.Exit
+import qualified System.Random as Random
 import Text.RawString.QQ
 
 main :: IO ()
@@ -108,17 +113,26 @@ main' w = do
   projectionUniform <- uniformLocation prog "proj"
   m44ToGLmatrix proj >>= (uniform projectionUniform $=)
 
-  let view = Util.camMatrix (Util.fpsCamera @Float)
+  let view = Cam3D.camMatrix (Cam3D.fpsCamera @Float)
   viewUniform <- uniformLocation prog "view"
   m44ToGLmatrix view >>= (uniform viewUniform $=)
 
-  let model = curry modelForAspectRatio (fromIntegral ww) (fromIntegral wh)
+  let model = curry scaleForAspectRatio (fromIntegral ww) (fromIntegral wh)
   modelUniform <- uniformLocation prog "model"
   m44ToGLmatrix model >>= (uniform modelUniform $=)
 
   GLFW.setWindowSize glW (fromIntegral . wa_width $ attr) (fromIntegral . wa_height $ attr)
   GLFW.setWindowPos glW (fromIntegral . wa_x $ attr) (fromIntegral . wa_y $ attr)
+
+  timeUniform <- uniformLocation prog "dt"
+  Just startTime <- GLFW.getTime
+  uniform timeUniform $= (0 :: Float)
   let update pm (ww, wh) = do
+        dt <-
+          GLFW.getTime >>= \case
+            Nothing -> exitFailure
+            Just currentTime -> return $ currentTime - startTime
+        uniform timeUniform $= realToFrac @Double @Float dt
         i <-
           getImage
             dp
@@ -140,6 +154,19 @@ main' w = do
           pixelData
 
         generateMipmap' Texture2D
+
+        -- Transformations.
+        offset <- Random.randomIO @Float
+        let view = Cam3D.camMatrix @Float (Cam2D.track (V2 (0 + offset) (0 - offset)) Cam3D.fpsCamera)
+        m44ToGLmatrix view >>= (uniform viewUniform $=)
+
+        let pos = V3 0 0 (-1)
+            axis = V3 0 0 (-1) :: V3 Float
+            rot = axisAngle axis 0
+            trans = mkTransformation @Float rot pos
+            scale = scaleForAspectRatio (fromIntegral ww, fromIntegral wh)
+            model = trans !*! scale
+         in m44ToGLmatrix model >>= (uniform modelUniform $=)
 
         destroyImage i
 
@@ -180,13 +207,10 @@ main' w = do
                     0
                     anyPixelData
 
-
                   let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
-                  projectionUniform <- uniformLocation prog "proj"
                   m44ToGLmatrix proj >>= (uniform projectionUniform $=)
 
-                  let model = curry modelForAspectRatio (fromIntegral ww) (fromIntegral wh)
-                  modelUniform <- uniformLocation prog "model"
+                  let model = curry scaleForAspectRatio (fromIntegral ww) (fromIntegral wh)
                   m44ToGLmatrix model >>= (uniform modelUniform $=)
 
                   return (newPm, (ev_width, ev_height))

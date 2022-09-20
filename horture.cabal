@@ -72,4 +72,5 @@ executable horture-exe
                     , containers
                     , optparse-applicative
                     , linear
+                    , random
     default-language: Haskell2010
