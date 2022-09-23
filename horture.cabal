@@ -73,4 +73,6 @@ executable horture-exe
                     , optparse-applicative
                     , linear
                     , random
+                    , JuicyPixels
+                    , vector
     default-language: Haskell2010

@@ -12,10 +12,14 @@ module Main where
 --                -> Upload image to GPU with OpenGL
 --                -> Postprocess and draw to window
 
+import Codec.Picture
+import Codec.Picture.Gif
 import Control.Monad.Except
 import Data.Bits hiding (rotate)
+import Data.ByteString (readFile)
 import Data.List (elem, find)
 import Data.Maybe
+import Data.Vector.Storable (toList)
 import Data.Word
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
@@ -41,6 +45,7 @@ import System.Clock
 import System.Exit
 import qualified System.Random as Random
 import Text.RawString.QQ
+import Prelude hiding (readFile)
 
 main :: IO ()
 main =
@@ -51,7 +56,7 @@ main =
 main' :: Window -> IO ()
 main' w = do
   glW <- initGLFW
-  (vao, vbo, veo, prog) <- initResources
+  (vao, vbo, veo, prog, gifProg) <- initResources
   dp <- openDisplay ""
   let ds = defaultScreen dp
       cm = defaultColormap dp ds
@@ -77,6 +82,47 @@ main' w = do
   when (isNothing res) $
     print "xCompositeExtension is missing!" >> exitFailure
   print "Queried composite extension"
+
+  -- GIFs
+  content <- readFile "/home/omega/Downloads/ricardoflick.gif"
+  imgs <- case decodeGifImages content of
+    Left err -> print ("decoding ricardogif: " <> err) >> exitFailure
+    Right imgs -> return imgs
+  delayms <- case getDelaysGifImages content of
+    Left err -> print ("getting gif delays: " <> err) >> exitFailure
+    Right ds -> return . head $ ds
+
+  -- Set active texture slot.
+  currentProgram $= Just gifProg
+  texIndex <- uniformLocation gifProg "index"
+  uniform texIndex $= (0 :: GLint)
+
+  let gifUnit = TextureUnit 4
+  activeTexture $= gifUnit
+  texGif <- genObjectName @TextureObject
+  textureBinding Texture2DArray $= Just texGif
+  let imgsL = concatMap (\(ImageRGBA8 (Codec.Picture.Image _ _ v)) -> toList v) imgs
+      (gifW, gifH) = case head imgs of
+        ImageRGBA8 (Codec.Picture.Image w h _) -> (w, h)
+        _ -> error "decoding gif image"
+  withArray imgsL $ \ptr -> do
+    let pixelData = PixelData RGBA UnsignedByte ptr
+    texImage3D
+      Texture2DArray
+      NoProxy
+      0
+      RGBA8
+      (TextureSize3D (fromIntegral gifW) (fromIntegral gifH) (fromIntegral . length $ imgs))
+      0
+      pixelData
+    generateMipmap' Texture2DArray
+
+  gifTexUni <- uniformLocation gifProg "gifTexture"
+  uniform gifTexUni $= gifUnit
+
+  activeTexture $= TextureUnit 0
+  currentProgram $= Just prog
+  --
 
   bindVertexArrayObject $= Just vao
   bindBuffer ArrayBuffer $= Just vbo
@@ -156,14 +202,14 @@ main' w = do
         generateMipmap' Texture2D
 
         -- Transformations.
-        offset <- Random.randomIO @Float
-        let view = Cam3D.camMatrix @Float (Cam2D.track (V2 (0 + offset) (0 - offset)) Cam3D.fpsCamera)
-        m44ToGLmatrix view >>= (uniform viewUniform $=)
+        -- offset <- Random.randomIO @Float
+        -- let view = Cam3D.camMatrix @Float ({-Cam2D.track (V2 (0 + offset) (0 - offset))-} Cam3D.fpsCamera)
+        -- m44ToGLmatrix view >>= (uniform viewUniform $=)
 
-        let pos = V3 0 0 (-1)
+        let posChange = V3 0 0 (negate $ fromIntegral (round dt `mod` 10) / 10)
             axis = V3 0 0 (-1) :: V3 Float
             rot = axisAngle axis 0
-            trans = mkTransformation @Float rot pos
+            trans = mkTransformation @Float rot posChange
             scale = scaleForAspectRatio (fromIntegral ww, fromIntegral wh)
             model = trans !*! scale
          in m44ToGLmatrix model >>= (uniform modelUniform $=)
@@ -174,6 +220,24 @@ main' w = do
 
         bindVertexArrayObject $= Just vao
         drawElements Triangles 6 UnsignedInt nullPtr
+
+        -- Each program needs its own set of uniforms, which can be accessed in
+        -- the vertex- and fragment shaders.
+        -- For GIFs we define a plane which can be animated over time. At first
+        -- it will be rather random and slow movement.
+        -- Showing GIFs will then easily be achievable by instantiating a list
+        -- of GIF-objects and calling `render` on them.
+        -- `render` itself is part of a typeclass `class Renderable a where` a
+        -- contains all necessary state information to handle its own
+        -- rendering.
+        currentProgram $= Just gifProg
+        activeTexture $= gifUnit
+        let elapsedms = round $ dt * (10 ^ 2)
+            i = (elapsedms `div` (10 * delayms)) `mod` length imgs
+        uniform texIndex $= fromIntegral @_ @GLint i
+        drawElements Triangles 6 UnsignedInt nullPtr
+        activeTexture $= TextureUnit 0
+        currentProgram $= Just prog
 
         GLFW.swapBuffers glW
         GLFW.pollEvents
@@ -243,3 +307,7 @@ findMe root dp me = do
             _ -> False
         )
       $ res
+
+createGifTex :: DynamicImage -> IO ()
+createGifTex (ImageRGBA8 i) = undefined
+createGifTex _ = error "unhandled image type encountered when creating GIF texture"

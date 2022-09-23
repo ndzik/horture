@@ -236,7 +236,7 @@ shutdown win = do
   GLFW.terminate
   void exitSuccess
 
-initResources :: IO (VertexArrayObject, BufferObject, BufferObject, Program)
+initResources :: IO (VertexArrayObject, BufferObject, BufferObject, Program, Program)
 initResources = do
   vao <- genObjectName
   bindVertexArrayObject $= Just vao
@@ -245,10 +245,49 @@ initResources = do
   vsp <- loadShaderBS "vertex.shader" VertexShader hortureVertexShader
   fsp <- loadShaderBS "fragment.shader" FragmentShader hortureFragmentShader
   prog <- linkShaderProgram [vsp, fsp]
+  vspg <- loadShaderBS "gifvertex.shader" VertexShader hortureVertexGIF
+  fspg <- loadShaderBS "giffragment.shader" FragmentShader hortureFragmentGIF
+  gifProg <- linkShaderProgram [vspg, fspg]
   currentProgram $= Just prog
   veo <- genObjectName
   bindBuffer ArrayBuffer $= Just veo
-  return (vao, vbo, veo, prog)
+  return (vao, vbo, veo, prog, gifProg)
+
+hortureVertexGIF :: ByteString
+hortureVertexGIF =
+  pack
+    [r|
+#version 410
+
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec2 aTexCoord;
+uniform float dt;
+
+out vec2 texCoord;
+
+void main() {
+  gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
+  texCoord = aTexCoord;
+}
+   |]
+
+hortureFragmentGIF :: ByteString
+hortureFragmentGIF =
+  pack
+    [r|
+#version 410
+
+in vec2 texCoord;
+
+uniform int index;
+uniform sampler2DArray gifTexture;
+
+out vec4 frag_colour;
+
+void main() {
+  frag_colour = texture(gifTexture, vec3(texCoord.x, texCoord.y, index));
+}
+    |]
 
 hortureVertexShader :: ByteString
 hortureVertexShader =
@@ -285,7 +324,9 @@ uniform sampler2D texture1;
 out vec4 frag_colour;
 
 void main() {
-  frag_colour = texture(texture1, texCoord);
+  vec4 colour = texture(texture1, texCoord);
+  // frag_colour = vec4(colour.x+sin(4*texCoord.x+dt), colour.y+cos(12*texCoord.y+dt), colour.z-sin(3*dt), colour.w);
+  frag_colour = vec4(colour.x, colour.y, colour.z, colour.w-sin(4*dt));
 }
     |]
 

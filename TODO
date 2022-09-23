@@ -25,3 +25,13 @@
 * NOTE: A RUNNING compositemanager is ALSO required! MAYBE?
 * zPixmap required!
   https://stackoverflow.com/questions/34662275/xgetimage-takes-a-lot-of-time-to-run
+
+# Features
+* Toggle ClearScreen (background)
+* Zoom monitor away
+* Gradually increase visual screen shaking
+* Flip screen (X and/or Y)
+* Rollercoaster: Move screen and add delayed camera tracking
+* Spawn GIF (+optional add sound) at random location for ~X seconds
+* Your Highness, texture shader randomizing colors
+* FLASHBANG
