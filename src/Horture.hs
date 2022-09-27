@@ -28,12 +28,14 @@ module Horture
 where
 
 import Control.Monad.Except
+import Control.Monad.Reader
+import Control.Monad.State
 import Data.Bits
 import Data.ByteString.Char8 (ByteString, pack)
 import Data.Functor ((<&>))
 import Data.IORef
-import Data.List (find)
 import Data.Word
+import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
@@ -49,9 +51,9 @@ import Horture.Error
 import Horture.Horture
 import Horture.Render
 import Horture.Scene
+import Horture.State
 import Linear.Matrix
 import Linear.V4
-import qualified System.Clock as Clock
 import System.Exit
 import Text.RawString.QQ
 
@@ -62,54 +64,72 @@ playScene s = do
   where
     go startTime s = do
       dt <- deltaTime startTime
-      timeNow <- getTime
+      clearView
       renderScreen dt . _screen $ s
       renderObjects dt . _gifs $ s
-      let s' = purge timeNow s
+      updateView
       pollEvents
+      s' <- getTime <&> flip purge s
       go startTime s'
 
+clearView :: Horture ()
+clearView = liftIO $ GL.clear [ColorBuffer]
+
+updateView :: Horture ()
+updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
+
 pollEvents :: Horture ()
-pollEvents = undefined
+pollEvents = do
+  liftIO GLFW.pollEvents
+  glWin <- asks _glWin
+  projectionUniform <- asks _projUniform
+  modelUniform <- asks _modelUniform
+  screenTexObj <- asks _screenTexObject
+  screenTexUnit <- asks _screenTexUnit
+  xWin <- gets _xWin
+  dp <- gets _display
+  pm <- gets _capture
+  (ww, wh) <- gets _dim
+  (pm, (ww, wh)) <- liftIO $
+    allocaXEvent $ \evptr -> do
+      doIt <- checkWindowEvent dp xWin structureNotifyMask evptr
+      if doIt
+        then do
+          getEvent evptr >>= \case
+            ConfigureEvent {..} -> do
+              -- Retrieve a new pixmap
+              newPm <- xCompositeNameWindowPixmap dp xWin
+              -- Update reference, aspect ratio & destroy old pixmap.
+              freePixmap dp pm
+              -- Update overlay window with new aspect ratio.
+              let glw = fromIntegral ev_width
+                  glh = fromIntegral ev_height
+              GLFW.setWindowSize glWin glw glh
+              GLFW.setWindowPos glWin (fromIntegral ev_x) (fromIntegral ev_y)
+              let !anyPixelData = PixelData BGRA UnsignedInt8888Rev nullPtr
+              -- Update texture bindings!
+              activeTexture $= screenTexUnit
+              textureBinding Texture2D $= Just screenTexObj
+              texImage2D
+                Texture2D
+                NoProxy
+                0
+                RGBA'
+                (TextureSize2D (fromIntegral ev_width) (fromIntegral ev_height))
+                0
+                anyPixelData
+              generateMipmap' Texture2D
 
---       (pm, (ww, wh)) <- allocaXEvent $ \evptr -> do
---         doIt <- checkWindowEvent dp w structureNotifyMask evptr
---         if doIt
---           then do
---             getEvent evptr >>= \case
---               ConfigureEvent {..} -> do
---                 -- Retrieve a new pixmap.
---                 newPm <- xCompositeNameWindowPixmap dp w
---                 -- Update reference, aspect ratio & destroy old pixmap.
---                 freePixmap dp pm
---                 -- Update overlay window with new aspect ratio.
---                 let glw = fromIntegral ev_width
---                     glh = fromIntegral ev_height
---                 GLFW.setWindowSize glW glw glh
---                 attr <- getWindowAttributes dp w
---                 GLFW.setWindowPos glW (fromIntegral ev_x) (fromIntegral ev_y)
---                 (glW, glH) <- GLFW.getFramebufferSize glW
---                 let !anyPixelData = PixelData BGRA UnsignedInt8888Rev nullPtr
---                 -- Update texture bindings!
---                 textureBinding Texture2D $= Just tex01
---                 texImage2D
---                   Texture2D
---                   NoProxy
---                   0
---                   RGBA'
---                   (TextureSize2D (fromIntegral ev_width) (fromIntegral ev_height))
---                   0
---                   anyPixelData
+              let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
+              m44ToGLmatrix proj >>= (uniform projectionUniform $=)
 
---                 let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
---                 m44ToGLmatrix proj >>= (uniform projectionUniform $=)
+              let model = curry scaleForAspectRatio (fromIntegral ww) (fromIntegral wh)
+              m44ToGLmatrix model >>= (uniform modelUniform $=)
 
---                 let model = curry scaleForAspectRatio (fromIntegral ww) (fromIntegral wh)
---                 m44ToGLmatrix model >>= (uniform modelUniform $=)
-
---                 return (newPm, (ev_width, ev_height))
---               _ -> return (pm, (ww, wh))
---           else return (pm, (ww, wh))
+              return (newPm, (fromIntegral ev_width, fromIntegral ev_height))
+            _ -> return (pm, (ww, wh))
+        else return (pm, (ww, wh))
+  modify $ \hs -> hs {_dim = (ww, wh), _capture = pm}
 
 deltaTime :: Double -> Horture Double
 deltaTime startTime =
@@ -121,96 +141,8 @@ getTime =
     Nothing -> throwError . HE $ "GLFW not running or initialized"
     Just t -> return t
 
-main'' :: IO ()
-main'' = do
-  dp <- openDisplay ""
-  let ds = defaultScreen dp
-      cm = defaultColormap dp ds
-  w <- rootWindow dp ds
-  attr <- getWindowAttributes dp w
-
-  let ww = fromIntegral $ wa_width attr
-      wh = fromIntegral $ wa_height attr
-      n = 6
-      loop :: Int -> IO Int
-      loop i = do
-        !img <-
-          getImage
-            dp
-            w
-            0
-            0
-            (fromIntegral ww)
-            (fromIntegral wh)
-            0xFFFFFFFF
-            zPixmap
-
-        ximageBytesPerLine img >>= \m -> print $ "BytesPerLine: " <> show m
-        ximageOffset img >>= \m -> print $ "Offset: " <> show m
-        ximagebitsPerPixel img >>= \m -> print $ "BitsPerPixel: " <> show m
-
-        -- GetPixel query.
-        let x = 1
-            y = 0
-            px = getPixel img x y
-        queryColor dp cm (Color (fromIntegral px) 0 0 0 0)
-          >>= \(Color _ r g b _) -> print $ "GetPixel: " <> show (r, g, b)
-
-        -- Custom query.
-        buf <- ximageData img
-        let stride = 4
-            -- 3840x1080
-            idx = 3840 * 1080 * stride
-        peekByteOff @Word8 buf (idx + 0)
-          >>= \r ->
-            peekByteOff @Word8 buf (idx + 4)
-              >>= \g ->
-                peekByteOff @Word8 buf (idx + 8)
-                  >>= \b -> print $ "Image Inspect: " <> show (r, g, b)
-        if i < n then loop (i + 1) else return i
-
-  start <- Clock.getTime Clock.Monotonic
-  r <- loop 0
-  end <- Clock.getTime Clock.Monotonic
-
-  let dt = Clock.nsec (end - start)
-      frameTime = fromIntegral dt / fromIntegral n
-
-  print $ "r: " <> show r
-  print $ "dt: " <> show dt
-  print $ "n: " <> show n
-  print $ "FrameTime (ms): " <> show (frameTime / (10 ^ 6))
-
-  print "Done..."
-
-xtest :: IO ()
-xtest = do
-  dp <- openDisplay ""
-  let ds = defaultScreen dp
-      cm = defaultColormap dp ds
-  w <- rootWindow dp ds
-  (root, parent, childs) <- queryTree dp w
-  res <-
-    mapM
-      ( \c ->
-          fetchName dp c >>= \case
-            Nothing -> return ("", c)
-            Just w -> return (w, c)
-      )
-      childs
-      <&> filter ((/=) "" . fst)
-
-  alloca $ \ptr -> do
-    mapM
-      ( \c -> do
-          s <- xGetTextProperty dp c ptr wM_CLASS
-          when (s /= 0) $ peek ptr >>= wcTextPropertyToTextList dp >>= print
-      )
-      childs
-  print "Done..."
-
 verts :: [Float]
-verts = [-1, -1, -1, 0, 1, -1, 1, -1, 0, 0, 1, 1, -1, 1, 0, 1, -1, -1, 1, 1]
+verts = [-1, -1, 0, 0, 1, -1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, -1, 0, 1, 1]
 
 vertsElement :: [GLuint]
 vertsElement = [0, 1, 2, 0, 2, 3]
@@ -227,49 +159,11 @@ planeVertsSize = length verts * floatSize
 vertsElementSize :: Int
 vertsElementSize = length vertsElement * uintSize
 
-imgPtr :: Image -> Ptr Image
-imgPtr (Image p) = p
-
-szCInt :: Int
-szCInt = sizeOf @CInt undefined
-
 ximageData :: Image -> IO (Ptr Word8)
 ximageData (Image p) = peek (plusPtr @Image @(Ptr CIntPtr) p xdataPtr) >>= \buf -> return . castPtr $ buf
   where
     szCint = sizeOf @CInt undefined
     xdataPtr = 4 * szCint
-
-ximagebitsPerPixel :: Image -> IO CInt
-ximagebitsPerPixel (Image p) = peekByteOff @CInt (castPtr p) xbitsPerPixel
-  where
-    szCint = sizeOf @CInt undefined
-    szPtr = sizeOf @CIntPtr undefined
-    xbitsPerPixel = 4 * szCint + szPtr + 6 * szCint
-
-ximageBytesPerLine :: Image -> IO CInt
-ximageBytesPerLine (Image p) = peekByteOff @CInt (castPtr p) xbytesPerLine
-  where
-    szCint = sizeOf @CInt undefined
-    szPtr = sizeOf @CIntPtr undefined
-    xbytesPerLine = 4 * szCint + szPtr + 5 * szCint
-
-ximageOffset :: Image -> IO CInt
-ximageOffset (Image p) = peekByteOff @CInt (castPtr p) xoffset
-  where
-    szCint = sizeOf @CInt undefined
-    szPtr = sizeOf @CIntPtr undefined
-    xwidth = 0
-    xheight = szCint
-    xoffset = 2 * szCint
-    xformat = 3 * szCint
-    xdataPtr = 4 * szCint
-    xbyteorder = 4 * szCint + szPtr
-    xbitmapUnit = 4 * szCint + szPtr + szCint
-    xbitmapBitOrder = 4 * szCint + szPtr + 2 * szCint
-    xbitmapPad = 4 * szCint + szPtr + 3 * szCint
-    xdepth = 4 * szCint + szPtr + 4 * szCint
-    xbytesPerLine = 4 * szCint + szPtr + 5 * szCint
-    xbitsPerPixel = 4 * szCint + szPtr + 6 * szCint
 
 initGLFW :: IO GLFW.Window
 initGLFW = do
@@ -294,11 +188,6 @@ initGLFW = do
 resizeWindow' :: GLFW.WindowSizeCallback
 resizeWindow' _ w h = do
   GL.viewport $= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
-
-keyPressed :: GLFW.KeyCallback
-keyPressed win GLFW.Key'Escape _ GLFW.KeyState'Pressed _ = shutdown win
-keyPressed win GLFW.Key'Q _ GLFW.KeyState'Pressed _ = shutdown win
-keyPressed _ _ _ _ _ = return ()
 
 shutdown :: GLFW.Window -> IO ()
 shutdown win = do
@@ -397,7 +286,7 @@ out vec4 frag_colour;
 void main() {
   vec4 colour = texture(texture1, texCoord);
   // frag_colour = vec4(colour.x+sin(4*texCoord.x+dt), colour.y+cos(12*texCoord.y+dt), colour.z-sin(3*dt), colour.w);
-  frag_colour = vec4(colour.x, colour.y, colour.z, colour.w-sin(4*dt));
+  frag_colour = vec4(colour.x, colour.y, colour.z, colour.w);
 }
     |]
 
@@ -405,16 +294,40 @@ data SizeUpdate = GLFWUpdate (Int, Int) | XUpdate (CInt, CInt) deriving (Show, E
 
 x11UserGrabWindow :: IO (Maybe Window)
 x11UserGrabWindow = do
+  print "opening display"
   dp <- openDisplay ""
   let ds = defaultScreen dp
+  print "getting root window"
   root <- rootWindow dp ds
+  print "creating cursor"
   cursor <- createFontCursor dp xC_crosshair
-  grabPointer dp root False (buttonMotionMask .|. buttonPressMask .|. buttonReleaseMask) grabModeAsync grabModeAsync root cursor currentTime
+  _ <-
+    grabPointer
+      dp
+      root
+      False
+      ( buttonMotionMask
+          .|. buttonPressMask
+          .|. buttonReleaseMask
+      )
+      grabModeAsync
+      grabModeAsync
+      root
+      cursor
+      currentTime
 
   userDecision <- allocaXEvent $ \evptr -> do
     nextEvent dp evptr
     getEvent evptr >>= \case
-      ButtonEvent {..} -> return . Just $ ev_subwindow
+      ButtonEvent {..} -> do
+        alloca $ \cptr -> do
+          s <- xFetchName dp ev_subwindow cptr
+          if s == 0
+            then print "Unabled to fetch name of grabbed window"
+            else do
+              s <- peek cptr >>= peekCString
+              print $ "Grabbing window: " <> s
+        return . Just $ ev_subwindow
       _ -> return Nothing
 
   ungrabPointer dp currentTime
@@ -442,33 +355,6 @@ listenResizeEvent dp w glW r = go
               GLFW.setWindowSize glW w h
             _ -> return ()
       go
-
-findClassName :: Display -> Window -> String -> IO (Maybe Window)
-findClassName dp w n = do
-  (root, parent, childs) <- queryTree dp w
-  alloca $ \ptr -> do
-    res <-
-      mapM
-        ( \c -> do
-            s <- xGetTextProperty dp c ptr wM_CLASS
-            if s /= 0
-              then
-                peek ptr
-                  >>= wcTextPropertyToTextList dp
-                  >>= \ss ->
-                    case find (n ==) ss of
-                      Nothing -> return (Nothing @Window)
-                      Just _ -> print ss >> return (Just c)
-              else return (Nothing @Window)
-        )
-        childs
-    case res of
-      [] -> return Nothing
-      fs -> case filter (/= Nothing) fs of
-        -- Xlib how to keep drawing unfocused window:
-        -- https://linux.die.net/man/3/xcompositenamewindowpixmap
-        xs@(_ : _) -> print xs >> return (last xs)
-        _ -> return Nothing
 
 hortureName :: String
 hortureName = "horture"

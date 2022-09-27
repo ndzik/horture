@@ -5,6 +5,7 @@ module Horture.State
 where
 
 import Graphics.Rendering.OpenGL hiding (get)
+import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
 
 data HortureStatic = HortureStatic
@@ -16,14 +17,19 @@ data HortureStatic = HortureStatic
     _planeVertexLocation :: AttribLocation,
     _planeTexLocation :: AttribLocation,
     _screenTexUnit :: TextureUnit,
+    _screenTexObject :: TextureObject,
+    _gifModelUniform :: UniformLocation,
     _gifTexUnit :: TextureUnit,
+    _gifTexObject :: TextureObject,
     _gifIndex :: UniformLocation,
+    _glWin :: GLFW.Window,
     _backgroundColor :: Color4 Float
   }
   deriving (Show)
 
 data HortureState = HortureState
   { _display :: Display,
+    _xWin :: Window,
     _capture :: Drawable,
     _dim :: (Int, Int)
   }

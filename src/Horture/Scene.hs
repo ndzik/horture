@@ -2,12 +2,14 @@ module Horture.Scene
   ( apply,
     applyAll,
     Scene (..),
+    addGif,
     purge,
   )
 where
 
 import Horture.Effect
 import Horture.Object
+import Linear.V3
 
 -- Scene is the horture scene. It consists of the background plane, which is
 -- the screen being hortured as well as transient multiple objects in an
@@ -21,7 +23,7 @@ data Scene = Scene
 -- since the last frame to the scene.
 apply :: Double -> Double -> Effect -> Scene -> Scene
 apply _timeNow _dt Noop s = s
-apply timeNow dt (AddGif t) s = addGif t timeNow dt s
+apply timeNow _dt (AddGif t lt pos) s = addGif t timeNow lt pos s
 apply _timeNow _dt ShakeIt s = s
 apply _timeNow _dt ZoomIt s = s
 apply _timeNow _dt FlipIt s = s
@@ -34,10 +36,10 @@ apply _timeNow _dt Flashbang s = s
 applyAll :: [Effect] -> Double -> Double -> Scene -> Scene
 applyAll effs timeNow dt s = foldr (apply timeNow dt) s (Noop : effs)
 
-addGif :: GifType -> Double -> Double -> Scene -> Scene
-addGif Ricardo timeNow _ s = s {_gifs = o : _gifs s}
+addGif :: GifType -> Double -> Lifetime -> V3 Float -> Scene -> Scene
+addGif Ricardo timeNow lt pos s = s {_gifs = o : _gifs s}
   where
-    o = defGif 0 timeNow (Limited 8) 20 2
+    o = (defGif 0 timeNow lt 20 2) {_pos = pos}
 
 -- purge purges the given scene using timenow by removing all transient objects
 -- which died off.

@@ -1,13 +1,15 @@
 {-# LANGUAGE TypeApplications #-}
 
-module Horture.X11 (
-    imgPtr,
+module Horture.X11
+  ( imgPtr,
     szCInt,
     ximageData,
     ximagebitsPerPixel,
     ximageBytesPerLine,
     ximageOffset,
-    ) where
+    ximageDepth,
+  )
+where
 
 import Data.Word
 import Foreign.C.Types
@@ -41,6 +43,13 @@ ximageBytesPerLine (Image p) = peekByteOff @CInt (castPtr p) xbytesPerLine
     szCint = sizeOf @CInt undefined
     szPtr = sizeOf @CIntPtr undefined
     xbytesPerLine = 4 * szCint + szPtr + 5 * szCint
+
+ximageDepth :: Image -> IO CInt
+ximageDepth (Image p) = peekByteOff @CInt (castPtr p) xdepth
+  where
+    szCint = sizeOf @CInt undefined
+    szPtr = sizeOf @CIntPtr undefined
+    xdepth = 4 * szCint + szPtr + 4 * szCint
 
 ximageOffset :: Image -> IO CInt
 ximageOffset (Image p) = peekByteOff @CInt (castPtr p) xoffset

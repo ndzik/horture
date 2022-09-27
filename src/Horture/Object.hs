@@ -56,14 +56,14 @@ class Renderable o where
 instance Renderable Object where
   model o = m
     where
-      trans = mkTransformation @Float (_orientation o) (V3 0 0 0)
+      trans = mkTransformation @Float (_orientation o) (_pos o)
       m = trans !*! _scale o
 
 defScreen :: Object
 defScreen =
   Object
     { _id = 0,
-      _pos = V3 0 0 0,
+      _pos = V3 0 0 (-1),
       _orientation = Quaternion 1 (V3 0 0 0),
       _scale =
         V4
