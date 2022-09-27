@@ -23,6 +23,14 @@ extra-source-files: CHANGELOG.md
 
 library horture-lib
     exposed-modules:  Horture
+                    , Horture.Scene
+                    , Horture.Horture
+                    , Horture.X11
+                    , Horture.Error
+                    , Horture.State
+                    , Horture.Render
+                    , Horture.Object
+                    , Horture.Effect
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -40,6 +48,7 @@ library horture-lib
                     , clock
                     , deepseq
                     , synchronous-channels
+                    , JuicyPixels
                     , containers
                     , linear
     ghc-options:

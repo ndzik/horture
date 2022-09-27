@@ -41,6 +41,8 @@ data Object = Object
     _lifetime :: Lifetime,
     _birth :: Double,
     _textureType :: TextureType,
+    _textureLength :: Int,
+    _delay :: Int,
     _voice :: Maybe Voice
     -- _attributes :: [Attribute]
   }
@@ -72,11 +74,13 @@ defScreen =
       _lifetime = Forever,
       _birth = 0,
       _textureType = Background,
+      _textureLength = 1,
+      _delay = 0,
       _voice = Nothing
     }
 
-defGif :: Int -> Double -> Lifetime -> Object
-defGif id birth lifetime =
+defGif :: Int -> Double -> Lifetime -> Int -> Int -> Object
+defGif id birth lifetime numOfImgs delayms =
   Object
     { _id = id,
       _pos = V3 0 0 0,
@@ -90,6 +94,8 @@ defGif id birth lifetime =
       _lifetime = lifetime,
       _birth = birth,
       _textureType = Gif,
+      _textureLength = numOfImgs,
+      _delay = delayms,
       _voice = Nothing
     }
 

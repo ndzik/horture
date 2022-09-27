@@ -1,6 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Main where
@@ -36,6 +35,11 @@ import Graphics.X11
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
 import Horture
+import Horture.Object
+import Horture.Render
+import Horture.Horture
+import Horture.State
+import Horture.Scene
 import Linear.Matrix
 import Linear.Quaternion
 import Linear.V2
@@ -84,6 +88,7 @@ main' w = do
   print "Queried composite extension"
 
   -- GIFs
+  gifModelUniform <- uniformLocation gifProg "model"
   content <- readFile "/home/omega/Downloads/ricardoflick.gif"
   imgs <- case decodeGifImages content of
     Left err -> print ("decoding ricardogif: " <> err) >> exitFailure
@@ -173,117 +178,144 @@ main' w = do
   timeUniform <- uniformLocation prog "dt"
   Just startTime <- GLFW.getTime
   uniform timeUniform $= (0 :: Float)
-  let update pm (ww, wh) = do
-        dt <-
-          GLFW.getTime >>= \case
-            Nothing -> exitFailure
-            Just currentTime -> return $ currentTime - startTime
-        uniform timeUniform $= realToFrac @Double @Float dt
-        i <-
-          getImage
-            dp
-            pm
-            0
-            0
-            (fromIntegral ww)
-            (fromIntegral wh)
-            0xFFFFFFFF
-            zPixmap
 
-        src <- ximageData i
-        let pixelData = PixelData BGRA UnsignedInt8888Rev src
-        texSubImage2D
-          Texture2D
-          0
-          (TexturePosition2D 0 0)
-          (TextureSize2D (fromIntegral ww) (fromIntegral wh))
-          pixelData
+  let scene =
+        Scene
+          { _screen = defScreen,
+            _gifs = []
+          }
+      hs =
+        HortureState
+          { _display = dp,
+            _capture = pm,
+            _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr)
+          }
+      hc =
+        HortureStatic
+          { _backgroundProg = prog
+          , _gifProg = gifProg
+          , _modelUniform = modelUniform
+          , _viewUniform = viewUniform
+          , _projUniform = projectionUniform
+          , _planeVertexLocation = AttribLocation 0
+          , _planeTexLocation = AttribLocation 1
+          , _screenTexUnit = TextureUnit 0
+          , _gifTexUnit = gifUnit
+          , _gifIndex = texIndex
+          , _backgroundColor = Color4 0.1 0.1 0.1 1
+          }
+  runHorture hs hc (playScene scene)
+  -- let update pm (ww, wh) = do
+  --       dt <-
+  --         GLFW.getTime >>= \case
+  --           Nothing -> exitFailure
+  --           Just currentTime -> return $ currentTime - startTime
+  --       uniform timeUniform $= realToFrac @Double @Float dt
+  --       i <-
+  --         getImage
+  --           dp
+  --           pm
+  --           1
+  --           1
+  --           (fromIntegral ww)
+  --           (fromIntegral wh)
+  --           0xFFFFFFFF
+  --           zPixmap
 
-        generateMipmap' Texture2D
+  --       src <- ximageData i
+  --       let pixelData = PixelData BGRA UnsignedInt8888Rev src
+  --       texSubImage2D
+  --         Texture2D
+  --         0
+  --         (TexturePosition2D 0 0)
+  --         (TextureSize2D (fromIntegral ww) (fromIntegral wh))
+  --         pixelData
 
-        -- Transformations.
-        -- offset <- Random.randomIO @Float
-        -- let view = Cam3D.camMatrix @Float ({-Cam2D.track (V2 (0 + offset) (0 - offset))-} Cam3D.fpsCamera)
-        -- m44ToGLmatrix view >>= (uniform viewUniform $=)
+  --       generateMipmap' Texture2D
 
-        let posChange = V3 0 0 (negate $ fromIntegral (round dt `mod` 10) / 10)
-            axis = V3 0 0 (-1) :: V3 Float
-            rot = axisAngle axis 0
-            trans = mkTransformation @Float rot posChange
-            scale = scaleForAspectRatio (fromIntegral ww, fromIntegral wh)
-            model = trans !*! scale
-         in m44ToGLmatrix model >>= (uniform modelUniform $=)
+  --       -- Transformations.
+  --       -- offset <- Random.randomIO @Float
+  --       -- let view = Cam3D.camMatrix @Float ({-Cam2D.track (V2 (0 + offset) (0 - offset))-} Cam3D.fpsCamera)
+  --       -- m44ToGLmatrix view >>= (uniform viewUniform $=)
 
-        destroyImage i
+  --       let posChange = V3 0 0 (negate $ fromIntegral (round dt `mod` 10) / 10)
+  --           axis = V3 0 0 (-1) :: V3 Float
+  --           rot = axisAngle axis 0
+  --           trans = mkTransformation @Float rot posChange
+  --           scale = scaleForAspectRatio (fromIntegral ww, fromIntegral wh)
+  --           model = trans !*! scale
+  --        in m44ToGLmatrix model >>= (uniform modelUniform $=)
 
-        GL.clear [ColorBuffer]
+  --       destroyImage i
 
-        bindVertexArrayObject $= Just vao
-        drawElements Triangles 6 UnsignedInt nullPtr
+  --       GL.clear [ColorBuffer]
 
-        -- Each program needs its own set of uniforms, which can be accessed in
-        -- the vertex- and fragment shaders.
-        -- For GIFs we define a plane which can be animated over time. At first
-        -- it will be rather random and slow movement.
-        -- Showing GIFs will then easily be achievable by instantiating a list
-        -- of GIF-objects and calling `render` on them.
-        -- `render` itself is part of a typeclass `class Renderable a where` a
-        -- contains all necessary state information to handle its own
-        -- rendering.
-        currentProgram $= Just gifProg
-        activeTexture $= gifUnit
-        let elapsedms = round $ dt * (10 ^ 2)
-            i = (elapsedms `div` (10 * delayms)) `mod` length imgs
-        uniform texIndex $= fromIntegral @_ @GLint i
-        drawElements Triangles 6 UnsignedInt nullPtr
-        activeTexture $= TextureUnit 0
-        currentProgram $= Just prog
+  --       bindVertexArrayObject $= Just vao
+  --       drawElements Triangles 6 UnsignedInt nullPtr
 
-        GLFW.swapBuffers glW
-        GLFW.pollEvents
+  --       -- Each program needs its own set of uniforms, which can be accessed in
+  --       -- the vertex- and fragment shaders.
+  --       -- For GIFs we define a plane which can be animated over time. At first
+  --       -- it will be rather random and slow movement.
+  --       -- Showing GIFs will then easily be achievable by instantiating a list
+  --       -- of GIF-objects and calling `render` on them.
+  --       -- `render` itself is part of a typeclass `class Renderable a where` a
+  --       -- contains all necessary state information to handle its own
+  --       -- rendering.
+  --       currentProgram $= Just gifProg
+  --       activeTexture $= gifUnit
+  --       let elapsedms = round $ dt * (10 ^ 2)
+  --           i = (elapsedms `div` (10 * delayms)) `mod` length imgs
+  --       uniform texIndex $= fromIntegral @_ @GLint i
+  --       drawElements Triangles 6 UnsignedInt nullPtr
+  --       activeTexture $= TextureUnit 0
+  --       currentProgram $= Just prog
 
-        (pm, (ww, wh)) <- allocaXEvent $ \evptr -> do
-          doIt <- checkWindowEvent dp w structureNotifyMask evptr
-          if doIt
-            then do
-              getEvent evptr >>= \case
-                ConfigureEvent {..} -> do
-                  -- Retrieve a new pixmap.
-                  newPm <- xCompositeNameWindowPixmap dp w
-                  -- Update reference, aspect ratio & destroy old pixmap.
-                  freePixmap dp pm
-                  -- Update overlay window with new aspect ratio.
-                  let glw = fromIntegral ev_width
-                      glh = fromIntegral ev_height
-                  GLFW.setWindowSize glW glw glh
-                  attr <- getWindowAttributes dp w
-                  GLFW.setWindowPos glW (fromIntegral ev_x) (fromIntegral ev_y)
-                  (glW, glH) <- GLFW.getFramebufferSize glW
-                  let !anyPixelData = PixelData BGRA UnsignedInt8888Rev nullPtr
-                  -- Update texture bindings!
-                  textureBinding Texture2D $= Just tex01
-                  texImage2D
-                    Texture2D
-                    NoProxy
-                    0
-                    RGBA'
-                    (TextureSize2D (fromIntegral ev_width) (fromIntegral ev_height))
-                    0
-                    anyPixelData
+  --       GLFW.swapBuffers glW
+  --       GLFW.pollEvents
 
-                  let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
-                  m44ToGLmatrix proj >>= (uniform projectionUniform $=)
+  --       (pm, (ww, wh)) <- allocaXEvent $ \evptr -> do
+  --         doIt <- checkWindowEvent dp w structureNotifyMask evptr
+  --         if doIt
+  --           then do
+  --             getEvent evptr >>= \case
+  --               ConfigureEvent {..} -> do
+  --                 -- Retrieve a new pixmap.
+  --                 newPm <- xCompositeNameWindowPixmap dp w
+  --                 -- Update reference, aspect ratio & destroy old pixmap.
+  --                 freePixmap dp pm
+  --                 -- Update overlay window with new aspect ratio.
+  --                 let glw = fromIntegral ev_width
+  --                     glh = fromIntegral ev_height
+  --                 GLFW.setWindowSize glW glw glh
+  --                 attr <- getWindowAttributes dp w
+  --                 GLFW.setWindowPos glW (fromIntegral ev_x) (fromIntegral ev_y)
+  --                 (glW, glH) <- GLFW.getFramebufferSize glW
+  --                 let !anyPixelData = PixelData BGRA UnsignedInt8888Rev nullPtr
+  --                 -- Update texture bindings!
+  --                 textureBinding Texture2D $= Just tex01
+  --                 texImage2D
+  --                   Texture2D
+  --                   NoProxy
+  --                   0
+  --                   RGBA'
+  --                   (TextureSize2D (fromIntegral ev_width) (fromIntegral ev_height))
+  --                   0
+  --                   anyPixelData
 
-                  let model = curry scaleForAspectRatio (fromIntegral ww) (fromIntegral wh)
-                  m44ToGLmatrix model >>= (uniform modelUniform $=)
+  --                 let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
+  --                 m44ToGLmatrix proj >>= (uniform projectionUniform $=)
 
-                  return (newPm, (ev_width, ev_height))
-                _ -> return (pm, (ww, wh))
-            else return (pm, (ww, wh))
+  --                 let model = curry scaleForAspectRatio (fromIntegral ww) (fromIntegral wh)
+  --                 m44ToGLmatrix model >>= (uniform modelUniform $=)
 
-        update pm (ww, wh)
+  --                 return (newPm, (ev_width, ev_height))
+  --               _ -> return (pm, (ww, wh))
+  --           else return (pm, (ww, wh))
 
-  update pm (ww, wh)
+  --       update pm (ww, wh)
+
+  -- update pm (ww, wh)
   print "Done..."
 
 findMe :: Window -> Display -> String -> IO (Maybe ([[Char]], Window))

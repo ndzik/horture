@@ -18,6 +18,7 @@ module Horture
     initResources,
     initGLFW,
     m44ToGLmatrix,
+    playScene,
     scaleForAspectRatio,
     projectionForAspectRatio,
     degToRad,
@@ -44,11 +45,81 @@ import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11 hiding (resizeWindow)
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
+import Horture.Error
+import Horture.Horture
+import Horture.Render
+import Horture.Scene
 import Linear.Matrix
 import Linear.V4
-import System.Clock
+import qualified System.Clock as Clock
 import System.Exit
 import Text.RawString.QQ
+
+playScene :: Scene -> Horture ()
+playScene s = do
+  startTime <- getTime
+  go startTime s
+  where
+    go startTime s = do
+      dt <- deltaTime startTime
+      timeNow <- getTime
+      renderScreen dt . _screen $ s
+      renderObjects dt . _gifs $ s
+      let s' = purge timeNow s
+      pollEvents
+      go startTime s'
+
+pollEvents :: Horture ()
+pollEvents = undefined
+
+--       (pm, (ww, wh)) <- allocaXEvent $ \evptr -> do
+--         doIt <- checkWindowEvent dp w structureNotifyMask evptr
+--         if doIt
+--           then do
+--             getEvent evptr >>= \case
+--               ConfigureEvent {..} -> do
+--                 -- Retrieve a new pixmap.
+--                 newPm <- xCompositeNameWindowPixmap dp w
+--                 -- Update reference, aspect ratio & destroy old pixmap.
+--                 freePixmap dp pm
+--                 -- Update overlay window with new aspect ratio.
+--                 let glw = fromIntegral ev_width
+--                     glh = fromIntegral ev_height
+--                 GLFW.setWindowSize glW glw glh
+--                 attr <- getWindowAttributes dp w
+--                 GLFW.setWindowPos glW (fromIntegral ev_x) (fromIntegral ev_y)
+--                 (glW, glH) <- GLFW.getFramebufferSize glW
+--                 let !anyPixelData = PixelData BGRA UnsignedInt8888Rev nullPtr
+--                 -- Update texture bindings!
+--                 textureBinding Texture2D $= Just tex01
+--                 texImage2D
+--                   Texture2D
+--                   NoProxy
+--                   0
+--                   RGBA'
+--                   (TextureSize2D (fromIntegral ev_width) (fromIntegral ev_height))
+--                   0
+--                   anyPixelData
+
+--                 let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
+--                 m44ToGLmatrix proj >>= (uniform projectionUniform $=)
+
+--                 let model = curry scaleForAspectRatio (fromIntegral ww) (fromIntegral wh)
+--                 m44ToGLmatrix model >>= (uniform modelUniform $=)
+
+--                 return (newPm, (ev_width, ev_height))
+--               _ -> return (pm, (ww, wh))
+--           else return (pm, (ww, wh))
+
+deltaTime :: Double -> Horture Double
+deltaTime startTime =
+  getTime >>= \currentTime -> return $ currentTime - startTime
+
+getTime :: Horture Double
+getTime =
+  liftIO GLFW.getTime >>= \case
+    Nothing -> throwError . HE $ "GLFW not running or initialized"
+    Just t -> return t
 
 main'' :: IO ()
 main'' = do
@@ -98,11 +169,11 @@ main'' = do
                   >>= \b -> print $ "Image Inspect: " <> show (r, g, b)
         if i < n then loop (i + 1) else return i
 
-  start <- getTime Monotonic
+  start <- Clock.getTime Clock.Monotonic
   r <- loop 0
-  end <- getTime Monotonic
+  end <- Clock.getTime Clock.Monotonic
 
-  let dt = nsec (end - start)
+  let dt = Clock.nsec (end - start)
       frameTime = fromIntegral dt / fromIntegral n
 
   print $ "r: " <> show r
@@ -222,7 +293,6 @@ initGLFW = do
 
 resizeWindow' :: GLFW.WindowSizeCallback
 resizeWindow' _ w h = do
-  -- TODO: GLFW.resizeWindow here?
   GL.viewport $= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
 
 keyPressed :: GLFW.KeyCallback
@@ -262,11 +332,12 @@ hortureVertexGIF =
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aTexCoord;
 uniform float dt;
+uniform mat4 model;
 
 out vec2 texCoord;
 
 void main() {
-  gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
+  gl_Position = model * vec4(aPos.x, aPos.y, aPos.z, 1.0);
   texCoord = aTexCoord;
 }
    |]
