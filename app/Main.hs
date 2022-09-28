@@ -112,7 +112,7 @@ main' w = do
         ImageRGBA8 (Codec.Picture.Image w h _) -> (w, h)
         _ -> error "decoding gif image"
   withArray imgsL $ \ptr -> do
-    let pixelData = PixelData RGBA UnsignedByte ptr
+    let pixelData = PixelData BGRA UnsignedInt8888Rev ptr
     texImage3D
       Texture2DArray
       NoProxy
@@ -143,7 +143,9 @@ main' w = do
   GL.clearColor $= Color4 0.1 0.1 0.1 1
 
   screenTexObject <- genObjectName @TextureObject
-  _ <- xCompositeRedirectWindow dp w CompositeRedirectAutomatic
+  -- CompositeRedirectManual to avoid unnecessarily drawing the captured
+  -- window, which is overlayed anyway by our application.
+  _ <- xCompositeRedirectWindow dp w CompositeRedirectManual
   pm <- xCompositeNameWindowPixmap dp w
   print $ "Retrieved composite window pixmap: " <> show pm
 
@@ -151,7 +153,7 @@ main' w = do
       wh = wa_height attr
   GLFW.setFramebufferSizeCallback glW (Just resizeWindow')
 
-  let !anyPixelData = PixelData BGRA UnsignedInt8888Rev nullPtr
+  let !anyPixelData = PixelData BGRA UnsignedByte nullPtr
   textureBinding Texture2D $= Just screenTexObject
   texImage2D
     Texture2D
@@ -221,6 +223,7 @@ main' w = do
             _gifIndex = texIndex,
             _backgroundColor = Color4 0.1 0.1 0.1 1
           }
+  -- TODO: Shutdown xWin when application closes.
   runHorture hs hc (playScene scene)
   print "Done..."
 
