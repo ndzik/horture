@@ -7,6 +7,11 @@ module Horture.X11
     ximagebitsPerPixel,
     ximageBytesPerLine,
     ximageOffset,
+    ximageBitmapUnit,
+    ximageBitmapPad,
+    ximageRMask,
+    ximageGMask,
+    ximageBMask,
     ximageDepth,
   )
 where
@@ -50,6 +55,43 @@ ximageDepth (Image p) = peekByteOff @CInt (castPtr p) xdepth
     szCint = sizeOf @CInt undefined
     szPtr = sizeOf @CIntPtr undefined
     xdepth = 4 * szCint + szPtr + 4 * szCint
+
+ximageRMask :: Image -> IO CULong
+ximageRMask (Image p) = peekByteOff @CULong (castPtr p) xrmask
+  where
+    szCint = sizeOf @CInt undefined
+    szPtr = sizeOf @CIntPtr undefined
+    xrmask = 4 * szCint + szPtr + 7 * szCint
+
+ximageGMask :: Image -> IO CULong
+ximageGMask (Image p) = peekByteOff @CULong (castPtr p) xgmask
+  where
+    szCint = sizeOf @CInt undefined
+    szCULong = sizeOf @CULong undefined
+    szPtr = sizeOf @CIntPtr undefined
+    xgmask = 4 * szCint + szPtr + 7 * szCint + 1 * szCULong
+
+ximageBMask :: Image -> IO CULong
+ximageBMask (Image p) = peekByteOff @CULong (castPtr p) xgmask
+  where
+    szCint = sizeOf @CInt undefined
+    szCULong = sizeOf @CULong undefined
+    szPtr = sizeOf @CIntPtr undefined
+    xgmask = 4 * szCint + szPtr + 7 * szCint + 2 * szCULong
+
+ximageBitmapUnit :: Image -> IO CInt
+ximageBitmapUnit (Image p) = peekByteOff @CInt (castPtr p) xbitmapUnit
+  where
+    szCint = sizeOf @CInt undefined
+    szPtr = sizeOf @CIntPtr undefined
+    xbitmapUnit = 4 * szCint + szPtr + szCint
+
+ximageBitmapPad :: Image -> IO CInt
+ximageBitmapPad (Image p) = peekByteOff @CInt (castPtr p) xbitmapPad
+  where
+    szCint = sizeOf @CInt undefined
+    szPtr = sizeOf @CIntPtr undefined
+    xbitmapPad = 4 * szCint + szPtr + 3 * szCint
 
 ximageOffset :: Image -> IO CInt
 ximageOffset (Image p) = peekByteOff @CInt (castPtr p) xoffset
