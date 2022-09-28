@@ -112,7 +112,7 @@ main' w = do
         ImageRGBA8 (Codec.Picture.Image w h _) -> (w, h)
         _ -> error "decoding gif image"
   withArray imgsL $ \ptr -> do
-    let pixelData = PixelData BGRA UnsignedInt8888Rev ptr
+    let pixelData = PixelData RGBA UnsignedByte ptr
     texImage3D
       Texture2DArray
       NoProxy
