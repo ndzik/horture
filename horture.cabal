@@ -23,13 +23,34 @@ extra-source-files: CHANGELOG.md
 
 library horture-lib
     exposed-modules:  Horture
+                    , Horture.Scene
+                    , Horture.Horture
+                    , Horture.X11
+                    , Horture.Error
+                    , Horture.State
+                    , Horture.Render
+                    , Horture.Object
+                    , Horture.Effect
 
     -- Modules included in this library but not exported.
     -- other-modules:
 
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
+    -- LANGUAGE extensions used by modules in this package. other-extensions:
     build-depends:    base ^>=4.14.3.0
+                    , X11
+                    , text
+                    , OpenGL
+                    , mtl
+                    , GLFW-b
+                    , GLUtil
+                    , raw-strings-qq
+                    , bytestring
+                    , clock
+                    , deepseq
+                    , synchronous-channels
+                    , JuicyPixels
+                    , containers
+                    , linear
     ghc-options:
                     -Wall
                     -fno-warn-name-shadowing
@@ -38,9 +59,29 @@ library horture-lib
 
 executable horture-exe
     hs-source-dirs:   app
+    -- other-modules:
     main-is:          Main.hs
+    ghc-options:
+                    -fno-warn-name-shadowing
+                    -threaded
+                    -O2
     build-depends:    base ^>=4.14.3.0
                     , horture-lib
                     , X11
                     , text
+                    , OpenGL
+                    , mtl
+                    , GLFW-b
+                    , GLUtil
+                    , raw-strings-qq
+                    , bytestring
+                    , clock
+                    , deepseq
+                    , synchronous-channels
+                    , containers
+                    , optparse-applicative
+                    , linear
+                    , random
+                    , JuicyPixels
+                    , vector
     default-language: Haskell2010
