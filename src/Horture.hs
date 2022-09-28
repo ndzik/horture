@@ -286,7 +286,7 @@ out vec4 frag_colour;
 void main() {
   vec4 colour = texture(texture1, texCoord);
   // frag_colour = vec4(colour.x+sin(4*texCoord.x+dt), colour.y+cos(12*texCoord.y+dt), colour.z-sin(3*dt), colour.w);
-  frag_colour = vec4(colour.x, colour.y, colour.z, colour.w);
+  frag_colour = vec4(colour.x, colour.y, colour.z, 1);
 }
     |]
 
