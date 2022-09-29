@@ -76,7 +76,7 @@ type Loader a = ExceptT LoaderError (ReaderT LoaderConfig (StateT LoaderState IO
 
 loadGifs :: Loader ()
 loadGifs = do
-  gifFiles <- asks _lcgifDirectory >>= loadDirectory <&> filter isGif
+  gifFiles <- asks _lcgifDirectory >>= liftIO . makeAbsolute >>= loadDirectory <&> filter isGif
   loadProgram
   glGifs <- mapM loadGifGL gifFiles
   storeGifs glGifs
@@ -152,8 +152,7 @@ loadGifGL gif = do
   gifTexUni <- asks _lcgifTexUniform
   uniform gifTexUni $= nu
 
-  gifAbsolutePath <- liftIO $ makeAbsolute gif
-  return $ HortureGIF gifAbsolutePath (takeBaseName gif) nu gifTexObject delayms
+  return $ HortureGIF gif (takeBaseName gif) nu gifTexObject (length imgs) delayms
 
 foldImageData :: [Image PixelRGBA8] -> Either LoaderError [Word8]
 foldImageData [] = Left "no image data available to fold"
@@ -169,4 +168,4 @@ isGif :: FilePath -> Bool
 isGif fp = takeExtension fp == ".gif"
 
 loadDirectory :: FilePath -> Loader [FilePath]
-loadDirectory = liftIO . listDirectory
+loadDirectory fp = (liftIO . listDirectory $ fp) <&> map ((fp ++ "/") ++)
