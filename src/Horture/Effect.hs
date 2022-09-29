@@ -1,7 +1,7 @@
 module Horture.Effect
   ( Effect (..),
-  GifIndex,
-  Position,
+    GifIndex,
+    Position,
     mkGifEffects,
   )
 where
@@ -28,4 +28,4 @@ data Effect
 
 -- | mkGifEffects creates effect constructors from the given HortureGIF cache.
 mkGifEffects :: Map.Map FilePath HortureGIF -> [Lifetime -> Position -> Effect]
-mkGifEffects = Map.foldl (\effs hg -> AddGif (_gifFullPath hg) : effs) []
+mkGifEffects = Map.foldr (\hg effs -> AddGif (_gifFullPath hg) : effs) []

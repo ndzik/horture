@@ -66,7 +66,7 @@ playScene s = do
       dt <- deltaTime startTime
       clearView
       renderScreen dt . _screen $ s
-      renderObjects dt . _gifs $ s
+      renderGifs dt . _gifs $ s
       updateView
       pollEvents
       s' <- getTime <&> flip purge s
@@ -80,7 +80,15 @@ updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
 
 pollEvents :: Horture ()
 pollEvents = do
-  liftIO GLFW.pollEvents
+  pollGLFWEvents
+  pollXEvents
+
+
+pollGLFWEvents :: Horture ()
+pollGLFWEvents = liftIO GLFW.pollEvents
+
+pollXEvents :: Horture ()
+pollXEvents = do
   glWin <- asks _glWin
   projectionUniform <- asks _projUniform
   modelUniform <- asks _modelUniform
@@ -127,7 +135,7 @@ pollEvents = do
               m44ToGLmatrix model >>= (uniform modelUniform $=)
 
               return (newPm, (fromIntegral ev_width, fromIntegral ev_height))
-            _ -> return (pm, (ww, wh))
+            _otherwise -> return (pm, (ww, wh))
         else return (pm, (ww, wh))
   modify $ \hs -> hs {_dim = (ww, wh), _capture = pm}
 
