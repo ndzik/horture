@@ -106,7 +106,7 @@ main' w = do
   --
 
   let vertexAttributeLocation = AttribLocation 0
-      texAttributeLocation = texAttributeLocation
+      texAttributeLocation = AttribLocation 1
   bindVertexArrayObject $= Just vao
   bindBuffer ArrayBuffer $= Just vbo
   withArray verts $ \ptr -> bufferData ArrayBuffer $= (fromIntegral planeVertsSize, ptr, StaticDraw)
