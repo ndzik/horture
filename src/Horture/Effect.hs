@@ -1,15 +1,22 @@
-module Horture.Effect (Effect (..), GifType (..)) where
+module Horture.Effect
+  ( Effect (..),
+  GifIndex,
+  Position,
+    mkGifEffects,
+  )
+where
 
+import qualified Data.Map.Strict as Map
+import Horture.Gif
 import Horture.Object
 import Linear.V3
 
-data GifType = Ricardo
-  deriving (Show)
+type GifIndex = FilePath
 
 type Position = V3 Float
 
 data Effect
-  = AddGif GifType Lifetime Position
+  = AddGif !GifIndex !Lifetime !Position
   | ShakeIt
   | ZoomIt
   | FlipIt
@@ -17,4 +24,8 @@ data Effect
   | BlazeIt
   | Flashbang
   | Noop
-  deriving (Show)
+  deriving (Show, Eq)
+
+-- | mkGifEffects creates effect constructors from the given HortureGIF cache.
+mkGifEffects :: Map.Map FilePath HortureGIF -> [Lifetime -> Position -> Effect]
+mkGifEffects = Map.foldl (\effs hg -> AddGif (_gifFullPath hg) : effs) []
