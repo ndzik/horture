@@ -27,9 +27,12 @@ library horture-lib
                     , Horture.Horture
                     , Horture.X11
                     , Horture.Error
+                    , Horture.Events
+                    , Horture.Event
                     , Horture.State
                     , Horture.Render
                     , Horture.Object
+                    , Horture.Loader
                     , Horture.Effect
 
     -- Modules included in this library but not exported.
@@ -51,11 +54,23 @@ library horture-lib
                     , JuicyPixels
                     , containers
                     , linear
+                    , vector
+                    , directory
     ghc-options:
                     -Wall
                     -fno-warn-name-shadowing
     hs-source-dirs:   src
     default-language: Haskell2010
+
+test-suite horture-test
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test
+  main-is:            Spec.hs
+  build-depends:      base ^>=4.14.3.0
+                    , horture-lib
+                    , tasty
+                    , tasty-hunit
+  default-language: Haskell2010
 
 executable horture-exe
     hs-source-dirs:   app
