@@ -11,6 +11,7 @@ import Data.Bits hiding (rotate)
 import Data.ByteString (readFile)
 import Data.Default
 import Data.List (elem, find)
+import qualified Data.Map.Strict as Map
 import Data.Maybe
 import Data.Vector.Storable (toList)
 import Data.Word
@@ -86,12 +87,14 @@ main' w = do
   -- GIFs
   gifModelUniform <- uniformLocation gifProg "model"
   gifTexUni <- uniformLocation gifProg "gifTexture"
+  gifTexIndex <- uniformLocation gifProg "index"
   (loaderResult, loaderState) <-
     runLoader
-      ( def
+      ( LC
           { _lcgifDirectory = "./gifs",
             _lcgifProg = gifProg,
-            _lcgifTexUniform = gifTexUni
+            _lcgifTexUniform = gifTexUni,
+            _lcdefaultGifDelay = defaultGifDelay
           }
       )
       (def {_nextTextureUnit = TextureUnit 4})
@@ -103,6 +106,8 @@ main' w = do
       print . ("resolved GIFs: " <>) . show $ resolvedGifs
       return resolvedGifs
   let gifEffects = mkGifEffects hortureGifs
+  activeTexture $= TextureUnit 0
+  currentProgram $= Just prog
   --
 
   let vertexAttributeLocation = AttribLocation 0
@@ -174,7 +179,7 @@ main' w = do
         applyAll effs startTime 0 $
           Scene
             { _screen = def,
-              _gifs = [],
+              _gifs = Map.empty,
               _gifCache = hortureGifs
             }
       hs =
@@ -195,6 +200,7 @@ main' w = do
             _planeTexLocation = texAttributeLocation,
             _screenTexUnit = TextureUnit 0,
             _screenTexObject = screenTexObject,
+            _gifIndexUniform = gifTexIndex,
             _gifModelUniform = gifModelUniform,
             _loadedGifs = hortureGifs,
             _glWin = glW,
@@ -222,10 +228,6 @@ findMe root dp me = do
       . find
         ( \case
             (Just (ns, c)) -> hortureName `elem` ns
-            _ -> False
+            _otherwise -> False
         )
       $ res
-
-createGifTex :: DynamicImage -> IO ()
-createGifTex (ImageRGBA8 i) = undefined
-createGifTex _ = error "unhandled image type encountered when creating GIF texture"
