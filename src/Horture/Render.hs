@@ -1,59 +1,62 @@
 {-# LANGUAGE TypeApplications #-}
 
 module Horture.Render
-  ( renderObjects,
+  ( renderGifs,
     renderScreen,
   )
 where
 
+
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import qualified Data.Map.Strict as Map
 import Foreign.Ptr
 import Foreign.Storable
 import Graphics.Rendering.OpenGL hiding (get)
 import Graphics.X11
+import Horture.Effect
+import Horture.Gif
 import Horture.Horture
 import Horture.Object
+import Horture.Scene
 import Horture.State
 import Horture.X11
 import Linear.Matrix
 import Linear.V4
 
-renderObjects :: Double -> [Object] -> Horture ()
-renderObjects _ [] = return ()
-renderObjects dt os = do
+renderGifs :: Double -> Map.Map GifIndex [ActiveGIF] -> Horture ()
+renderGifs _ m | Map.null m = return ()
+renderGifs dt m = do
   gifProg <- asks _gifProg
-  gifTex <- asks _gifTexUnit
-  gifTexObject <- asks _gifTexObject
-  gifIndex <- asks _gifIndex
   modelUniform <- asks _gifModelUniform
-  liftIO $ currentProgram $= Just gifProg
-  activeTexture $= gifTex
-  textureBinding Texture2DArray $= Just gifTexObject
-  go gifIndex modelUniform os
+  gifIndexUniform <- asks _gifIndexUniform
+  currentProgram $= Just gifProg
+  -- General preconditions are set. Render all GIFs of the same type at once.
+  mapM_ (renderGifType modelUniform gifIndexUniform) . Map.toList $ m
   where
-    go :: UniformLocation -> UniformLocation -> [Object] -> Horture ()
-    go _ _ [] = return ()
-    go gifIndex modelUniform (o : os) = do
+    renderGifType :: UniformLocation -> UniformLocation -> (GifIndex, [ActiveGIF]) -> Horture ()
+    renderGifType _ _ (_, []) = return ()
+    renderGifType modelUniform gifIndexUniform (_, gifsOfSameType@(g : _)) = do
       let elapsedms = round $ dt * (10 ^ (2 :: Int))
-          i = (elapsedms `div` (10 * _delay o)) `mod` _textureLength o
-      liftIO $
-        m44ToGLmatrix
-          ( model o
-              !*! V4
-                (V4 0.5 0 0 0)
-                (V4 0 0.5 0 0)
-                (V4 0 0 0.5 0)
-                (V4 0 0 0 1)
+          HortureGIF _ _ gifTextureUnit gifTextureObject numOfImgs delay = _afGif g
+      activeTexture $= gifTextureUnit
+      textureBinding Texture2DArray $= Just gifTextureObject
+      mapM_
+        ( ( \o -> do
+              -- TODO: Incorporate the birthtime of this active gif to account
+              -- for timeoffsets.
+              let texOffset = (elapsedms `div` (10 * delay)) `mod` numOfImgs
+              liftIO $ m44ToGLmatrix (model o !*! _scale o) >>= (uniform modelUniform $=)
+              uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
+              liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
           )
-          >>= (uniform modelUniform $=)
-      liftIO $ uniform gifIndex $= fromIntegral @_ @GLint i
-      liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
-      go gifIndex modelUniform os
+            . _afObject
+        )
+        gifsOfSameType
 
--- renderScreen renders the captured application window. It is assumed that the
--- horture texture was already initialized at this point.
+-- | renderScreen renders the captured application window. It is assumed that
+-- the horture texture was already initialized at this point.
 renderScreen :: Double -> Object -> Horture ()
 renderScreen _ s = do
   backgroundProg <- asks _backgroundProg
@@ -61,7 +64,7 @@ renderScreen _ s = do
   screenTexUnit <- asks _screenTexUnit
   screenTexObject <- asks _screenTexObject
   (HortureState dp _ pm dim) <- get
-  liftIO $ currentProgram $= Just backgroundProg
+  currentProgram $= Just backgroundProg
   activeTexture $= screenTexUnit
   textureBinding Texture2D $= Just screenTexObject
   liftIO $ getWindowImage dp pm dim >>= updateWindowTexture dim
@@ -70,7 +73,7 @@ renderScreen _ s = do
   liftIO $ m44ToGLmatrix m >>= (uniform modelUniform $=)
   liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
 
--- m44ToGLmatrix converts the row based representation of M44 to a GLmatrix
+-- | m44ToGLmatrix converts the row based representation of M44 to a GLmatrix
 -- representation which is column based.
 m44ToGLmatrix :: (Show a, MatrixComponent a) => M44 a -> IO (GLmatrix a)
 m44ToGLmatrix m = withNewMatrix ColumnMajor (\p -> poke (castPtr p) m')
