@@ -7,6 +7,8 @@ module Horture.Loader
     runLoader,
     isGif,
     loadGifs,
+    defaultGifDelay,
+    defaultGifDirectory,
   )
 where
 
@@ -62,14 +64,11 @@ data LoaderConfig = LC
   }
   deriving (Show)
 
-instance Default LoaderConfig where
-  def =
-    LC
-      { _lcgifDirectory = ".",
-        _lcgifProg = error "LoaderConfig: missing ShaderProgram for GIFs",
-        _lcgifTexUniform = error "LoaderConfig: missing TexUniformLocation for GIFs",
-        _lcdefaultGifDelay = 200
-      }
+defaultGifDirectory :: FilePath
+defaultGifDirectory = "."
+
+defaultGifDelay :: GifDelay
+defaultGifDelay = 200
 
 type LoaderError = String
 
