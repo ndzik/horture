@@ -95,6 +95,7 @@ executable horture-exe
                     , bytestring
                     , clock
                     , deepseq
+                    , data-default
                     , synchronous-channels
                     , containers
                     , optparse-applicative
