@@ -7,7 +7,6 @@
 module Horture
   ( SizeUpdate (..),
     hortureName,
-    listenResizeEvent,
     resizeWindow',
     verts,
     floatSize,
@@ -19,9 +18,6 @@ module Horture
     initGLFW,
     m44ToGLmatrix,
     playScene,
-    scaleForAspectRatio,
-    projectionForAspectRatio,
-    degToRad,
     identityM44,
     x11UserGrabWindow,
   )
@@ -33,7 +29,6 @@ import Control.Monad.State
 import Data.Bits
 import Data.ByteString.Char8 (ByteString, pack)
 import Data.Functor ((<&>))
-import Data.IORef
 import Data.Word
 import Foreign.C.String
 import Foreign.C.Types
@@ -41,7 +36,6 @@ import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Foreign.Storable
 import Graphics.GLUtil as Util hiding (throwError)
-import Graphics.GLUtil.Camera3D as Util
 import Graphics.Rendering.OpenGL as GL hiding (Color, flush)
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11 hiding (resizeWindow)
@@ -52,10 +46,11 @@ import Horture.Horture
 import Horture.Render
 import Horture.Scene
 import Horture.State
-import Linear.Matrix
-import Linear.V4
 import System.Exit
 import Text.RawString.QQ
+
+hortureName :: String
+hortureName = "horture"
 
 playScene :: Scene -> Horture ()
 playScene s = do
@@ -83,6 +78,8 @@ pollEvents = do
   pollGLFWEvents
   pollXEvents
 
+-- TODO: Add again.
+-- pollHortureEvents
 
 pollGLFWEvents :: Horture ()
 pollGLFWEvents = liftIO GLFW.pollEvents
@@ -128,6 +125,7 @@ pollXEvents = do
                 anyPixelData
               generateMipmap' Texture2D
 
+              -- TODO: Something is wrong here with the scaling to aspect ratio.
               let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
               m44ToGLmatrix proj >>= (uniform projectionUniform $=)
 
@@ -298,7 +296,7 @@ void main() {
 }
     |]
 
-data SizeUpdate = GLFWUpdate (Int, Int) | XUpdate (CInt, CInt) deriving (Show, Eq)
+data SizeUpdate = GLFWUpdate !(Int, Int) | XUpdate !(CInt, CInt) deriving (Show, Eq)
 
 x11UserGrabWindow :: IO (Maybe Window)
 x11UserGrabWindow = do
@@ -336,67 +334,9 @@ x11UserGrabWindow = do
               s <- peek cptr >>= peekCString
               print $ "Grabbing window: " <> s
         return . Just $ ev_subwindow
-      _ -> return Nothing
+      _otherwise -> return Nothing
 
   ungrabPointer dp currentTime
   freeCursor dp cursor
   closeDisplay dp
   return userDecision
-
-listenResizeEvent :: Display -> Window -> GLFW.Window -> IORef (Drawable, (CInt, CInt)) -> IO ()
-listenResizeEvent dp w glW r = go
-  where
-    go = do
-      allocaXEvent $ \evptr -> do
-        doIt <- checkWindowEvent dp w structureNotifyMask evptr
-        when doIt $ do
-          getEvent evptr >>= \case
-            ConfigureEvent {..} -> do
-              -- Retrieve a new pixmap.
-              pm <- xCompositeNameWindowPixmap dp w
-              -- Update reference, aspect ratio & destroy old pixmap.
-              pm <- atomicModifyIORef' r $ \(d, _) -> ((pm, (ev_width, ev_height)), d)
-              freePixmap dp pm
-              -- Update overlay window with new aspect ratio.
-              let w = fromIntegral ev_width
-                  h = fromIntegral ev_height
-              GLFW.setWindowSize glW w h
-            _ -> return ()
-      go
-
-hortureName :: String
-hortureName = "horture"
-
-identityM44 :: M44 Float
-identityM44 =
-  V4
-    (V4 1 0 0 0)
-    (V4 0 1 0 0)
-    (V4 0 0 1 0)
-    (V4 0 0 0 1)
-
-m44ToGLmatrix :: (Show a, MatrixComponent a) => M44 a -> IO (GLmatrix a)
-m44ToGLmatrix m = withNewMatrix ColumnMajor (\p -> poke (castPtr p) m')
-  where
-    m' = transpose m
-
-degToRad :: Float -> Float
-degToRad = (*) (pi / 180)
-
-scaleForAspectRatio :: (Float, Float) -> M44 Float
-scaleForAspectRatio (ww, wh) = model
-  where
-    ident = identityM44
-    aspectRatio = ww / wh
-    scaling =
-      V4
-        (V4 aspectRatio 0 0 0)
-        (V4 0 1 0 0)
-        (V4 0 0 1 0)
-        (V4 0 0 0 1)
-    model = scaling !*! ident
-
-projectionForAspectRatio :: (Float, Float) -> M44 Float
-projectionForAspectRatio (ww, wh) = proj
-  where
-    proj = Util.projectionMatrix (degToRad 90) (ww / wh) 1 100

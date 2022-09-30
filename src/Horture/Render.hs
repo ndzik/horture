@@ -3,9 +3,13 @@
 module Horture.Render
   ( renderGifs,
     renderScreen,
+    scaleForAspectRatio,
+    m44ToGLmatrix,
+    identityM44,
+    degToRad,
+    projectionForAspectRatio,
   )
 where
-
 
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -13,6 +17,7 @@ import Control.Monad.State
 import qualified Data.Map.Strict as Map
 import Foreign.Ptr
 import Foreign.Storable
+import Graphics.GLUtil.Camera3D as Util
 import Graphics.Rendering.OpenGL hiding (get)
 import Graphics.X11
 import Horture.Effect
@@ -127,3 +132,11 @@ updateWindowTexture (w, h) i = do
     pd
   generateMipmap' Texture2D
   destroyImage i
+
+degToRad :: Float -> Float
+degToRad = (*) (pi / 180)
+
+projectionForAspectRatio :: (Float, Float) -> M44 Float
+projectionForAspectRatio (ww, wh) = proj
+  where
+    proj = Util.projectionMatrix (degToRad 90) (ww / wh) 1 100
