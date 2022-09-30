@@ -94,10 +94,11 @@ main' w = do
           { _lcgifDirectory = "./gifs",
             _lcgifProg = gifProg,
             _lcgifTexUniform = gifTexUni,
+            _lcGifTextureUnit = TextureUnit 4,
             _lcdefaultGifDelay = defaultGifDelay
           }
       )
-      (def {_nextTextureUnit = TextureUnit 4})
+      def
       loadGifs
   hortureGifs <- case loaderResult of
     Left err -> print ("loading GIFs: " <> err) >> exitFailure
@@ -173,10 +174,12 @@ main' w = do
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
 
   gen <- Random.getStdGen
-  let (mkGifEff : _) = gifEffects
-      effs = map (\v -> mkGifEff (Limited 8) (V3 (sin (20 * v)) (cos (33 * v)) 0)) . take 10 $ Random.randoms @Float gen
+  let effs =
+        map (\(v, i) -> (gifEffects !! i) (Limited 8) (V3 (sin (20 * v)) (cos (33 * v)) 0))
+          . take 10
+          $ zip (Random.randoms @Float gen) (Random.randomRs (0, length gifEffects - 1) gen)
       scene =
-        applyAll effs startTime 0 $
+        applyAll effs 0 0 $
           Scene
             { _screen = def,
               _gifs = Map.empty,
@@ -207,6 +210,7 @@ main' w = do
             _backgroundColor = Color4 0.1 0.1 0.1 1
           }
   -- TODO: Shutdown xWin when application closes.
+  print "starting scene rendering"
   runHorture hs hc (playScene scene)
   print "Done..."
 
