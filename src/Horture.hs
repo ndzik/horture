@@ -94,8 +94,8 @@ pollXEvents = do
   xWin <- gets _xWin
   dp <- gets _display
   pm <- gets _capture
-  (ww, wh) <- gets _dim
-  (pm, (ww, wh)) <- liftIO $
+  (oldW, oldH) <- gets _dim
+  (pm, (newW, newH)) <- liftIO $
     allocaXEvent $ \evptr -> do
       doIt <- checkWindowEvent dp xWin structureNotifyMask evptr
       if doIt
@@ -107,9 +107,11 @@ pollXEvents = do
               -- Update reference, aspect ratio & destroy old pixmap.
               freePixmap dp pm
               -- Update overlay window with new aspect ratio.
-              let glw = fromIntegral ev_width
-                  glh = fromIntegral ev_height
-              GLFW.setWindowSize glWin glw glh
+              let newWInt = fromIntegral ev_width
+                  newHInt = fromIntegral ev_height
+                  newWFloat = fromIntegral ev_width
+                  newHFloat = fromIntegral ev_height
+              GLFW.setWindowSize glWin newWInt newHInt
               GLFW.setWindowPos glWin (fromIntegral ev_x) (fromIntegral ev_y)
               let !anyPixelData = PixelData BGRA UnsignedInt8888Rev nullPtr
               -- Update texture bindings!
@@ -125,17 +127,16 @@ pollXEvents = do
                 anyPixelData
               generateMipmap' Texture2D
 
-              -- TODO: Something is wrong here with the scaling to aspect ratio.
-              let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
+              let proj = curry projectionForAspectRatio newWFloat newHFloat
               m44ToGLmatrix proj >>= (uniform projectionUniform $=)
 
-              let model = curry scaleForAspectRatio (fromIntegral ww) (fromIntegral wh)
+              let model = curry scaleForAspectRatio newWInt newHInt
               m44ToGLmatrix model >>= (uniform modelUniform $=)
 
-              return (newPm, (fromIntegral ev_width, fromIntegral ev_height))
-            _otherwise -> return (pm, (ww, wh))
-        else return (pm, (ww, wh))
-  modify $ \hs -> hs {_dim = (ww, wh), _capture = pm}
+              return (newPm, (newWInt, newHInt))
+            _otherwise -> return (pm, (oldW, oldH))
+        else return (pm, (oldW, oldH))
+  modify $ \hs -> hs {_dim = (newW, newH), _capture = pm}
 
 deltaTime :: Double -> Horture Double
 deltaTime startTime =

@@ -26,7 +26,7 @@ data Object = Object
     _pos :: !(V3 Float),
     -- | Current orientation of this object.
     _orientation :: !(Quaternion Float),
-    -- | Current scale of this object, by default fills the whole screen.
+    -- | Current scale of this object.
     _scale :: !(M44 Float),
     -- | How long this object is supposed to live.
     _lifetime :: !Lifetime,
