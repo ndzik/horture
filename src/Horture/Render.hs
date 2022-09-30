@@ -37,6 +37,8 @@ renderGifs dt m = do
   gifProg <- asks _gifProg
   modelUniform <- asks _gifModelUniform
   gifIndexUniform <- asks _gifIndexUniform
+  gifTextureUnit <- asks _gifTextureUnit
+  activeTexture $= gifTextureUnit
   currentProgram $= Just gifProg
   -- General preconditions are set. Render all GIFs of the same type at once.
   mapM_ (renderGifType modelUniform gifIndexUniform) . Map.toList $ m
@@ -44,9 +46,8 @@ renderGifs dt m = do
     renderGifType :: UniformLocation -> UniformLocation -> (GifIndex, [ActiveGIF]) -> Horture ()
     renderGifType _ _ (_, []) = return ()
     renderGifType modelUniform gifIndexUniform (_, gifsOfSameType@(g : _)) = do
-      let HortureGIF _ _ gifTextureUnit gifTextureObject numOfImgs delays = _afGif g
+      let HortureGIF _ _ gifTextureObject numOfImgs delays = _afGif g
           timeSinceBirth = dt - (_birth . _afObject $ g)
-      activeTexture $= gifTextureUnit
       textureBinding Texture2DArray $= Just gifTextureObject
       mapM_
         ( ( \o -> do

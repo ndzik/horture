@@ -207,6 +207,7 @@ main' w = do
             _screenTexUnit = screenTextureUnit,
             _screenTexObject = screenTexObject,
             _gifIndexUniform = gifTexIndex,
+            _gifTextureUnit = gifTextureUnit,
             _gifModelUniform = gifModelUniform,
             _loadedGifs = hortureGifs,
             _glWin = glW,

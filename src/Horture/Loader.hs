@@ -150,7 +150,7 @@ loadGifGL gif = do
   gifTexUni <- asks _lcgifTexUniform
   uniform gifTexUni $= nu
 
-  return $ HortureGIF gif (takeBaseName gif) nu gifTexObject (length imgs) delaysms
+  return $ HortureGIF gif (takeBaseName gif) gifTexObject (length imgs) delaysms
 
 foldImageData :: [Image PixelRGBA8] -> Either LoaderError [Word8]
 foldImageData [] = Left "no image data available to fold"

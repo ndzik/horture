@@ -21,6 +21,7 @@ data HortureStatic = HortureStatic
     _screenTexUnit :: !TextureUnit,
     _screenTexObject :: !TextureObject,
     _gifIndexUniform :: !UniformLocation,
+    _gifTextureUnit :: !TextureUnit,
     _gifModelUniform :: !UniformLocation,
     _loadedGifs :: !(Map.Map FilePath HortureGIF),
     _glWin :: !GLFW.Window,

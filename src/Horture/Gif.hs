@@ -3,13 +3,9 @@ module Horture.Gif (HortureGIF (..)) where
 import Codec.Picture.Gif
 import Graphics.Rendering.OpenGL
 
--- TODO: Do I want to track the ShaderProgram here too? Would be redundant
--- state.
--- TODO: Externally track the `TextureUnit` this gif is part of, reduce redundant state.
 data HortureGIF = HortureGIF
   { _gifFullPath :: !FilePath,
     _gifName :: !String,
-    _gifTextureUnit :: !TextureUnit,
     _gifTextureObject :: !TextureObject,
     _gifNumOfImgs :: !Int,
     _gifDelays :: ![GifDelay]
