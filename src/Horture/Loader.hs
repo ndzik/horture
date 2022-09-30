@@ -37,19 +37,16 @@ runLoader :: LoaderConfig -> LoaderState -> Loader a -> IO (Either LoaderError a
 runLoader lc ls = flip runStateT ls . flip runReaderT lc . runExceptT
 
 -- LoaderState describes the state of the horture loader.
-data LoaderState = LS
-  { -- | Generator for texture units counting up.
-    _nextTextureUnit :: !TextureUnit,
-    -- | Gifs which were already resolved and loaded as textures.
-    _resolvedGifs :: !(Map.Map FilePath HortureGIF)
+newtype LoaderState = LS
+  { -- | Gifs which were already resolved and loaded as textures.
+    _resolvedGifs :: Map.Map FilePath HortureGIF
   }
   deriving (Show)
 
 instance Default LoaderState where
   def =
     LS
-      { _nextTextureUnit = TextureUnit 0,
-        _resolvedGifs = Map.empty
+      { _resolvedGifs = Map.empty
       }
 
 data LoaderConfig = LC
@@ -60,7 +57,9 @@ data LoaderConfig = LC
     -- | Location for sampler2DArray in fragment shader.
     _lcgifTexUniform :: !UniformLocation,
     -- | Default delay to use for gifs without a specified delay.
-    _lcdefaultGifDelay :: !GifDelay
+    _lcdefaultGifDelay :: !GifDelay,
+    -- | Texture unit which holds GIF images.
+    _lcGifTextureUnit :: !TextureUnit
   }
   deriving (Show)
 
@@ -107,7 +106,7 @@ loadProgram = asks _lcgifProg >>= (currentProgram $=) . Just
 unloadProgram :: Loader ()
 unloadProgram = currentProgram $= Nothing
 
-readImagesAndMetadata :: FilePath -> Loader ([Image PixelRGBA8], GifDelay, (Int, Int))
+readImagesAndMetadata :: FilePath -> Loader ([Image PixelRGBA8], [GifDelay], (Int, Int))
 readImagesAndMetadata gif = do
   content <- liftIO $ readFile gif
   imgs@(i : _) <- case decodeGifImages content of
@@ -115,11 +114,10 @@ readImagesAndMetadata gif = do
     Right [] -> throwError "decoded gif without images"
     Right imgs@(ImageRGBA8 _ : _) -> mapM stripDynamicImage imgs
     Right _ -> throwError "only supporting ImageRGBA8 gif types"
-  delayms <- case getDelaysGifImages content of
+  delaysms <- case getDelaysGifImages content of
     Left err -> throwError $ "retrieving gif delays: " <> err
-    Right (d : _) -> return d
-    Right [] -> asks _lcdefaultGifDelay
-  return (imgs, delayms, (imageWidth i, imageHeight i))
+    Right ds -> return ds
+  return (imgs, delaysms, (imageWidth i, imageHeight i))
 
 stripDynamicImage :: DynamicImage -> Loader (Image PixelRGBA8)
 stripDynamicImage (ImageRGBA8 i) = return i
@@ -127,12 +125,12 @@ stripDynamicImage _ = throwError "heterogenous gif array encountered"
 
 loadGifGL :: FilePath -> Loader HortureGIF
 loadGifGL gif = do
-  (imgs, delayms, (w, h)) <- readImagesAndMetadata gif
+  (imgs, delaysms, (w, h)) <- readImagesAndMetadata gif
   rawGifData <- case foldImageData imgs of
     Left err -> throwError err
     Right imgdata -> return imgdata
 
-  nu <- nextTextureUnit
+  nu <- asks _lcGifTextureUnit
   activeTexture $= nu
   gifTexObject <- genObjectName @TextureObject
   textureBinding Texture2DArray $= Just gifTexObject
@@ -152,17 +150,11 @@ loadGifGL gif = do
   gifTexUni <- asks _lcgifTexUniform
   uniform gifTexUni $= nu
 
-  return $ HortureGIF gif (takeBaseName gif) nu gifTexObject (length imgs) delayms
+  return $ HortureGIF gif (takeBaseName gif) nu gifTexObject (length imgs) delaysms
 
 foldImageData :: [Image PixelRGBA8] -> Either LoaderError [Word8]
 foldImageData [] = Left "no image data available to fold"
 foldImageData imgs = Right $ concatMap (toList . imageData) imgs
-
-nextTextureUnit :: Loader TextureUnit
-nextTextureUnit = do
-  (nu, nu') <- gets _nextTextureUnit <&> \tu@(TextureUnit i) -> (tu, TextureUnit (i + 1))
-  modify (\ls -> ls {_nextTextureUnit = nu'})
-  return nu
 
 isGif :: FilePath -> Bool
 isGif fp = takeExtension fp == ".gif"

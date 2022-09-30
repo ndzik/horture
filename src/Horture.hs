@@ -54,8 +54,8 @@ hortureName = "horture"
 
 playScene :: Scene -> Horture ()
 playScene s = do
-  startTime <- getTime
-  go startTime s
+  setTime 0
+  go 0 s
   where
     go startTime s = do
       dt <- deltaTime startTime
@@ -141,6 +141,9 @@ pollXEvents = do
 deltaTime :: Double -> Horture Double
 deltaTime startTime =
   getTime >>= \currentTime -> return $ currentTime - startTime
+
+setTime :: Double -> Horture ()
+setTime = liftIO . GLFW.setTime
 
 getTime :: Horture Double
 getTime =

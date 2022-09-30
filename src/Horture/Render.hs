@@ -11,6 +11,7 @@ module Horture.Render
   )
 where
 
+import Codec.Picture.Gif
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
@@ -43,15 +44,13 @@ renderGifs dt m = do
     renderGifType :: UniformLocation -> UniformLocation -> (GifIndex, [ActiveGIF]) -> Horture ()
     renderGifType _ _ (_, []) = return ()
     renderGifType modelUniform gifIndexUniform (_, gifsOfSameType@(g : _)) = do
-      let elapsedms = round $ dt * (10 ^ (2 :: Int))
-          HortureGIF _ _ gifTextureUnit gifTextureObject numOfImgs delay = _afGif g
+      let HortureGIF _ _ gifTextureUnit gifTextureObject numOfImgs delays = _afGif g
+          timeSinceBirth = dt - (_birth . _afObject $ g)
       activeTexture $= gifTextureUnit
       textureBinding Texture2DArray $= Just gifTextureObject
       mapM_
         ( ( \o -> do
-              -- TODO: Incorporate the birthtime of this active gif to account
-              -- for timeoffsets.
-              let texOffset = (elapsedms `div` (10 * delay)) `mod` numOfImgs
+              let texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
               liftIO $ m44ToGLmatrix (model o !*! _scale o) >>= (uniform modelUniform $=)
               uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
               liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
@@ -59,6 +58,18 @@ renderGifs dt m = do
             . _afObject
         )
         gifsOfSameType
+
+-- | indexForGif returns the index of the image for the associated GIF to be
+-- viewed at the time given since birth in 100th of a second. The index is
+-- clamped from [0,maxIndex].
+indexForGif :: [GifDelay] -> Double -> Int -> Int
+indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxIndex + 1)
+  where
+    go :: [GifDelay] -> Double -> Int -> Int
+    go [] _ i = i
+    go (d : gifDelays) accumulatedTime i
+      | accumulatedTime > timeSinceBirth = i
+      | otherwise = go gifDelays (accumulatedTime + fromIntegral d) (i + 1)
 
 -- | renderScreen renders the captured application window. It is assumed that
 -- the horture texture was already initialized at this point.
