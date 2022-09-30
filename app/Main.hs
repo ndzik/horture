@@ -84,6 +84,9 @@ main' w = do
     print "xCompositeExtension is missing!" >> exitFailure
   print "Queried composite extension"
 
+  let screenTextureUnit = TextureUnit 0
+      gifTextureUnit = TextureUnit 4
+
   -- GIFs
   gifModelUniform <- uniformLocation gifProg "model"
   gifTexUni <- uniformLocation gifProg "gifTexture"
@@ -94,7 +97,7 @@ main' w = do
           { _lcgifDirectory = "./gifs",
             _lcgifProg = gifProg,
             _lcgifTexUniform = gifTexUni,
-            _lcGifTextureUnit = TextureUnit 4,
+            _lcGifTextureUnit = gifTextureUnit,
             _lcdefaultGifDelay = defaultGifDelay
           }
       )
@@ -107,7 +110,7 @@ main' w = do
       print . ("resolved GIFs: " <>) . show $ resolvedGifs
       return resolvedGifs
   let gifEffects = mkGifEffects hortureGifs
-  activeTexture $= TextureUnit 0
+  activeTexture $= screenTextureUnit
   currentProgram $= Just prog
   --
 
@@ -201,7 +204,7 @@ main' w = do
             _projUniform = projectionUniform,
             _planeVertexLocation = vertexAttributeLocation,
             _planeTexLocation = texAttributeLocation,
-            _screenTexUnit = TextureUnit 0,
+            _screenTexUnit = screenTextureUnit,
             _screenTexObject = screenTexObject,
             _gifIndexUniform = gifTexIndex,
             _gifModelUniform = gifModelUniform,
