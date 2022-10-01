@@ -56,15 +56,16 @@ hortureName = "horture"
 playScene :: Scene -> Horture ()
 playScene s = do
   setTime 0
-  go 0 s
+  go 0 (Just s)
   where
-    go startTime s = do
+    go _ Nothing = return ()
+    go startTime (Just s) = do
       dt <- deltaTime startTime
       clearView
       renderScreen dt . _screen $ s
       renderGifs dt . _gifs $ s
       updateView
-      s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> purge timeNow
+      s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
       go startTime s'
 
 clearView :: Horture ()
@@ -73,7 +74,7 @@ clearView = liftIO $ GL.clear [ColorBuffer]
 updateView :: Horture ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
 
-pollEvents :: Scene -> Double -> Double -> Horture Scene
+pollEvents :: Scene -> Double -> Double -> Horture (Maybe Scene)
 pollEvents s timeNow dt = do
   pollGLFWEvents
   pollXEvents
