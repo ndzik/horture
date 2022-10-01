@@ -27,6 +27,7 @@ library horture-lib
                     , Horture.Horture
                     , Horture.X11
                     , Horture.Error
+                    , Horture.Command
                     , Horture.Events
                     , Horture.Event
                     , Horture.State

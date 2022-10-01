@@ -1,8 +1,9 @@
 module Horture.Event (Event (..)) where
 
+import Horture.Command
 import Horture.Effect
 
 data Event
-  = ChatEvent !Effect
-  | CommandEvent
-  deriving (Eq)
+  = EventEffect !Effect
+  | EventCommand !Command
+  deriving (Show, Eq)
