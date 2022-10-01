@@ -42,6 +42,7 @@ import Graphics.X11 hiding (resizeWindow)
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
 import Horture.Error
+import Horture.Events
 import Horture.Horture
 import Horture.Render
 import Horture.Scene
@@ -63,8 +64,7 @@ playScene s = do
       renderScreen dt . _screen $ s
       renderGifs dt . _gifs $ s
       updateView
-      pollEvents
-      s' <- getTime <&> flip purge s
+      s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> purge timeNow
       go startTime s'
 
 clearView :: Horture ()
@@ -73,13 +73,11 @@ clearView = liftIO $ GL.clear [ColorBuffer]
 updateView :: Horture ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
 
-pollEvents :: Horture ()
-pollEvents = do
+pollEvents :: Scene -> Double -> Double -> Horture Scene
+pollEvents s timeNow dt = do
   pollGLFWEvents
   pollXEvents
-
--- TODO: Add again.
--- pollHortureEvents
+  pollHortureEvents timeNow dt s
 
 pollGLFWEvents :: Horture ()
 pollGLFWEvents = liftIO GLFW.pollEvents

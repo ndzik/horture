@@ -4,10 +4,12 @@ module Horture.State
   )
 where
 
+import Control.Concurrent.Chan.Synchronous
 import qualified Data.Map.Strict as Map
 import Graphics.Rendering.OpenGL hiding (get)
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
+import Horture.Event
 import Horture.Gif
 
 data HortureStatic = HortureStatic
@@ -24,10 +26,10 @@ data HortureStatic = HortureStatic
     _gifTextureUnit :: !TextureUnit,
     _gifModelUniform :: !UniformLocation,
     _loadedGifs :: !(Map.Map FilePath HortureGIF),
+    _eventChan :: !(Chan Event),
     _glWin :: !GLFW.Window,
     _backgroundColor :: !(Color4 Float)
   }
-  deriving (Show)
 
 data HortureState = HortureState
   { _display :: !Display,
