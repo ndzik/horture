@@ -47,11 +47,11 @@ renderGifs dt m = do
     renderGifType _ _ (_, []) = return ()
     renderGifType modelUniform gifIndexUniform (_, gifsOfSameType@(g : _)) = do
       let HortureGIF _ _ gifTextureObject numOfImgs delays = _afGif g
-          timeSinceBirth = dt - (_birth . _afObject $ g)
       textureBinding Texture2DArray $= Just gifTextureObject
       mapM_
         ( ( \o -> do
-              let texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
+              let timeSinceBirth = dt - _birth o
+                  texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
               liftIO $ m44ToGLmatrix (model o !*! _scale o) >>= (uniform modelUniform $=)
               uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
               liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
