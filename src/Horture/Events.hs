@@ -22,7 +22,7 @@ pollHortureEvents timeNow dt s = do
 handleHortureEvent :: Double -> Double -> Scene -> Event -> Horture Scene
 handleHortureEvent timeNow dt s (EventEffect eff) = do
   applyEffect timeNow dt s eff
-handleHortureEvent _ _ _ EventCommand = error "unimplemented"
+handleHortureEvent _ _ _ (EventCommand _cmd) = error "unimplemented"
 
 applyEffect :: Double -> Double -> Scene -> Effect -> Horture Scene
 applyEffect timeNow dt s eff@AddGif {} = do
