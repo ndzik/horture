@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Run (initialise) where
+module Run (initialise, run) where
 
 import Control.Concurrent (forkOS, threadDelay)
 import Control.Concurrent.Chan.Synchronous
@@ -41,10 +41,10 @@ initialise :: Chan Event -> IO ()
 initialise evChan =
   x11UserGrabWindow >>= \case
     Nothing -> print "No window to horture yourself on selected 🤨, aborting" >> exitFailure
-    Just w -> main evChan w
+    Just w -> run evChan w
 
-main :: Chan Event -> Window -> IO ()
-main evChan w = do
+run :: Chan Event -> Window -> IO ()
+run evChan w = do
   glW <- initGLFW
   (vao, vbo, veo, prog, gifProg) <- initResources
   dp <- openDisplay ""

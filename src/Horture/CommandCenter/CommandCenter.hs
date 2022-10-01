@@ -16,6 +16,7 @@ import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Except
 import Data.Default
 import Graphics.Vty hiding (Event)
+import Horture
 import Horture.Command
 import Horture.CommandCenter.State
 import Horture.Event
@@ -51,10 +52,11 @@ stopHorture = do
 grabHorture :: EventM Name CommandCenterState ()
 grabHorture = do
   evChan <- liftIO $ newChan @Event
-  -- TODO: Split intialise up here s.t. we only can push into evChan from the
-  -- CommandCenter if horturing started.
-  _ <- liftIO . forkOS $ initialise evChan
-  modify $ \ccs -> ccs { _ccEventChan = Just evChan }
+  liftIO x11UserGrabWindow >>= \case
+    Nothing -> return ()
+    Just w -> do
+      void . liftIO . forkOS $ run evChan w
+      modify $ \ccs -> ccs {_ccEventChan = Just evChan}
 
 app :: App CommandCenterState e Name
 app =
