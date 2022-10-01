@@ -6,7 +6,6 @@ module Horture.Render
     scaleForAspectRatio,
     m44ToGLmatrix,
     identityM44,
-    degToRad,
     projectionForAspectRatio,
   )
 where
@@ -118,7 +117,7 @@ scaleForAspectRatio (ww, wh) = model
         (V4 0 0 0 1)
     model = scaling !*! ident
 
--- getWindowImage fetches the image of the currently captured application
+-- | getWindowImage fetches the image of the currently captured application
 -- window.
 getWindowImage :: Display -> Drawable -> (Int, Int) -> IO Image
 getWindowImage dp pm (w, h) =
@@ -132,6 +131,8 @@ getWindowImage dp pm (w, h) =
     0xFFFFFFFF
     zPixmap
 
+-- | updateWindowTexture updates the OpenGL texture for the captured window
+-- using the given dimensions together with the source image as a data source.
 updateWindowTexture :: (Int, Int) -> Image -> IO ()
 updateWindowTexture (w, h) i = do
   src <- ximageData i
@@ -145,10 +146,7 @@ updateWindowTexture (w, h) i = do
   generateMipmap' Texture2D
   destroyImage i
 
-degToRad :: Float -> Float
-degToRad = (*) (pi / 180)
-
 projectionForAspectRatio :: (Float, Float) -> M44 Float
 projectionForAspectRatio (ww, wh) = proj
   where
-    proj = Util.projectionMatrix (degToRad 90) (ww / wh) 1 100
+    proj = Util.projectionMatrix (Util.deg2rad 90) (ww / wh) 1 100
