@@ -38,6 +38,7 @@ library horture-lib
                     , Horture.Loader
                     , Horture.Effect
                     , Horture.Gif
+                    , Run
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -59,6 +60,7 @@ library horture-lib
                     , containers
                     , linear
                     , vector
+                    , random
                     , directory
                     , data-default
                     , filepath
