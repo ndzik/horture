@@ -6,6 +6,8 @@ module Main (main) where
 
 import Codec.Picture
 import Codec.Picture.Gif
+import Control.Concurrent (forkOS, threadDelay)
+import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Except
 import Data.Bits hiding (rotate)
 import Data.ByteString (readFile)
@@ -31,6 +33,7 @@ import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
 import Horture
 import Horture.Effect
+import qualified Horture.Event as H
 import Horture.Horture
 import Horture.Loader
 import Horture.Object
@@ -177,17 +180,12 @@ main' w = do
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
 
   gen <- Random.getStdGen
-  let effs =
-        map (\(v, i) -> (gifEffects !! i) (Limited 8) (V3 (sin (20 * v)) (cos (33 * v)) 0))
-          . take 10
-          $ zip (Random.randoms @Float gen) (Random.randomRs (0, length gifEffects - 1) gen)
-      scene =
-        applyAll effs 0 0 $
-          Scene
-            { _screen = def,
-              _gifs = Map.empty,
-              _gifCache = hortureGifs
-            }
+  let scene =
+        Scene
+          { _screen = def,
+            _gifs = Map.empty,
+            _gifCache = hortureGifs
+          }
       hs =
         HortureState
           { _display = dp,
@@ -195,9 +193,19 @@ main' w = do
             _capture = pm,
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr)
           }
-      hc =
+  evChan <- newChan @H.Event
+  let generateEvents evChan gen = do
+        let (i, gen') = Random.randomR (0, length gifEffects - 1) gen
+            (v, _) = Random.random @Float gen
+            ev = (gifEffects !! i) (Limited 8) (V3 (sin (20 * v)) (cos (33 * v)) 0)
+        threadDelay 500000
+        writeChan evChan (H.EventEffect ev)
+        generateEvents evChan gen'
+  forkOS (generateEvents evChan gen)
+  let hc =
         HortureStatic
           { _backgroundProg = prog,
+            _eventChan = evChan,
             _gifProg = gifProg,
             _modelUniform = modelUniform,
             _viewUniform = viewUniform,
