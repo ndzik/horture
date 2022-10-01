@@ -52,18 +52,16 @@ applyAll effs timeNow dt s = foldr (apply timeNow dt) s (Noop : effs)
 addGif :: GifIndex -> Double -> Lifetime -> V3 Float -> Scene -> Scene
 addGif i timeNow lt pos s =
   let loadedGifs = _gifCache s
-      hGif = case Map.lookup i loadedGifs of
-        -- TODO: Add a fallback gif type known statically to make this function
-        -- pure.
-        Nothing -> error "trying to add unknown GIF"
-        Just hGif -> hGif
+      hGif = Map.lookup i loadedGifs
       newGif = def {_pos = pos, _lifetime = lt, _birth = timeNow, _scale = V4
                                                                             (V4 0.33 0 0 0)
                                                                             (V4 0 0.33 0 0)
                                                                             (V4 0 0 0.33 0)
                                                                             (V4 0 0 0 1)
                                                                             }
-   in s {_gifs = Map.insertWith (++) i [AGIF hGif newGif] . _gifs $ s}
+   in case hGif of
+        Nothing -> s
+        Just hgif -> s {_gifs = Map.insertWith (++) i [AGIF hgif newGif] . _gifs $ s}
 
 -- purge purges the given scene using timenow by removing all transient objects
 -- which died off.
