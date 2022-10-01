@@ -4,19 +4,16 @@
 
 module Main (main) where
 
--- Horture
---
--- Initialize fullscreen transparent window without focus GLFW
--- Initialize X11 -> Continuously pull desktop image (excluding GLFW) with x11::GetImage
---                -> Upload image to GPU with OpenGL
---                -> Postprocess and draw to window
-
 import Codec.Picture
 import Codec.Picture.Gif
+import Control.Concurrent (forkOS, threadDelay)
+import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Except
 import Data.Bits hiding (rotate)
 import Data.ByteString (readFile)
+import Data.Default
 import Data.List (elem, find)
+import qualified Data.Map.Strict as Map
 import Data.Maybe
 import Data.Vector.Storable (toList)
 import Data.Word
@@ -36,7 +33,9 @@ import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
 import Horture
 import Horture.Effect
+import qualified Horture.Event as H
 import Horture.Horture
+import Horture.Loader
 import Horture.Object
 import Horture.Render
 import Horture.Scene
@@ -88,55 +87,45 @@ main' w = do
     print "xCompositeExtension is missing!" >> exitFailure
   print "Queried composite extension"
 
+  let screenTextureUnit = TextureUnit 0
+      gifTextureUnit = TextureUnit 4
+
   -- GIFs
   gifModelUniform <- uniformLocation gifProg "model"
-  content <- readFile "/home/omega/Downloads/ricardoflick.gif"
-  imgs <- case decodeGifImages content of
-    Left err -> print ("decoding ricardogif: " <> err) >> exitFailure
-    Right imgs -> return imgs
-  delayms <- case getDelaysGifImages content of
-    Left err -> print ("getting gif delays: " <> err) >> exitFailure
-    Right ds -> return . head $ ds
-
-  -- Set active texture slot.
-  currentProgram $= Just gifProg
-  texIndex <- uniformLocation gifProg "index"
-  uniform texIndex $= (0 :: GLint)
-
-  let gifUnit = TextureUnit 4
-  activeTexture $= gifUnit
-  texGif <- genObjectName @TextureObject
-  textureBinding Texture2DArray $= Just texGif
-  let imgsL = concatMap (\(ImageRGBA8 (Codec.Picture.Image _ _ v)) -> toList v) imgs
-      (gifW, gifH) = case head imgs of
-        ImageRGBA8 (Codec.Picture.Image w h _) -> (w, h)
-        _ -> error "decoding gif image"
-  withArray imgsL $ \ptr -> do
-    let pixelData = PixelData BGRA UnsignedInt8888Rev ptr
-    texImage3D
-      Texture2DArray
-      NoProxy
-      0
-      RGBA8
-      (TextureSize3D (fromIntegral gifW) (fromIntegral gifH) (fromIntegral . length $ imgs))
-      0
-      pixelData
-    generateMipmap' Texture2DArray
-
   gifTexUni <- uniformLocation gifProg "gifTexture"
-  uniform gifTexUni $= gifUnit
-
-  activeTexture $= TextureUnit 0
+  gifTexIndex <- uniformLocation gifProg "index"
+  (loaderResult, loaderState) <-
+    runLoader
+      ( LC
+          { _lcgifDirectory = "./gifs",
+            _lcgifProg = gifProg,
+            _lcgifTexUniform = gifTexUni,
+            _lcGifTextureUnit = gifTextureUnit,
+            _lcdefaultGifDelay = defaultGifDelay
+          }
+      )
+      def
+      loadGifs
+  hortureGifs <- case loaderResult of
+    Left err -> print ("loading GIFs: " <> err) >> exitFailure
+    _otherwise -> do
+      let resolvedGifs = _resolvedGifs loaderState
+      print . ("resolved GIFs: " <>) . show $ resolvedGifs
+      return resolvedGifs
+  let gifEffects = mkGifEffects hortureGifs
+  activeTexture $= screenTextureUnit
   currentProgram $= Just prog
   --
 
+  let vertexAttributeLocation = AttribLocation 0
+      texAttributeLocation = AttribLocation 1
   bindVertexArrayObject $= Just vao
   bindBuffer ArrayBuffer $= Just vbo
   withArray verts $ \ptr -> bufferData ArrayBuffer $= (fromIntegral planeVertsSize, ptr, StaticDraw)
-  vertexAttribPointer (AttribLocation 0) $= (ToFloat, VertexArrayDescriptor 3 Float (fromIntegral $ 5 * floatSize) (plusPtr nullPtr 0))
-  vertexAttribArray (AttribLocation 0) $= Enabled
-  vertexAttribPointer (AttribLocation 1) $= (ToFloat, VertexArrayDescriptor 2 Float (fromIntegral $ 5 * floatSize) (plusPtr nullPtr (3 * floatSize)))
-  vertexAttribArray (AttribLocation 1) $= Enabled
+  vertexAttribPointer vertexAttributeLocation $= (ToFloat, VertexArrayDescriptor 3 Float (fromIntegral $ 5 * floatSize) (plusPtr nullPtr 0))
+  vertexAttribArray vertexAttributeLocation $= Enabled
+  vertexAttribPointer texAttributeLocation $= (ToFloat, VertexArrayDescriptor 2 Float (fromIntegral $ 5 * floatSize) (plusPtr nullPtr (3 * floatSize)))
+  vertexAttribArray texAttributeLocation $= Enabled
   bindBuffer ElementArrayBuffer $= Just veo
   withArray vertsElement $ \ptr -> bufferData ElementArrayBuffer $= (fromIntegral vertsElementSize, ptr, StaticDraw)
 
@@ -191,13 +180,12 @@ main' w = do
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
 
   gen <- Random.getStdGen
-  let effs = map (\v -> AddGif Ricardo (Limited 8) (V3 (sin (20 * v)) (cos (33 * v)) 0)) . take 10 $ Random.randoms @Float gen
-      scene =
-        applyAll effs startTime 0 $
-          Scene
-            { _screen = defScreen,
-              _gifs = []
-            }
+  let scene =
+        Scene
+          { _screen = def,
+            _gifs = Map.empty,
+            _gifCache = hortureGifs
+          }
       hs =
         HortureState
           { _display = dp,
@@ -205,25 +193,36 @@ main' w = do
             _capture = pm,
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr)
           }
-      hc =
+  evChan <- newChan @H.Event
+  let generateEvents evChan gen = do
+        let (i, gen') = Random.randomR (0, length gifEffects - 1) gen
+            (v, _) = Random.random @Float gen
+            ev = (gifEffects !! i) (Limited 8) (V3 (sin (20 * v)) (cos (33 * v)) 0)
+        threadDelay 500000
+        writeChan evChan (H.EventEffect ev)
+        generateEvents evChan gen'
+  forkOS (generateEvents evChan gen)
+  let hc =
         HortureStatic
           { _backgroundProg = prog,
+            _eventChan = evChan,
             _gifProg = gifProg,
             _modelUniform = modelUniform,
             _viewUniform = viewUniform,
             _projUniform = projectionUniform,
-            _planeVertexLocation = AttribLocation 0,
-            _planeTexLocation = AttribLocation 1,
-            _screenTexUnit = TextureUnit 0,
+            _planeVertexLocation = vertexAttributeLocation,
+            _planeTexLocation = texAttributeLocation,
+            _screenTexUnit = screenTextureUnit,
             _screenTexObject = screenTexObject,
+            _gifIndexUniform = gifTexIndex,
+            _gifTextureUnit = gifTextureUnit,
             _gifModelUniform = gifModelUniform,
-            _gifTexUnit = gifUnit,
-            _gifTexObject = texGif,
+            _loadedGifs = hortureGifs,
             _glWin = glW,
-            _gifIndex = texIndex,
             _backgroundColor = Color4 0.1 0.1 0.1 1
           }
   -- TODO: Shutdown xWin when application closes.
+  print "starting scene rendering"
   runHorture hs hc (playScene scene)
   print "Done..."
 
@@ -245,10 +244,6 @@ findMe root dp me = do
       . find
         ( \case
             (Just (ns, c)) -> hortureName `elem` ns
-            _ -> False
+            _otherwise -> False
         )
       $ res
-
-createGifTex :: DynamicImage -> IO ()
-createGifTex (ImageRGBA8 i) = undefined
-createGifTex _ = error "unhandled image type encountered when creating GIF texture"

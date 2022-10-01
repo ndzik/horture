@@ -1,59 +1,78 @@
 {-# LANGUAGE TypeApplications #-}
 
 module Horture.Render
-  ( renderObjects,
+  ( renderGifs,
     renderScreen,
+    scaleForAspectRatio,
+    m44ToGLmatrix,
+    identityM44,
+    projectionForAspectRatio,
   )
 where
 
+import Codec.Picture.Gif
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import qualified Data.Map.Strict as Map
 import Foreign.Ptr
 import Foreign.Storable
+import Graphics.GLUtil.Camera3D as Util
 import Graphics.Rendering.OpenGL hiding (get)
 import Graphics.X11
+import Horture.Effect
+import Horture.Gif
 import Horture.Horture
 import Horture.Object
+import Horture.Scene
 import Horture.State
 import Horture.X11
 import Linear.Matrix
 import Linear.V4
 
-renderObjects :: Double -> [Object] -> Horture ()
-renderObjects _ [] = return ()
-renderObjects dt os = do
+renderGifs :: Double -> Map.Map GifIndex [ActiveGIF] -> Horture ()
+renderGifs _ m | Map.null m = return ()
+renderGifs dt m = do
   gifProg <- asks _gifProg
-  gifTex <- asks _gifTexUnit
-  gifTexObject <- asks _gifTexObject
-  gifIndex <- asks _gifIndex
   modelUniform <- asks _gifModelUniform
-  liftIO $ currentProgram $= Just gifProg
-  activeTexture $= gifTex
-  textureBinding Texture2DArray $= Just gifTexObject
-  go gifIndex modelUniform os
+  gifIndexUniform <- asks _gifIndexUniform
+  gifTextureUnit <- asks _gifTextureUnit
+  activeTexture $= gifTextureUnit
+  currentProgram $= Just gifProg
+  -- General preconditions are set. Render all GIFs of the same type at once.
+  mapM_ (renderGifType modelUniform gifIndexUniform) . Map.toList $ m
   where
-    go :: UniformLocation -> UniformLocation -> [Object] -> Horture ()
-    go _ _ [] = return ()
-    go gifIndex modelUniform (o : os) = do
-      let elapsedms = round $ dt * (10 ^ (2 :: Int))
-          i = (elapsedms `div` (10 * _delay o)) `mod` _textureLength o
-      liftIO $
-        m44ToGLmatrix
-          ( model o
-              !*! V4
-                (V4 0.5 0 0 0)
-                (V4 0 0.5 0 0)
-                (V4 0 0 0.5 0)
-                (V4 0 0 0 1)
+    renderGifType :: UniformLocation -> UniformLocation -> (GifIndex, [ActiveGIF]) -> Horture ()
+    renderGifType _ _ (_, []) = return ()
+    renderGifType modelUniform gifIndexUniform (_, gifsOfSameType@(g : _)) = do
+      let HortureGIF _ _ gifTextureObject numOfImgs delays = _afGif g
+          timeSinceBirth = dt - (_birth . _afObject $ g)
+      textureBinding Texture2DArray $= Just gifTextureObject
+      mapM_
+        ( ( \o -> do
+              let texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
+              liftIO $ m44ToGLmatrix (model o !*! _scale o) >>= (uniform modelUniform $=)
+              uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
+              liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
           )
-          >>= (uniform modelUniform $=)
-      liftIO $ uniform gifIndex $= fromIntegral @_ @GLint i
-      liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
-      go gifIndex modelUniform os
+            . _afObject
+        )
+        gifsOfSameType
 
--- renderScreen renders the captured application window. It is assumed that the
--- horture texture was already initialized at this point.
+-- | indexForGif returns the index of the image for the associated GIF to be
+-- viewed at the time given since birth in 100th of a second. The index is
+-- clamped from [0,maxIndex].
+indexForGif :: [GifDelay] -> Double -> Int -> Int
+indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxIndex + 1)
+  where
+    go :: [GifDelay] -> Double -> Int -> Int
+    go [] _ i = i
+    go (d : gifDelays) accumulatedTime i
+      | accumulatedTime > timeSinceBirth = i
+      | otherwise = go gifDelays (accumulatedTime + fromIntegral d) (i + 1)
+
+-- | renderScreen renders the captured application window. It is assumed that
+-- the horture texture was already initialized at this point.
 renderScreen :: Double -> Object -> Horture ()
 renderScreen _ s = do
   backgroundProg <- asks _backgroundProg
@@ -61,7 +80,7 @@ renderScreen _ s = do
   screenTexUnit <- asks _screenTexUnit
   screenTexObject <- asks _screenTexObject
   (HortureState dp _ pm dim) <- get
-  liftIO $ currentProgram $= Just backgroundProg
+  currentProgram $= Just backgroundProg
   activeTexture $= screenTexUnit
   textureBinding Texture2D $= Just screenTexObject
   liftIO $ getWindowImage dp pm dim >>= updateWindowTexture dim
@@ -70,7 +89,7 @@ renderScreen _ s = do
   liftIO $ m44ToGLmatrix m >>= (uniform modelUniform $=)
   liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
 
--- m44ToGLmatrix converts the row based representation of M44 to a GLmatrix
+-- | m44ToGLmatrix converts the row based representation of M44 to a GLmatrix
 -- representation which is column based.
 m44ToGLmatrix :: (Show a, MatrixComponent a) => M44 a -> IO (GLmatrix a)
 m44ToGLmatrix m = withNewMatrix ColumnMajor (\p -> poke (castPtr p) m')
@@ -98,7 +117,7 @@ scaleForAspectRatio (ww, wh) = model
         (V4 0 0 0 1)
     model = scaling !*! ident
 
--- getWindowImage fetches the image of the currently captured application
+-- | getWindowImage fetches the image of the currently captured application
 -- window.
 getWindowImage :: Display -> Drawable -> (Int, Int) -> IO Image
 getWindowImage dp pm (w, h) =
@@ -112,6 +131,8 @@ getWindowImage dp pm (w, h) =
     0xFFFFFFFF
     zPixmap
 
+-- | updateWindowTexture updates the OpenGL texture for the captured window
+-- using the given dimensions together with the source image as a data source.
 updateWindowTexture :: (Int, Int) -> Image -> IO ()
 updateWindowTexture (w, h) i = do
   src <- ximageData i
@@ -124,3 +145,8 @@ updateWindowTexture (w, h) i = do
     pd
   generateMipmap' Texture2D
   destroyImage i
+
+projectionForAspectRatio :: (Float, Float) -> M44 Float
+projectionForAspectRatio (ww, wh) = proj
+  where
+    proj = Util.projectionMatrix (Util.deg2rad 90) (ww / wh) 1 100

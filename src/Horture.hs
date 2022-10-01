@@ -7,7 +7,6 @@
 module Horture
   ( SizeUpdate (..),
     hortureName,
-    listenResizeEvent,
     resizeWindow',
     verts,
     floatSize,
@@ -19,9 +18,6 @@ module Horture
     initGLFW,
     m44ToGLmatrix,
     playScene,
-    scaleForAspectRatio,
-    projectionForAspectRatio,
-    degToRad,
     identityM44,
     x11UserGrabWindow,
   )
@@ -33,7 +29,6 @@ import Control.Monad.State
 import Data.Bits
 import Data.ByteString.Char8 (ByteString, pack)
 import Data.Functor ((<&>))
-import Data.IORef
 import Data.Word
 import Foreign.C.String
 import Foreign.C.Types
@@ -41,35 +36,35 @@ import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Foreign.Storable
 import Graphics.GLUtil as Util hiding (throwError)
-import Graphics.GLUtil.Camera3D as Util
 import Graphics.Rendering.OpenGL as GL hiding (Color, flush)
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11 hiding (resizeWindow)
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
 import Horture.Error
+import Horture.Events
 import Horture.Horture
 import Horture.Render
 import Horture.Scene
 import Horture.State
-import Linear.Matrix
-import Linear.V4
 import System.Exit
 import Text.RawString.QQ
 
+hortureName :: String
+hortureName = "horture"
+
 playScene :: Scene -> Horture ()
 playScene s = do
-  startTime <- getTime
-  go startTime s
+  setTime 0
+  go 0 s
   where
     go startTime s = do
       dt <- deltaTime startTime
       clearView
       renderScreen dt . _screen $ s
-      renderObjects dt . _gifs $ s
+      renderGifs dt . _gifs $ s
       updateView
-      pollEvents
-      s' <- getTime <&> flip purge s
+      s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> purge timeNow
       go startTime s'
 
 clearView :: Horture ()
@@ -78,9 +73,17 @@ clearView = liftIO $ GL.clear [ColorBuffer]
 updateView :: Horture ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
 
-pollEvents :: Horture ()
-pollEvents = do
-  liftIO GLFW.pollEvents
+pollEvents :: Scene -> Double -> Double -> Horture Scene
+pollEvents s timeNow dt = do
+  pollGLFWEvents
+  pollXEvents
+  pollHortureEvents timeNow dt s
+
+pollGLFWEvents :: Horture ()
+pollGLFWEvents = liftIO GLFW.pollEvents
+
+pollXEvents :: Horture ()
+pollXEvents = do
   glWin <- asks _glWin
   projectionUniform <- asks _projUniform
   modelUniform <- asks _modelUniform
@@ -89,8 +92,8 @@ pollEvents = do
   xWin <- gets _xWin
   dp <- gets _display
   pm <- gets _capture
-  (ww, wh) <- gets _dim
-  (pm, (ww, wh)) <- liftIO $
+  (oldW, oldH) <- gets _dim
+  (pm, (newW, newH)) <- liftIO $
     allocaXEvent $ \evptr -> do
       doIt <- checkWindowEvent dp xWin structureNotifyMask evptr
       if doIt
@@ -102,9 +105,11 @@ pollEvents = do
               -- Update reference, aspect ratio & destroy old pixmap.
               freePixmap dp pm
               -- Update overlay window with new aspect ratio.
-              let glw = fromIntegral ev_width
-                  glh = fromIntegral ev_height
-              GLFW.setWindowSize glWin glw glh
+              let newWInt = fromIntegral ev_width
+                  newHInt = fromIntegral ev_height
+                  newWFloat = fromIntegral ev_width
+                  newHFloat = fromIntegral ev_height
+              GLFW.setWindowSize glWin newWInt newHInt
               GLFW.setWindowPos glWin (fromIntegral ev_x) (fromIntegral ev_y)
               let !anyPixelData = PixelData BGRA UnsignedInt8888Rev nullPtr
               -- Update texture bindings!
@@ -120,20 +125,23 @@ pollEvents = do
                 anyPixelData
               generateMipmap' Texture2D
 
-              let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
+              let proj = curry projectionForAspectRatio newWFloat newHFloat
               m44ToGLmatrix proj >>= (uniform projectionUniform $=)
 
-              let model = curry scaleForAspectRatio (fromIntegral ww) (fromIntegral wh)
+              let model = curry scaleForAspectRatio newWInt newHInt
               m44ToGLmatrix model >>= (uniform modelUniform $=)
 
-              return (newPm, (fromIntegral ev_width, fromIntegral ev_height))
-            _ -> return (pm, (ww, wh))
-        else return (pm, (ww, wh))
-  modify $ \hs -> hs {_dim = (ww, wh), _capture = pm}
+              return (newPm, (newWInt, newHInt))
+            _otherwise -> return (pm, (oldW, oldH))
+        else return (pm, (oldW, oldH))
+  modify $ \hs -> hs {_dim = (newW, newH), _capture = pm}
 
 deltaTime :: Double -> Horture Double
 deltaTime startTime =
   getTime >>= \currentTime -> return $ currentTime - startTime
+
+setTime :: Double -> Horture ()
+setTime = liftIO . GLFW.setTime
 
 getTime :: Horture Double
 getTime =
@@ -290,7 +298,7 @@ void main() {
 }
     |]
 
-data SizeUpdate = GLFWUpdate (Int, Int) | XUpdate (CInt, CInt) deriving (Show, Eq)
+data SizeUpdate = GLFWUpdate !(Int, Int) | XUpdate !(CInt, CInt) deriving (Show, Eq)
 
 x11UserGrabWindow :: IO (Maybe Window)
 x11UserGrabWindow = do
@@ -328,67 +336,9 @@ x11UserGrabWindow = do
               s <- peek cptr >>= peekCString
               print $ "Grabbing window: " <> s
         return . Just $ ev_subwindow
-      _ -> return Nothing
+      _otherwise -> return Nothing
 
   ungrabPointer dp currentTime
   freeCursor dp cursor
   closeDisplay dp
   return userDecision
-
-listenResizeEvent :: Display -> Window -> GLFW.Window -> IORef (Drawable, (CInt, CInt)) -> IO ()
-listenResizeEvent dp w glW r = go
-  where
-    go = do
-      allocaXEvent $ \evptr -> do
-        doIt <- checkWindowEvent dp w structureNotifyMask evptr
-        when doIt $ do
-          getEvent evptr >>= \case
-            ConfigureEvent {..} -> do
-              -- Retrieve a new pixmap.
-              pm <- xCompositeNameWindowPixmap dp w
-              -- Update reference, aspect ratio & destroy old pixmap.
-              pm <- atomicModifyIORef' r $ \(d, _) -> ((pm, (ev_width, ev_height)), d)
-              freePixmap dp pm
-              -- Update overlay window with new aspect ratio.
-              let w = fromIntegral ev_width
-                  h = fromIntegral ev_height
-              GLFW.setWindowSize glW w h
-            _ -> return ()
-      go
-
-hortureName :: String
-hortureName = "horture"
-
-identityM44 :: M44 Float
-identityM44 =
-  V4
-    (V4 1 0 0 0)
-    (V4 0 1 0 0)
-    (V4 0 0 1 0)
-    (V4 0 0 0 1)
-
-m44ToGLmatrix :: (Show a, MatrixComponent a) => M44 a -> IO (GLmatrix a)
-m44ToGLmatrix m = withNewMatrix ColumnMajor (\p -> poke (castPtr p) m')
-  where
-    m' = transpose m
-
-degToRad :: Float -> Float
-degToRad = (*) (pi / 180)
-
-scaleForAspectRatio :: (Float, Float) -> M44 Float
-scaleForAspectRatio (ww, wh) = model
-  where
-    ident = identityM44
-    aspectRatio = ww / wh
-    scaling =
-      V4
-        (V4 aspectRatio 0 0 0)
-        (V4 0 1 0 0)
-        (V4 0 0 1 0)
-        (V4 0 0 0 1)
-    model = scaling !*! ident
-
-projectionForAspectRatio :: (Float, Float) -> M44 Float
-projectionForAspectRatio (ww, wh) = proj
-  where
-    proj = Util.projectionMatrix (degToRad 90) (ww / wh) 1 100
