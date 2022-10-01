@@ -50,9 +50,13 @@ import System.Exit
 import qualified System.Random as Random
 import Text.RawString.QQ
 import Prelude hiding (readFile)
+import Horture.CommandCenter.CommandCenter
 
 main :: IO ()
-main =
+main = runCommandCenter
+
+initialise :: IO ()
+initialise =
   x11UserGrabWindow >>= \case
     Nothing -> print "No window to horture yourself on selected 🤨, aborting" >> exitFailure
     Just w -> main' w
