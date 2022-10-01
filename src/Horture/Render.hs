@@ -6,6 +6,7 @@ module Horture.Render
     scaleForAspectRatio,
     m44ToGLmatrix,
     identityM44,
+    indexForGif,
     projectionForAspectRatio,
   )
 where
@@ -65,11 +66,13 @@ renderGifs dt m = do
 indexForGif :: [GifDelay] -> Double -> Int -> Int
 indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxIndex + 1)
   where
+    -- TODO: Something is wrong here, GIFs are displayed (in percent)
+    -- 25-50-25-50-75-100.
     go :: [GifDelay] -> Double -> Int -> Int
     go [] _ i = i
     go (d : gifDelays) accumulatedTime i
-      | accumulatedTime > timeSinceBirth = i
-      | otherwise = go gifDelays (accumulatedTime + fromIntegral d) (i + 1)
+      | (accumulatedTime + fromIntegral d) < timeSinceBirth = go gifDelays (accumulatedTime + fromIntegral d) (i + 1)
+      | otherwise = i
 
 -- | renderScreen renders the captured application window. It is assumed that
 -- the horture texture was already initialized at this point.
