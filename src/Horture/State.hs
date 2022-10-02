@@ -7,6 +7,7 @@ where
 import Control.Concurrent.Chan.Synchronous
 import qualified Data.Map.Strict as Map
 import Graphics.Rendering.OpenGL hiding (get)
+import Data.Text (Text)
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
 import Horture.Event
@@ -27,6 +28,7 @@ data HortureStatic = HortureStatic
     _gifModelUniform :: !UniformLocation,
     _loadedGifs :: !(Map.Map FilePath HortureGIF),
     _eventChan :: !(Chan Event),
+    _logChan :: !(Maybe (Chan Text)),
     _glWin :: !GLFW.Window,
     _backgroundColor :: !(Color4 Float)
   }

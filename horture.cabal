@@ -24,9 +24,11 @@ extra-source-files: CHANGELOG.md
 library horture-lib
     exposed-modules:  Horture
                     , Horture.CommandCenter.CommandCenter
+                    , Horture.CommandCenter.Event
                     , Horture.CommandCenter.State
                     , Horture.Scene
                     , Horture.Horture
+                    , Horture.Logging
                     , Horture.X11
                     , Horture.Error
                     , Horture.Command
@@ -61,6 +63,7 @@ library horture-lib
                     , linear
                     , vector
                     , random
+                    , co-log
                     , directory
                     , data-default
                     , filepath

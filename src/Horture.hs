@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -44,6 +45,7 @@ import Graphics.X11.Xlib.Types
 import Horture.Error
 import Horture.Events
 import Horture.Horture
+import Horture.Logging
 import Horture.Render
 import Horture.Scene
 import Horture.State
@@ -53,7 +55,7 @@ import Text.RawString.QQ
 hortureName :: String
 hortureName = "horture"
 
-playScene :: Scene -> Horture ()
+playScene :: (HortureLogger (Horture l)) => Scene -> Horture l ()
 playScene s = do
   setTime 0
   go 0 (Just s)
@@ -68,22 +70,22 @@ playScene s = do
       s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
       go startTime s'
 
-clearView :: Horture ()
+clearView :: Horture l ()
 clearView = liftIO $ GL.clear [ColorBuffer]
 
-updateView :: Horture ()
+updateView :: Horture l ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
 
-pollEvents :: Scene -> Double -> Double -> Horture (Maybe Scene)
+pollEvents :: (HortureLogger (Horture l)) => Scene -> Double -> Double -> Horture l (Maybe Scene)
 pollEvents s timeNow dt = do
   pollGLFWEvents
   pollXEvents
   pollHortureEvents timeNow dt s
 
-pollGLFWEvents :: Horture ()
+pollGLFWEvents :: Horture l ()
 pollGLFWEvents = liftIO GLFW.pollEvents
 
-pollXEvents :: Horture ()
+pollXEvents :: Horture l ()
 pollXEvents = do
   glWin <- asks _glWin
   projectionUniform <- asks _projUniform
@@ -137,14 +139,14 @@ pollXEvents = do
         else return (pm, (oldW, oldH))
   modify $ \hs -> hs {_dim = (newW, newH), _capture = pm}
 
-deltaTime :: Double -> Horture Double
+deltaTime :: Double -> Horture l Double
 deltaTime startTime =
   getTime >>= \currentTime -> return $ currentTime - startTime
 
-setTime :: Double -> Horture ()
+setTime :: Double -> Horture l ()
 setTime = liftIO . GLFW.setTime
 
-getTime :: Horture Double
+getTime :: Horture l Double
 getTime =
   liftIO GLFW.getTime >>= \case
     Nothing -> throwError . HE $ "GLFW not running or initialized"

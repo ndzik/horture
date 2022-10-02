@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -11,6 +12,7 @@ import Data.Default
 import Data.List (find)
 import qualified Data.Map.Strict as Map
 import Data.Maybe
+import Data.Text (Text)
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
 import Foreign.Ptr
@@ -37,15 +39,15 @@ import Prelude hiding (readFile)
 
 -- | initialise initialises horture by letting the user pick an application to
 -- use together with the given event channel as an event source.
-initialise :: Chan Event -> IO ()
-initialise evChan =
+initialise :: Maybe (Chan Text) -> Chan Event -> IO ()
+initialise logChan evChan =
   x11UserGrabWindow >>= \case
     Nothing -> print "No window to horture yourself on selected 🤨, aborting" >> exitFailure
-    Just w -> run evChan $ snd w
+    Just w -> run logChan evChan $ snd w
 
 -- TODO: Remove `exitFailure` usage.
-run :: Chan Event -> Window -> IO ()
-run evChan w = do
+run :: Maybe (Chan Text) -> Chan Event -> Window -> IO ()
+run logChan evChan w = do
   glW <- initGLFW
   (vao, vbo, veo, prog, gifProg) <- initResources
   dp <- openDisplay ""
@@ -183,6 +185,7 @@ run evChan w = do
         HortureStatic
           { _backgroundProg = prog,
             _eventChan = evChan,
+            _logChan = logChan,
             _gifProg = gifProg,
             _modelUniform = modelUniform,
             _viewUniform = viewUniform,
@@ -198,7 +201,9 @@ run evChan w = do
             _glWin = glW,
             _backgroundColor = Color4 0.1 0.1 0.1 1
           }
-  _ <- runHorture hs hc (playScene scene)
+  _ <- case logChan of
+    Just _ -> runHorture hs hc (playScene @'Channel scene)
+    Nothing -> runHorture hs hc (playScene @'NoLog scene)
   GLFW.destroyWindow glW
   GLFW.terminate
   closeDisplay dp
