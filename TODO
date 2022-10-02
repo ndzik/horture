@@ -18,6 +18,8 @@
 * Use compositor instead of GLFW workaround...
     -- set_override_redirect ptr True
     -- changeWindowAttributes dp meW cWOverrideRedirect ptr
+* TODO: Gif loader performance optimization.
+* TODO: Proper logging interface abstraction instead of `print`.
 
 # Notes
 * NOTE: Need to set the events we are interested in ON the window we are
