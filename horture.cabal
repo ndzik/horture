@@ -27,6 +27,7 @@ library horture-lib
                     , Horture.CommandCenter.State
                     , Horture.Scene
                     , Horture.Horture
+                    , Horture.Logging
                     , Horture.X11
                     , Horture.Error
                     , Horture.Command
@@ -61,6 +62,7 @@ library horture-lib
                     , linear
                     , vector
                     , random
+                    , co-log
                     , directory
                     , data-default
                     , filepath

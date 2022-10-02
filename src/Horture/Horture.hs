@@ -1,7 +1,14 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Horture.Horture (Horture (..), runHorture) where
+module Horture.Horture
+  ( Horture (..),
+    runHorture,
+    LoggingTarget (..),
+  )
+where
 
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -9,7 +16,9 @@ import Control.Monad.State
 import Horture.Error
 import Horture.State
 
-newtype Horture l a = Horture
+data LoggingTarget = Channel | NoLog deriving (Show)
+
+newtype Horture (l :: LoggingTarget) a = Horture
   { unHorture :: ExceptT HortureError (StateT HortureState (ReaderT HortureStatic IO)) a
   }
   deriving (Functor, Applicative, Monad, MonadIO)

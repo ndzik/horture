@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -183,6 +184,7 @@ run evChan w = do
         HortureStatic
           { _backgroundProg = prog,
             _eventChan = evChan,
+            _logChan = Nothing,
             _gifProg = gifProg,
             _modelUniform = modelUniform,
             _viewUniform = viewUniform,
@@ -198,7 +200,7 @@ run evChan w = do
             _glWin = glW,
             _backgroundColor = Color4 0.1 0.1 0.1 1
           }
-  _ <- runHorture hs hc (playScene scene)
+  _ <- runHorture hs hc (playScene @'NoLog scene)
   GLFW.destroyWindow glW
   GLFW.terminate
   closeDisplay dp
