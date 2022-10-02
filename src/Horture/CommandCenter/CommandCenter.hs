@@ -7,7 +7,6 @@ module Horture.CommandCenter.CommandCenter
 where
 
 import Brick
-import Brick.Types
 import Brick.Widgets.Border
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center
@@ -38,16 +37,23 @@ appEvent (VtyEvent (EvKey (KChar 'j') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'k') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'l') [])) = return ()
+appEvent (VtyEvent (EvKey (KChar 'i') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'g') [])) = grabHorture
 appEvent (VtyEvent (EvKey (KChar 'q') [])) = stopHorture
+appEvent (VtyEvent (EvKey KEsc [])) = stopApplication
 appEvent _ = return ()
 
+stopApplication :: EventM Name CommandCenterState ()
+stopApplication = do
+  gets _ccEventChan >>= \case
+    Nothing -> halt
+    Just chan -> writeExit chan >> halt
+
 stopHorture :: EventM Name CommandCenterState ()
-stopHorture = do
-  mchan <- gets _ccEventChan
-  case mchan of
-    Nothing -> return ()
-    Just chan -> liftIO $ writeChan chan (EventCommand Exit)
+stopHorture = gets _ccEventChan >>= mapM_ writeExit >> modify (\ccs -> ccs {_ccEventChan = Nothing})
+
+writeExit :: Chan Event -> EventM Name CommandCenterState ()
+writeExit chan = liftIO $ writeChan chan (EventCommand Exit)
 
 grabHorture :: EventM Name CommandCenterState ()
 grabHorture = do
@@ -69,4 +75,5 @@ app =
     }
 
 runCommandCenter :: IO ()
-runCommandCenter = void $ defaultMain app def
+runCommandCenter = do
+  void $ defaultMain app def
