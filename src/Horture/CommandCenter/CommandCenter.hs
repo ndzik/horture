@@ -7,19 +7,22 @@ module Horture.CommandCenter.CommandCenter
 where
 
 import Brick
+import Brick.BChan
 import Brick.Widgets.Border
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center
 import Brick.Widgets.List
-import Control.Concurrent (forkOS)
+import Control.Concurrent (forkIO, forkOS)
 import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Except
 import Data.Default
 import Data.List (intercalate)
+import Data.Text (Text)
 import Graphics.Vty hiding (Event)
 import Graphics.X11 (Window)
 import Horture
 import Horture.Command
+import Horture.CommandCenter.Event
 import Horture.CommandCenter.State
 import Horture.Event
 import Horture.Loader (loadDirectory)
@@ -57,14 +60,16 @@ drawUI cs =
               borderWithLabel
                 (str "Assets")
                 (availableAssetsUI . _ccGifs $ cs),
-            vBox [withBorderStyle unicode $
-              borderWithLabel
-                (str "Log")
-                runningLogUI,
+            vBox
+              [ withBorderStyle unicode $
+                  borderWithLabel
+                    (str "Log")
+                    (runningLogUI . _ccLog $ cs),
                 withBorderStyle unicode $
-                  borderWithLabel (str "Metainformation")
-                  metainfoUI
-                 ]
+                  borderWithLabel
+                    (str "Metainformation")
+                    metainfoUI
+              ]
           ],
         vLimit 3 $
           withBorderStyle unicode $
@@ -84,8 +89,9 @@ instance Splittable [] where
 availableAssetsUI :: [FilePath] -> Widget Name
 availableAssetsUI fs = renderList (\_selected el -> str el) False $ list AssetList fs 1
 
-runningLogUI :: Widget Name
-runningLogUI = center (str "No logs available")
+runningLogUI :: [Text] -> Widget Name
+runningLogUI [] = center (str "No logs available")
+runningLogUI log = padBottom Max . vBox . map txtWrap $ log
 
 metainfoUI :: Widget Name
 metainfoUI = center (str "No metainformation available")
@@ -102,7 +108,7 @@ hotkeyUI =
           ]
     )
 
-appEvent :: BrickEvent Name e -> EventM Name CommandCenterState ()
+appEvent :: BrickEvent Name CommandCenterEvent -> EventM Name CommandCenterState ()
 appEvent (VtyEvent (EvKey (KChar 'j') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'k') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
@@ -111,7 +117,11 @@ appEvent (VtyEvent (EvKey (KChar 'i') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'g') [])) = grabHorture
 appEvent (VtyEvent (EvKey (KChar 'q') [])) = stopHorture
 appEvent (VtyEvent (EvKey KEsc [])) = stopApplication
+appEvent (AppEvent e) = handleCCEvent e
 appEvent _ = return ()
+
+handleCCEvent :: CommandCenterEvent -> EventM Name CommandCenterState ()
+handleCCEvent (CCLog msg) = modify (\cs -> cs {_ccLog = msg : _ccLog cs})
 
 stopApplication :: EventM Name CommandCenterState ()
 stopApplication = do
@@ -135,18 +145,25 @@ writeExit chan = liftIO $ writeChan chan (EventCommand Exit)
 
 grabHorture :: EventM Name CommandCenterState ()
 grabHorture = do
+  brickChanM <- gets _brickEventChan
+  logChan <- liftIO $ newChan @Text
   evChan <- liftIO $ newChan @Event
   liftIO x11UserGrabWindow >>= \case
     Nothing -> return ()
     Just res@(_, w) -> do
-      void . liftIO . forkOS $ run evChan w
+      case brickChanM of
+        Just brickChan -> do
+          void . liftIO . forkOS $ run (Just logChan) evChan w
+          void . liftIO . forkIO . forever $ do
+            readChan logChan >>= writeBChan brickChan . CCLog
+        _otherwise -> return ()
       modify $ \ccs ->
         ccs
           { _ccEventChan = Just evChan,
             _ccCapturedWin = Just res
           }
 
-app :: App CommandCenterState e Name
+app :: App CommandCenterState CommandCenterEvent Name
 app =
   App
     { appDraw = drawUI,
@@ -163,4 +180,16 @@ runCommandCenter :: IO ()
 runCommandCenter = do
   let gifDirectory = "./gifs"
   gifs <- makeAbsolute gifDirectory >>= loadDirectory
-  void $ defaultMain app def {_ccGifs = gifs}
+  appChan <- newBChan 10
+  let buildVty = mkVty defaultConfig
+  initialVty <- buildVty
+  void $
+    customMain
+      initialVty
+      buildVty
+      (Just appChan)
+      app
+      def
+        { _ccGifs = gifs,
+          _brickEventChan = Just appChan
+        }

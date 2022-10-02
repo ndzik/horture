@@ -24,6 +24,7 @@ extra-source-files: CHANGELOG.md
 library horture-lib
     exposed-modules:  Horture
                     , Horture.CommandCenter.CommandCenter
+                    , Horture.CommandCenter.Event
                     , Horture.CommandCenter.State
                     , Horture.Scene
                     , Horture.Horture
