@@ -10,27 +10,97 @@ import Brick
 import Brick.Widgets.Border
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center
+import Brick.Widgets.List
 import Control.Concurrent (forkOS)
 import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Except
 import Data.Default
+import Data.List (intercalate)
 import Graphics.Vty hiding (Event)
+import Graphics.X11 (Window)
 import Horture
 import Horture.Command
 import Horture.CommandCenter.State
 import Horture.Event
+import Horture.Loader (loadDirectory)
+import Numeric (showHex)
 import Run
+import System.Directory
 
-data Name = Main
+data Name
+  = Main
+  | AssetList
   deriving (Ord, Show, Eq)
 
+-- UI should be:
+--
+
+-- | |----------------------------------------|
+--   | Captured Window Title + ID             |
+--   |----------------------------------------|
+--   | Assets           | Running log         |
+--   |                  |                     |
+--   |                  |---------------------|
+--   |                  | MetaInfos           |
+--   |                  |                     |
+--   |------------------|---------------------|
 drawUI :: CommandCenterState -> [Widget Name]
-drawUI _cs =
-  [ withBorderStyle unicode $
-      borderWithLabel @Name
-        (str "Horture CommandCenter")
-        (center (str "Left") <+> vBorder <+> center (str "Right"))
+drawUI cs =
+  [ vBox
+      [ vLimit 4 $
+          withBorderStyle unicode $
+            borderWithLabel
+              (str "Horture CommandCenter")
+              (currentCaptureUI . _ccCapturedWin $ cs),
+        hBox
+          [ withBorderStyle unicode $
+              borderWithLabel
+                (str "Assets")
+                (availableAssetsUI . _ccGifs $ cs),
+            vBox [withBorderStyle unicode $
+              borderWithLabel
+                (str "Log")
+                runningLogUI,
+                withBorderStyle unicode $
+                  borderWithLabel (str "Metainformation")
+                  metainfoUI
+                 ]
+          ],
+        vLimit 3 $
+          withBorderStyle unicode $
+            borderWithLabel
+              (str "Hotkeys")
+              hotkeyUI
+      ]
   ]
+
+currentCaptureUI :: Maybe (String, Window) -> Widget Name
+currentCaptureUI Nothing = center (str "No window is captured")
+currentCaptureUI (Just (n, w)) = center (str . unlines $ ["Capturing: " <> n, "WinID: 0x" <> showHex w ""])
+
+instance Splittable [] where
+  splitAt n ls = (take n ls, drop n ls)
+
+availableAssetsUI :: [FilePath] -> Widget Name
+availableAssetsUI fs = renderList (\_selected el -> str el) False $ list AssetList fs 1
+
+runningLogUI :: Widget Name
+runningLogUI = center (str "No logs available")
+
+metainfoUI :: Widget Name
+metainfoUI = center (str "No metainformation available")
+
+hotkeyUI :: Widget Name
+hotkeyUI =
+  center
+    ( str $
+        intercalate
+          " | "
+          [ "<g>: Select window to capture",
+            "<q>: Stop window capture",
+            "<esc>: Exit horture"
+          ]
+    )
 
 appEvent :: BrickEvent Name e -> EventM Name CommandCenterState ()
 appEvent (VtyEvent (EvKey (KChar 'j') [])) = return ()
@@ -50,7 +120,15 @@ stopApplication = do
     Just chan -> writeExit chan >> halt
 
 stopHorture :: EventM Name CommandCenterState ()
-stopHorture = gets _ccEventChan >>= mapM_ writeExit >> modify (\ccs -> ccs {_ccEventChan = Nothing})
+stopHorture =
+  gets _ccEventChan >>= mapM_ writeExit
+    >> modify
+      ( \ccs ->
+          ccs
+            { _ccEventChan = Nothing,
+              _ccCapturedWin = Nothing
+            }
+      )
 
 writeExit :: Chan Event -> EventM Name CommandCenterState ()
 writeExit chan = liftIO $ writeChan chan (EventCommand Exit)
@@ -60,20 +138,29 @@ grabHorture = do
   evChan <- liftIO $ newChan @Event
   liftIO x11UserGrabWindow >>= \case
     Nothing -> return ()
-    Just w -> do
+    Just res@(_, w) -> do
       void . liftIO . forkOS $ run evChan w
-      modify $ \ccs -> ccs {_ccEventChan = Just evChan}
+      modify $ \ccs ->
+        ccs
+          { _ccEventChan = Just evChan,
+            _ccCapturedWin = Just res
+          }
 
 app :: App CommandCenterState e Name
 app =
   App
     { appDraw = drawUI,
-      appStartEvent = return (),
+      appStartEvent = prepareEnvironment,
       appHandleEvent = appEvent,
       appAttrMap = const $ attrMap defAttr [],
       appChooseCursor = neverShowCursor
     }
 
+prepareEnvironment :: EventM Name CommandCenterState ()
+prepareEnvironment = return ()
+
 runCommandCenter :: IO ()
 runCommandCenter = do
-  void $ defaultMain app def
+  let gifDirectory = "./gifs"
+  gifs <- makeAbsolute gifDirectory >>= loadDirectory
+  void $ defaultMain app def {_ccGifs = gifs}

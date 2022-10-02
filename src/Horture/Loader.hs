@@ -6,9 +6,10 @@ module Horture.Loader
     LoaderState (..),
     runLoader,
     isGif,
-    loadGifs,
+    loadGifsGL,
     defaultGifDelay,
     defaultGifDirectory,
+    loadDirectory
   )
 where
 
@@ -73,9 +74,9 @@ type LoaderError = String
 
 type Loader a = ExceptT LoaderError (ReaderT LoaderConfig (StateT LoaderState IO)) a
 
-loadGifs :: Loader ()
-loadGifs = do
-  gifFiles <- asks _lcgifDirectory >>= liftIO . makeAbsolute >>= loadDirectory <&> filter isGif
+loadGifsGL :: Loader ()
+loadGifsGL = do
+  gifFiles <- asks _lcgifDirectory >>= liftIO . makeAbsolute >>= liftIO . loadDirectory <&> filter isGif
   loadProgram
   glGifs <- mapM loadGifGL gifFiles
   storeGifs glGifs
@@ -159,5 +160,5 @@ foldImageData imgs = Right $ concatMap (toList . imageData) imgs
 isGif :: FilePath -> Bool
 isGif fp = takeExtension fp == ".gif"
 
-loadDirectory :: FilePath -> Loader [FilePath]
-loadDirectory fp = (liftIO . listDirectory $ fp) <&> map ((fp ++ "/") ++)
+loadDirectory :: FilePath -> IO [FilePath]
+loadDirectory fp = listDirectory fp <&> map ((fp ++ "/") ++)

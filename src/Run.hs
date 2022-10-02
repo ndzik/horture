@@ -41,8 +41,9 @@ initialise :: Chan Event -> IO ()
 initialise evChan =
   x11UserGrabWindow >>= \case
     Nothing -> print "No window to horture yourself on selected 🤨, aborting" >> exitFailure
-    Just w -> run evChan w
+    Just w -> run evChan $ snd w
 
+-- TODO: Remove `exitFailure` usage.
 run :: Chan Event -> Window -> IO ()
 run evChan w = do
   glW <- initGLFW
@@ -65,12 +66,9 @@ run evChan w = do
   allocaSetWindowAttributes $ \ptr -> do
     _ <- set_event_mask ptr structureNotifyMask
     changeWindowAttributes dp w cWEventMask ptr
-  print "Set window attributes"
 
   res <- xCompositeQueryExtension dp
-  when (isNothing res) $
-    print "xCompositeExtension is missing!" >> exitFailure
-  print "Queried composite extension"
+  when (isNothing res) exitFailure
 
   let screenTextureUnit = TextureUnit 0
       gifTextureUnit = TextureUnit 4
@@ -90,12 +88,11 @@ run evChan w = do
           }
       )
       def
-      loadGifs
+      loadGifsGL
   hortureGifs <- case loaderResult of
-    Left err -> print ("loading GIFs: " <> err) >> exitFailure
+    Left _ -> exitFailure
     _otherwise -> do
       let resolvedGifs = _resolvedGifs loaderState
-      print . ("resolved GIFs: " <>) . show $ resolvedGifs
       return resolvedGifs
   let gifEffects = mkGifEffects hortureGifs
   activeTexture $= screenTextureUnit
@@ -121,7 +118,6 @@ run evChan w = do
   -- window, which is overlayed anyway by our application.
   _ <- xCompositeRedirectWindow dp w CompositeRedirectManual
   pm <- xCompositeNameWindowPixmap dp w
-  print $ "Retrieved composite window pixmap: " <> show pm
 
   let ww = wa_width attr
       wh = wa_height attr
@@ -137,7 +133,6 @@ run evChan w = do
     (TextureSize2D (fromIntegral ww) (fromIntegral wh))
     0
     anyPixelData
-  print "Created dummy texture"
 
   let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
   projectionUniform <- uniformLocation prog "proj"
@@ -180,7 +175,7 @@ run evChan w = do
         let (i, gen') = Random.randomR (0, length gifEffects - 1) gen
             (v, _) = Random.random @Float gen
             ev = (gifEffects !! i) (Limited 8) (V3 (sin (20 * v)) (cos (33 * v)) 0)
-        threadDelay 500000
+        threadDelay 100000
         writeChan evChan (H.EventEffect ev)
         generateEvents evChan gen'
   _threadId <- forkOS (generateEvents evChan gen)
@@ -203,12 +198,10 @@ run evChan w = do
             _glWin = glW,
             _backgroundColor = Color4 0.1 0.1 0.1 1
           }
-  print "starting scene rendering"
   _ <- runHorture hs hc (playScene scene)
   GLFW.destroyWindow glW
   GLFW.terminate
   closeDisplay dp
-  print "Done..."
 
 findMe :: Window -> Display -> String -> IO (Maybe ([[Char]], Window))
 findMe root dp me = do
@@ -220,7 +213,7 @@ findMe root dp me = do
             _ <- xGetTextProperty dp c ptr wM_CLASS
             r <- peek ptr >>= wcTextPropertyToTextList dp
             if not . null $ r
-              then print r >> return (Just (r, c))
+              then return (Just (r, c))
               else return Nothing
         )
         childs
