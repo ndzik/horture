@@ -23,6 +23,8 @@ extra-source-files: CHANGELOG.md
 
 library horture-lib
     exposed-modules:  Horture
+                    , Horture.CommandCenter.CommandCenter
+                    , Horture.CommandCenter.State
                     , Horture.Scene
                     , Horture.Horture
                     , Horture.X11
@@ -36,6 +38,7 @@ library horture-lib
                     , Horture.Loader
                     , Horture.Effect
                     , Horture.Gif
+                    , Run
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -57,9 +60,12 @@ library horture-lib
                     , containers
                     , linear
                     , vector
+                    , random
                     , directory
                     , data-default
                     , filepath
+                    , vty
+                    , brick
     ghc-options:
                     -Wall
                     -fno-warn-name-shadowing
@@ -86,6 +92,7 @@ executable horture-exe
                     -O2
     build-depends:    base ^>=4.14.3.0
                     , horture-lib
+                    , brick
                     , X11
                     , text
                     , OpenGL

@@ -56,15 +56,16 @@ hortureName = "horture"
 playScene :: Scene -> Horture ()
 playScene s = do
   setTime 0
-  go 0 s
+  go 0 (Just s)
   where
-    go startTime s = do
+    go _ Nothing = return ()
+    go startTime (Just s) = do
       dt <- deltaTime startTime
       clearView
       renderScreen dt . _screen $ s
       renderGifs dt . _gifs $ s
       updateView
-      s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> purge timeNow
+      s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
       go startTime s'
 
 clearView :: Horture ()
@@ -73,7 +74,7 @@ clearView = liftIO $ GL.clear [ColorBuffer]
 updateView :: Horture ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
 
-pollEvents :: Scene -> Double -> Double -> Horture Scene
+pollEvents :: Scene -> Double -> Double -> Horture (Maybe Scene)
 pollEvents s timeNow dt = do
   pollGLFWEvents
   pollXEvents
@@ -300,14 +301,11 @@ void main() {
 
 data SizeUpdate = GLFWUpdate !(Int, Int) | XUpdate !(CInt, CInt) deriving (Show, Eq)
 
-x11UserGrabWindow :: IO (Maybe Window)
+x11UserGrabWindow :: IO (Maybe (String, Window))
 x11UserGrabWindow = do
-  print "opening display"
   dp <- openDisplay ""
   let ds = defaultScreen dp
-  print "getting root window"
   root <- rootWindow dp ds
-  print "creating cursor"
   cursor <- createFontCursor dp xC_crosshair
   _ <-
     grabPointer
@@ -331,11 +329,8 @@ x11UserGrabWindow = do
         alloca $ \cptr -> do
           s <- xFetchName dp ev_subwindow cptr
           if s == 0
-            then print "Unabled to fetch name of grabbed window"
-            else do
-              s <- peek cptr >>= peekCString
-              print $ "Grabbing window: " <> s
-        return . Just $ ev_subwindow
+            then return . Just $ ("unknown", ev_subwindow)
+            else peek cptr >>= peekCString >>= \n -> return . Just $ (n, ev_subwindow)
       _otherwise -> return Nothing
 
   ungrabPointer dp currentTime
