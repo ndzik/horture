@@ -44,17 +44,21 @@ library horture-lib
                     , Run
 
     -- Modules included in this library but not exported.
-    -- other-modules:
+    other-modules:    Twitch.Server
+                    , Twitch.Types
 
     -- LANGUAGE extensions used by modules in this package. other-extensions:
     build-depends:    base ^>=4.14.3.0
                     , X11
                     , text
+                    , aeson
                     , OpenGL
                     , mtl
                     , GLFW-b
                     , GLUtil
                     , raw-strings-qq
+                    , cryptonite
+                    , memory
                     , bytestring
                     , clock
                     , deepseq
@@ -70,6 +74,13 @@ library horture-lib
                     , filepath
                     , vty
                     , brick
+                    , wai
+                    , warp
+                    , warp-tls
+                    , wai-extra
+                    , wai-logger
+                    , wai-websockets
+                    , http-types
     ghc-options:
                     -Wall
                     -fno-warn-name-shadowing
