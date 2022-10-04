@@ -2,14 +2,14 @@
 
 module Twitch.Types
   ( NotificationReq (..),
-    SubscriptionMsg (..),
     Subscription (..),
     Status (..),
-    Condition (..),
     Transport (..),
-    ChannelRedemptionPayload (..),
+    ChannelRedemptionNotification (..),
+    WebhookRequest (..),
+    RewardRedemptionCondition (..),
     Verification (..),
-    Event (..),
+    RedemptionRewardEvent (..),
     EventStatus (..),
     Reward (..),
   )
@@ -20,9 +20,15 @@ import Data.Aeson.TH
 import Data.Char (toLower)
 import Data.Text (Text)
 
-data Verification = Verification
+data NotificationEvent c = NotificationEvent
+  { notificationeventSubscription :: !(Subscription c),
+    notificationeventEvent :: !RedemptionRewardEvent
+  }
+  deriving (Show)
+
+data Verification c = Verification
   { verificationChallenge :: !Text,
-    verificationSubscription :: !Subscription
+    verificationSubscription :: !(Subscription c)
   }
   deriving (Show)
 
@@ -33,20 +39,15 @@ data NotificationReq = NotificationReq
   }
   deriving (Show)
 
-data SubscriptionMsg = SubscriptionMsg
-  { subscriptionmsgSubscription :: !Subscription,
-    subscriptionmsgTransport :: !Transport,
-    subscriptionmsgCreatedAt :: !Text
-  }
-  deriving (Show)
-
-data Subscription = Subscription
+-- Subscription is the webhook subscription event type received from twitch
+-- when requesting a webhook subscription.
+data Subscription c = Subscription
   { subscriptionId :: !Text,
-    subscriptionStatus :: !Text,
     subscriptionType :: !Text,
     subscriptionVersion :: !Text,
+    subscriptionStatus :: !Status,
     subscriptionCost :: !Int,
-    subscriptionCondition :: !Condition,
+    subscriptionCondition :: !c,
     subscriptionTransport :: !Transport,
     subscriptionCreatedAt :: !Text
   }
@@ -57,11 +58,20 @@ data Status
   | Disabled
   deriving (Show)
 
--- TODO: Make this typesafe by associating SubTypes with their condition
--- structure.
-data Condition = Condition
-  { conditionBroadcasterUserId :: !Text
-  -- conditionRewardId :: !Text
+-- TODO: Could we use TypeLits here to statically fix the request type and
+-- still generate everything using TH?
+data WebhookRequest c = MkWebhookRequest
+  { mkwebhookrequestType :: !Text,
+    mkwebhookrequestVersion :: !Text,
+    mkwebhookrequestCondition :: !c,
+    mkwebhookrequestTransport :: !Transport
+  }
+  deriving (Show)
+
+-- type: "channel.channel_points_custom_reward_redemption.add"
+data RewardRedemptionCondition = RewardRedemptionCondition
+  { rewardredemptionconditionBroadcasterUserId :: !Text,
+    rewardredemptionconditionRewardId :: !(Maybe Text)
   }
   deriving (Show)
 
@@ -72,28 +82,24 @@ data Transport = Transport
   }
   deriving (Show)
 
--- data Method = WebHook
---
--- instance Show Method where
---   show WebHook = "webhook"
-
-data ChannelRedemptionPayload = ChannelRedemptionPayload
-  { channelRedemptionPayloadSubscription :: !Subscription,
-    channelRedemptionPayloadEvent :: !Event
+data ChannelRedemptionNotification c = ChannelRedemptionNotification
+  { channelredemptionnotificationSubscription :: !(Subscription c),
+    channelredemptionnotificationEvent :: !RedemptionRewardEvent
   }
   deriving (Show)
 
-data Event = Event
-  { eventId :: !Text,
-    eventBroadcasterUserId :: !Text,
-    eventBroadcasterUserName :: !Text,
-    eventUserId :: !Text,
-    eventUserLogin :: !Text,
-    eventUserName :: !Text,
-    eventUserInput :: !Text,
-    eventStatus :: !EventStatus,
-    eventReward :: !Reward,
-    eventRedeemedAt :: !Text
+data RedemptionRewardEvent = RedemptionRewardEvent
+  { redemptionrewardeventId :: !Text,
+    redemptionrewardeventBroadcasterUserId :: !Text,
+    redemptionrewardeventBroadcasterUserLogin :: !Text,
+    redemptionrewardeventBroadcasterUserName :: !Text,
+    redemptionrewardeventUserId :: !Text,
+    redemptionrewardeventUserLogin :: !Text,
+    redemptionrewardeventUserName :: !Text,
+    redemptionrewardeventUserInput :: !Text,
+    redemptionrewardeventStatus :: !EventStatus,
+    redemptionrewardeventReward :: !Reward,
+    redemptionrewardeventRedeemedAt :: !Text
   }
   deriving (Show)
 
@@ -110,5 +116,10 @@ data Reward = Reward
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length "verification_") . camelTo2 '_'} ''Verification)
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length "subscription_") . camelTo2 '_'} ''Subscription)
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length "transport_") . camelTo2 '_'} ''Transport)
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "condition_") . camelTo2 '_'} ''Condition)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "mkwebhookrequest_") . camelTo2 '_'} ''WebhookRequest)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "channelredemptionnotification_") . camelTo2 '_'} ''ChannelRedemptionNotification)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "rewardredemptioncondition_") . camelTo2 '_'} ''RewardRedemptionCondition)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "redemptionrewardevent_") . camelTo2 '_'} ''RedemptionRewardEvent)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "reward_") . camelTo2 '_'} ''Reward)
+$(deriveJSON defaultOptions {constructorTagModifier = map toLower} ''EventStatus)
 $(deriveJSON defaultOptions {constructorTagModifier = map toLower} ''Status)

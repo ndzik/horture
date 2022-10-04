@@ -10,35 +10,41 @@ import Data.Aeson (decodeStrict)
 import Data.ByteArray.Encoding
 import Data.ByteString (ByteString, concat)
 import Data.Maybe
+import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8Builder)
 import Network.HTTP.Types
 import Network.Wai
 import Network.Wai.Handler.Warp
+import System.Random.Stateful
 import Twitch.Types
 import Prelude hiding (concat)
 
 runTwitchSub :: Port -> IO ()
-runTwitchSub port = run port twitchSubApp
+runTwitchSub port = do
+  secret <- uniformByteStringM 64 globalStdGen
+  run port $ twitchSubApp secret
 
-twitchSubApp :: Application
-twitchSubApp req respondWith = do
+twitchSubApp :: ByteString -> Application
+twitchSubApp secret req respondWith = do
   response <- case pathInfo req of
-    ["eventsub"] -> handleTwitchNotification req
+    ["eventsub"] -> handleTwitchNotification secret req
     _otherwise -> notFound
   respondWith response
 
-handleTwitchNotification :: Request -> IO Response
-handleTwitchNotification req = do
-  let headers = requestHeaders req
-      secret = "someSecret"
-  -- TODO: Throws `user error: mzero`, how to properly handle early abort
-  -- without breaking middleware?
-  guard =<< case lookup "Twitch-Eventsub-Message-Signature" headers of
-    Just sig -> verifyFromTwitch req secret sig
-    _otherwise -> return False
-  case requestHeaders req of
-    [("Twitch-Eventsub-Message-Type", messageType)] -> handleMessageType messageType req
-    _otherwise -> badRequest
+handleTwitchNotification :: ByteString -> Request -> IO Response
+handleTwitchNotification secret req =
+  if not . isPOST . requestMethod $ req
+    then methodNotAllowed
+    else do
+      let headers = requestHeaders req
+      -- TODO: Throws `user error: mzero`, how to properly handle early abort
+      -- without breaking middleware?
+      guard =<< case lookup "Twitch-Eventsub-Message-Signature" headers of
+        Just sig -> verifyFromTwitch req secret sig
+        _otherwise -> return False
+      case requestHeaders req of
+        [("Twitch-Eventsub-Message-Type", messageType)] -> handleMessageType messageType req
+        _otherwise -> badRequest
 
 verifyFromTwitch :: Request -> ByteString -> ByteString -> IO Bool
 verifyFromTwitch req secret twitchSig = do
@@ -67,11 +73,11 @@ handleMessageType :: ByteString -> Request -> IO Response
 handleMessageType "webhook_callback_verification" req = handleCallbackVerification req
 handleMessageType "notification" req = handleNotification req
 handleMessageType "revocation" req = handleRevocation req
-handleMessageType _ _req = badRequest
+handleMessageType _ _req = okNoContent
 
 handleCallbackVerification :: Request -> IO Response
 handleCallbackVerification req = do
-  verification <- getRequestBodyChunk req >>= return . decodeStrict @Verification
+  verification <- getRequestBodyChunk req >>= return . decodeStrict @(Verification RewardRedemptionCondition)
   maybe badRequestBody respondWithChallenge verification
   where
     respondWithChallenge verification =
@@ -82,13 +88,13 @@ handleCallbackVerification req = do
         $ verification
 
 handleNotification :: Request -> IO Response
-handleNotification _req = okResponse
+handleNotification _req = okNoContent
 
 handleRevocation :: Request -> IO Response
-handleRevocation _req = okResponse
+handleRevocation _req = okNoContent
 
-okResponse :: IO Response
-okResponse = return $ responseBuilder status200 [] mempty
+okNoContent :: IO Response
+okNoContent = return $ responseBuilder status204 [] mempty
 
 notFound :: IO Response
 notFound = return $ responseBuilder status404 [("Content-Type", "text/plain")] mempty
@@ -98,3 +104,10 @@ badRequest = return $ responseBuilder status400 [("Content-Type", "text/plain")]
 
 badRequestBody :: IO Response
 badRequestBody = return $ responseBuilder status422 [("Content-Type", "text/plain")] mempty
+
+methodNotAllowed :: IO Response
+methodNotAllowed = return $ responseBuilder status405 [("Content-Type", "text/plain")] mempty
+
+isPOST :: ByteString -> Bool
+isPOST "POST" = True
+isPOST _ = False

@@ -46,6 +46,7 @@ library horture-lib
     -- Modules included in this library but not exported.
     other-modules:    Twitch.Server
                     , Twitch.Types
+                    , Twitch.Rest
 
     -- LANGUAGE extensions used by modules in this package. other-extensions:
     build-depends:    base ^>=4.14.3.0
@@ -58,6 +59,9 @@ library horture-lib
                     , GLUtil
                     , raw-strings-qq
                     , cryptonite
+                    , servant
+                    , servant-client
+                    , http-client
                     , memory
                     , bytestring
                     , clock
