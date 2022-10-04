@@ -22,112 +22,105 @@ maintainer:         norbert@perun.network
 extra-source-files: CHANGELOG.md
 
 library horture-lib
-    exposed-modules:  Horture
-                    , Horture.CommandCenter.CommandCenter
-                    , Horture.CommandCenter.Event
-                    , Horture.CommandCenter.State
-                    , Horture.Scene
-                    , Horture.Horture
-                    , Horture.Logging
-                    , Horture.X11
-                    , Horture.Error
-                    , Horture.Command
-                    , Horture.Events
-                    , Horture.Event
-                    , Horture.State
-                    , Horture.Render
-                    , Horture.Object
-                    , Horture.Loader
-                    , Horture.Effect
-                    , Horture.Gif
-                    , Twitch
-                    , Run
+    exposed-modules:            Horture
+                                , Horture.CommandCenter.CommandCenter
+                                , Horture.CommandCenter.Event
+                                , Horture.CommandCenter.State
+                                , Horture.Scene
+                                , Horture.Horture
+                                , Horture.Logging
+                                , Horture.X11
+                                , Horture.Error
+                                , Horture.Command
+                                , Horture.Events
+                                , Horture.Event
+                                , Horture.State
+                                , Horture.Render
+                                , Horture.Object
+                                , Horture.Loader
+                                , Horture.Effect
+                                , Horture.Gif
+                                , Twitch
+                                , Run
 
     -- Modules included in this library but not exported.
-    other-modules:    Twitch.Server
-                    , Twitch.Types
-                    , Twitch.Rest
+    other-modules:              Twitch.Server
+                                , Twitch.Types
+                                , Twitch.Rest
 
     -- LANGUAGE extensions used by modules in this package. other-extensions:
-    build-depends:    base ^>=4.14.3.0
-                    , X11
-                    , text
-                    , aeson
-                    , OpenGL
-                    , mtl
-                    , GLFW-b
-                    , GLUtil
-                    , raw-strings-qq
-                    , cryptonite
-                    , servant
-                    , servant-client
-                    , http-client
-                    , memory
-                    , bytestring
-                    , clock
-                    , deepseq
-                    , synchronous-channels
-                    , JuicyPixels
-                    , containers
-                    , linear
-                    , vector
-                    , random
-                    , co-log
-                    , directory
-                    , data-default
-                    , filepath
-                    , vty
-                    , brick
-                    , wai
-                    , warp
-                    , warp-tls
-                    , wai-extra
-                    , wai-logger
-                    , wai-websockets
-                    , http-types
+    build-depends:              base ^>=4.14.3.0
+                                , X11
+                                , text
+                                , aeson
+                                , OpenGL
+                                , mtl
+                                , GLFW-b
+                                , GLUtil
+                                , raw-strings-qq
+                                , cryptonite
+                                , servant
+                                , servant-client
+                                , servant-client-core
+                                , http-client
+                                , memory
+                                , bytestring
+                                , clock
+                                , deepseq
+                                , synchronous-channels
+                                , JuicyPixels
+                                , containers
+                                , linear
+                                , vector
+                                , random
+                                , co-log
+                                , directory
+                                , data-default
+                                , filepath
+                                , vty
+                                , brick
+                                , wai
+                                , warp
+                                , warp-tls
+                                , wai-extra
+                                , wai-logger
+                                , wai-websockets
+                                , websockets
+                                , http-types
     ghc-options:
-                    -Wall
-                    -fno-warn-name-shadowing
-    hs-source-dirs:   src
-    default-language: Haskell2010
+                                -Wall
+                                -fno-warn-name-shadowing
+    hs-source-dirs:             src
+    default-language:           Haskell2010
 
 test-suite horture-test
-  type:               exitcode-stdio-1.0
-  hs-source-dirs:     test
-  main-is:            Spec.hs
-  build-depends:      base ^>=4.14.3.0
-                    , horture-lib
-                    , tasty
-                    , tasty-hunit
-  default-language: Haskell2010
+  type:                         exitcode-stdio-1.0
+  hs-source-dirs:               test
+  main-is:                      Spec.hs
+  build-depends:                base ^>=4.14.3.0
+                                , horture-lib
+                                , tasty
+                                , tasty-hunit
+  default-language:             Haskell2010
 
 executable horture-exe
-    hs-source-dirs:   app
-    -- other-modules:
-    main-is:          Main.hs
+    hs-source-dirs:             app/Exe
+    main-is:                    Main.hs
     ghc-options:
-                    -fno-warn-name-shadowing
-                    -threaded
-                    -O2
-    build-depends:    base ^>=4.14.3.0
-                    , horture-lib
-                    , brick
-                    , X11
-                    , text
-                    , OpenGL
-                    , mtl
-                    , GLFW-b
-                    , GLUtil
-                    , raw-strings-qq
-                    , bytestring
-                    , clock
-                    , deepseq
-                    , data-default
-                    , synchronous-channels
-                    , containers
-                    , optparse-applicative
-                    , linear
-                    , random
-                    , JuicyPixels
-                    , vector
-    default-language: Haskell2010
+                                -fno-warn-name-shadowing
+                                -threaded
+                                -O2
+    build-depends:              base ^>=4.14.3.0
+                                , horture-lib
+    default-language:           Haskell2010
+
+executable horture-server
+  hs-source-dirs:               app/Server
+  main-is:                      Main.hs
+  ghc-options:
+                                -fno-warn-name-shadowing
+                                -threaded
+                                -O2
+  build-depends:                base ^>=4.14.3.0
+                                , horture-lib
+  default-language:             Haskell2010

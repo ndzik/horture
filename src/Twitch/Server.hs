@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Twitch.Server (runTwitchSub) where
+module Twitch.Server (runTwitchSubLocal, runTwitchSub) where
 
 import Control.Monad (guard)
 import Crypto.Hash.Algorithms (SHA256)
@@ -15,17 +15,46 @@ import Data.Text.Encoding (encodeUtf8Builder)
 import Network.HTTP.Types
 import Network.Wai
 import Network.Wai.Handler.Warp
+import Network.Wai.Handler.WarpTLS
+import Network.Wai.Handler.WebSockets
+import Network.WebSockets hiding (Request, Response, requestHeaders)
 import System.Random.Stateful
 import Twitch.Types
 import Prelude hiding (concat)
 
-runTwitchSub :: Port -> IO ()
-runTwitchSub port = do
+-- | runTwitchSub runs the twitch sub server with the given certificate and key
+-- on the given port. Can be used in production with officially CA signed SSL
+-- certificates or alternatively locally in tests with self-signed
+-- certificates.
+runTwitchSub :: FilePath -> FilePath -> Port -> IO ()
+runTwitchSub cert key port = server (runTLS (tlsSettings cert key) (setPort port defaultSettings))
+
+-- | runTwitchSubLocal runs the server in a local environment. This cannot be
+-- used with the production twitch api, because webhooks ONLY work external
+-- reachable servers with an officially CA signed SSL certificate.
+runTwitchSubLocal :: Port -> IO ()
+runTwitchSubLocal port = server (run port)
+
+server :: (Application -> IO ()) -> IO ()
+server runApp = do
   secret <- uniformByteStringM 64 globalStdGen
-  run port $ twitchSubApp secret
+  -- TODO: Initially subscribe to twitch events of interest here.
+  runApp . twitchSubApp $ secret
 
 twitchSubApp :: ByteString -> Application
-twitchSubApp secret req respondWith = do
+twitchSubApp secret = websocketsOr defaultConnectionOptions hortureWSApp (hortureTwitchApp secret)
+
+-- | hortureWSApp will forward and multiplex received webhook messages to a
+-- connected client.
+hortureWSApp :: ServerApp
+hortureWSApp pendingConn = do
+  conn <- acceptRequest pendingConn
+  sendTextData @Text conn "Hello, client!"
+
+-- | hortureTwitchApp acts as the webhook for twitch to send subscribed events
+-- to.
+hortureTwitchApp :: ByteString -> Application
+hortureTwitchApp secret req respondWith = do
   response <- case pathInfo req of
     ["eventsub"] -> handleTwitchNotification secret req
     _otherwise -> notFound
@@ -61,6 +90,7 @@ verifyFromTwitch req secret twitchSig = do
   where
     concat3 msg1 msg2 msg3 = concat [msg1, msg2, msg3]
 
+{- HLINT ignore "Use ++"-}
 createHmacHex :: ByteString -> ByteString -> ByteString
 createHmacHex secret hmacMsg = concat ["sha256=", convertToBase Base16 (hmac secret hmacMsg :: HMAC SHA256)]
 
@@ -87,9 +117,11 @@ handleCallbackVerification req = do
         . verificationChallenge
         $ verification
 
+-- TODO: Handle incoming events and push over websocket if available.
 handleNotification :: Request -> IO Response
 handleNotification _req = okNoContent
 
+-- TODO: Resubscribe to twitch events of interest here.
 handleRevocation :: Request -> IO Response
 handleRevocation _req = okNoContent
 

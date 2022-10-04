@@ -12,6 +12,8 @@ module Twitch.Types
     RedemptionRewardEvent (..),
     EventStatus (..),
     Reward (..),
+    TwitchResponseObject(..),
+    TwitchSubscriptionResponse(..),
   )
 where
 
@@ -56,6 +58,26 @@ data Subscription c = Subscription
 data Status
   = Enabled
   | Disabled
+  deriving (Show)
+
+data TwitchSubscriptionResponse c = TwitchSubscriptionResponse
+  { twitchsubscriptionresponseData :: ![TwitchResponseObject c],
+    twitchsubscriptionresponseTotal :: !Int,
+    twitchsubscriptionresponseTotalCost :: !Int,
+    twitchsubscriptionresponseMaxTotalCost :: !Int
+  }
+  deriving (Show)
+
+data TwitchResponseObject c = TwitchResponseObject
+  { twitchresponseobjectId :: !Text,
+    twitchresponseobjectStatus :: !Text,
+    twitchresponseobjectType :: !Text,
+    twitchresponseobjectVersion :: !Text,
+    twitchresponseobjectCondition :: !c,
+    twitchresponseobjectCreatedAt :: !Text,
+    twitchresponseobjectTransport :: !Transport,
+    twitchresponseobjectCost :: !Int
+  }
   deriving (Show)
 
 -- TODO: Could we use TypeLits here to statically fix the request type and
@@ -121,5 +143,7 @@ $(deriveJSON defaultOptions {fieldLabelModifier = drop (length "channelredemptio
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length "rewardredemptioncondition_") . camelTo2 '_'} ''RewardRedemptionCondition)
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length "redemptionrewardevent_") . camelTo2 '_'} ''RedemptionRewardEvent)
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length "reward_") . camelTo2 '_'} ''Reward)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "twitchsubscriptionresponse_") . camelTo2 '_'} ''TwitchSubscriptionResponse)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "twitchresponseobject_") . camelTo2 '_'} ''TwitchResponseObject)
 $(deriveJSON defaultOptions {constructorTagModifier = map toLower} ''EventStatus)
 $(deriveJSON defaultOptions {constructorTagModifier = map toLower} ''Status)
