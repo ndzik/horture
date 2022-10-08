@@ -6,7 +6,7 @@
 -- | Condition types according to the twitch specification:
 --
 -- https://dev.twitch.tv/docs/eventsub/eventsub-reference#conditions
-module Twitch.Types.EventSub.Condition (Condition (..)) where
+module Twitch.EventSub.Condition (Condition (..), conditionTag) where
 
 import Data.Aeson
 import Data.Aeson.TH
@@ -244,5 +244,43 @@ instance FromJSON Condition where
         condition <- o .: "condition"
         UserUpdate <$> condition .: "user_id"
       _otherwise -> parseFail "unhandled subscription type"
+
+conditionTag :: Condition -> Text
+conditionTag ChannelUpdate {} = "channel.update"
+conditionTag ChannelFollow {} = "channel.follow"
+conditionTag ChannelSubscribe {} = "channel.subscribe"
+conditionTag ChannelSubscriptionEnd {} = "channel.subscription.end"
+conditionTag ChannelSubscriptionGift {} = "Channel.subscription.gift"
+conditionTag ChannelCheer {} = "channel.cheer"
+conditionTag ChannelRaid {} = "channel.raid"
+conditionTag ChannelBan {} = "channel.ban"
+conditionTag ChannelUnban {} = "channel.unban"
+conditionTag ChannelModeratorAdd {} = "channel.moderator.add"
+conditionTag ChannelModeratorRemove {} = "channel.moderator.remove"
+conditionTag ChannelPointsCustomRewardAdd {} = "channel.channel_points_custom_reward.add"
+conditionTag ChannelPointsCustomRewardUpdate {} = "channel.channel_points_custom_reward.update"
+conditionTag ChannelPointsCustomRewardRemove {} = "channel.channel_points_custom_reward.remove"
+conditionTag ChannelPointsCustomRewardRedemptionAdd {} = "channel.channel_points_custom_reward_redemption.add"
+conditionTag ChannelPointsCustomRewardRedemptionUpdate {} = "channel.channel_points_custom_reward_redemption.update"
+conditionTag ChannelPollBegin {} = "channel.poll.begin"
+conditionTag ChannelPollProgress {} = "channel.poll.progress"
+conditionTag ChannelPollEnd {} = "channel.poll.end"
+conditionTag ChannelPredictionBegin {} = "channel.prediction.begin"
+conditionTag ChannelPredictionProgress {} = "channel.prediction.progress"
+conditionTag ChannelPredictionLock {} = "channel.prediction.lock"
+conditionTag ChannelPredictionEnd {} = "channel.prediction.end"
+conditionTag DropEntitlementGrant {} = "drop.entitlement.grant"
+conditionTag ExtensionBitsTransactionCreate {} = "extension.bits_transaction.create"
+conditionTag GoalBegin {} = "channel.goal.begin"
+conditionTag GoalProgress {} = "channel.goal.progress"
+conditionTag GoalEnd {} = "channel.goal.end"
+conditionTag HypeTrainBegin {} = "channel.hype_train.begin"
+conditionTag HypeTrainProgress {} = "channel.hype_train.progress"
+conditionTag HypeTrainEnd {} = "channel.hype_train.end"
+conditionTag StreamOnline {} = "stream.online"
+conditionTag StreamOffline {} = "stream.offline"
+conditionTag AuthorizationGrant {} = "user.authorization.grant"
+conditionTag AuthorizationRevoke {} = "user.authorization.revoke"
+conditionTag UserUpdate {} = "user.update"
 
 $(deriveToJSON defaultOptions {fieldLabelModifier = camelTo2 '_', sumEncoding = UntaggedValue} ''Condition)

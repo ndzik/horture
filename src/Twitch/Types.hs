@@ -1,36 +1,42 @@
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Twitch.Types
   ( NotificationReq (..),
     Subscription (..),
     Status (..),
-    Transport (..),
     ChannelRedemptionNotification (..),
-    WebhookRequest (..),
-    RewardRedemptionCondition (..),
     Verification (..),
     RedemptionRewardEvent (..),
     EventStatus (..),
     Reward (..),
-    TwitchResponseObject(..),
-    TwitchSubscriptionResponse(..),
+    ResponseObject (..),
+    SubscriptionResponse (..),
+    ClientCredentialRequest (..),
+    ClientCredentialResponse (..),
+    AccessTokenScopesRequest (..),
   )
 where
 
 import Data.Aeson
 import Data.Aeson.TH
-import Data.Char (toLower)
-import Data.Text (Text)
+import Data.Text (Text, unwords)
+import Twitch.EventSub
+import Twitch.EventSub.Event
+import Web.FormUrlEncoded (FromForm (..), ToForm (..), parseUnique)
+import Web.HttpApiData (ToHttpApiData, toQueryParam)
+import Prelude hiding (unwords)
 
-data NotificationEvent c = NotificationEvent
-  { notificationeventSubscription :: !(Subscription c),
-    notificationeventEvent :: !RedemptionRewardEvent
+data NotificationEvent = NotificationEvent
+  { notificationeventSubscription :: !Subscription,
+    notificationeventEvent :: !Event
   }
   deriving (Show)
 
-data Verification c = Verification
+data Verification = Verification
   { verificationChallenge :: !Text,
-    verificationSubscription :: !(Subscription c)
+    verificationSubscription :: !Subscription
   }
   deriving (Show)
 
@@ -43,107 +49,92 @@ data NotificationReq = NotificationReq
 
 -- Subscription is the webhook subscription event type received from twitch
 -- when requesting a webhook subscription.
-data Subscription c = Subscription
+data Subscription = Subscription
   { subscriptionId :: !Text,
-    subscriptionType :: !Text,
     subscriptionVersion :: !Text,
     subscriptionStatus :: !Status,
     subscriptionCost :: !Int,
-    subscriptionCondition :: !c,
+    subscriptionCondition :: !Condition,
     subscriptionTransport :: !Transport,
     subscriptionCreatedAt :: !Text
   }
   deriving (Show)
 
+instance FromJSON Subscription where
+  parseJSON v =
+    withObject
+      "Subscription"
+      ( \o ->
+          Subscription
+            <$> o .: "id"
+            <*> o .: "version"
+            <*> o .: "status"
+            <*> o .: "cost"
+            <*> parseJSON v
+            <*> o .: "transport"
+            <*> o .: "created_at"
+      )
+      v
+
+instance ToJSON Subscription where
+  toJSON (Subscription i v s c con tr ca) =
+    object
+      [ "type" .= conditionTag con,
+        "id" .= i,
+        "version" .= v,
+        "status" .= s,
+        "cost" .= c,
+        "condition" .= con,
+        "transport" .= tr,
+        "created_at" .= ca
+      ]
+
 data Status
   = Enabled
   | Disabled
+  | WebhookCallbackVerificationPending
   deriving (Show)
 
-data TwitchSubscriptionResponse c = TwitchSubscriptionResponse
-  { twitchsubscriptionresponseData :: ![TwitchResponseObject c],
-    twitchsubscriptionresponseTotal :: !Int,
-    twitchsubscriptionresponseTotalCost :: !Int,
-    twitchsubscriptionresponseMaxTotalCost :: !Int
+data ChannelRedemptionNotification = ChannelRedemptionNotification
+  { channelredemptionnotificationSubscription :: !Subscription,
+    channelredemptionnotificationEvent :: !Event
   }
   deriving (Show)
 
-data TwitchResponseObject c = TwitchResponseObject
-  { twitchresponseobjectId :: !Text,
-    twitchresponseobjectStatus :: !Text,
-    twitchresponseobjectType :: !Text,
-    twitchresponseobjectVersion :: !Text,
-    twitchresponseobjectCondition :: !c,
-    twitchresponseobjectCreatedAt :: !Text,
-    twitchresponseobjectTransport :: !Transport,
-    twitchresponseobjectCost :: !Int
+data ClientCredentialRequest = ClientCredentialRequest
+  { clientcredentialrequestClientId :: !Text,
+    clientcredentialrequestClientSecret :: !Text,
+    clientcredentialrequestGrantType :: !Text
   }
   deriving (Show)
 
--- TODO: Could we use TypeLits here to statically fix the request type and
--- still generate everything using TH?
-data WebhookRequest c = MkWebhookRequest
-  { mkwebhookrequestType :: !Text,
-    mkwebhookrequestVersion :: !Text,
-    mkwebhookrequestCondition :: !c,
-    mkwebhookrequestTransport :: !Transport
+instance FromForm ClientCredentialRequest where
+  fromForm f =
+    ClientCredentialRequest
+      <$> parseUnique "client_id" f
+      <*> parseUnique "client_secret" f
+      <*> parseUnique "grant_type" f
+
+instance ToForm ClientCredentialRequest where
+  toForm ccr =
+    [ ("client_id", toQueryParam (clientcredentialrequestClientId ccr)),
+      ("client_secret", toQueryParam (clientcredentialrequestClientSecret ccr)),
+      ("grant_type", toQueryParam (clientcredentialrequestGrantType ccr))
+    ]
+
+data ClientCredentialResponse = ClientCredentialResponse
+  { clientcredentialresponseAccessToken :: !Text,
+    clientcredentialresponseExpiresIn :: !Int,
+    clientcredentialresponseTokenType :: !Text
   }
   deriving (Show)
 
--- type: "channel.channel_points_custom_reward_redemption.add"
-data RewardRedemptionCondition = RewardRedemptionCondition
-  { rewardredemptionconditionBroadcasterUserId :: !Text,
-    rewardredemptionconditionRewardId :: !(Maybe Text)
-  }
-  deriving (Show)
+newtype AccessTokenScopesRequest = AccessTokenScopesRequest [Text] deriving (Show)
 
-data Transport = Transport
-  { transportMethod :: !Text,
-    transportCallback :: !Text,
-    transportSecret :: !(Maybe Text)
-  }
-  deriving (Show)
+instance ToHttpApiData AccessTokenScopesRequest where
+  toQueryParam (AccessTokenScopesRequest ss) = toQueryParam . unwords $ ss
 
-data ChannelRedemptionNotification c = ChannelRedemptionNotification
-  { channelredemptionnotificationSubscription :: !(Subscription c),
-    channelredemptionnotificationEvent :: !RedemptionRewardEvent
-  }
-  deriving (Show)
-
-data RedemptionRewardEvent = RedemptionRewardEvent
-  { redemptionrewardeventId :: !Text,
-    redemptionrewardeventBroadcasterUserId :: !Text,
-    redemptionrewardeventBroadcasterUserLogin :: !Text,
-    redemptionrewardeventBroadcasterUserName :: !Text,
-    redemptionrewardeventUserId :: !Text,
-    redemptionrewardeventUserLogin :: !Text,
-    redemptionrewardeventUserName :: !Text,
-    redemptionrewardeventUserInput :: !Text,
-    redemptionrewardeventStatus :: !EventStatus,
-    redemptionrewardeventReward :: !Reward,
-    redemptionrewardeventRedeemedAt :: !Text
-  }
-  deriving (Show)
-
-data EventStatus = Unfulfilled | Unknown | Fulfilled | Canceled deriving (Show)
-
-data Reward = Reward
-  { rewardId :: !Text,
-    rewardTitle :: !Text,
-    rewardCost :: !Int,
-    rewardPrompt :: !Text
-  }
-  deriving (Show)
-
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "verification_") . camelTo2 '_'} ''Verification)
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "subscription_") . camelTo2 '_'} ''Subscription)
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "transport_") . camelTo2 '_'} ''Transport)
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "mkwebhookrequest_") . camelTo2 '_'} ''WebhookRequest)
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "channelredemptionnotification_") . camelTo2 '_'} ''ChannelRedemptionNotification)
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "rewardredemptioncondition_") . camelTo2 '_'} ''RewardRedemptionCondition)
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "redemptionrewardevent_") . camelTo2 '_'} ''RedemptionRewardEvent)
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "reward_") . camelTo2 '_'} ''Reward)
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "twitchsubscriptionresponse_") . camelTo2 '_'} ''TwitchSubscriptionResponse)
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length "twitchresponseobject_") . camelTo2 '_'} ''TwitchResponseObject)
-$(deriveJSON defaultOptions {constructorTagModifier = map toLower} ''EventStatus)
-$(deriveJSON defaultOptions {constructorTagModifier = map toLower} ''Status)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("verification_" :: String)) . camelTo2 '_'} ''Verification)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("channelredemptionnotification_" :: String)) . camelTo2 '_'} ''ChannelRedemptionNotification)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("clientcredentialresponse_" :: String)) . camelTo2 '_'} ''ClientCredentialResponse)
+$(deriveJSON defaultOptions {constructorTagModifier = camelTo2 '_'} ''Status)
