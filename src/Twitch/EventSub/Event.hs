@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Twitch.EventSub.Event
   ( Event (..),
     Reward (..),
@@ -7,6 +9,7 @@ where
 
 import Data.Aeson
 import Data.Aeson.TH
+import Data.List (isPrefixOf)
 import Data.Text (Text)
 import Twitch.EventSub.BitsVoting
 import Twitch.EventSub.ChannelPointsVoting
@@ -140,7 +143,7 @@ data Event
         eventToBroadcasterUserId :: !Text,
         eventToBroadcasterUserLogin :: !Text,
         eventToBroadcasterUserName :: !Text,
-        viewer :: !Int
+        eventViewer :: !Int
       }
   | ChannelModeratorAdd
       { eventBroadcasterUserId :: !Text,
@@ -475,5 +478,13 @@ $(deriveJSON defaultOptions {constructorTagModifier = camelTo2 '_'} ''EventStatu
 $(deriveJSON defaultOptions {constructorTagModifier = camelTo2 '_'} ''GoalsType)
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("rreward_" :: String)) . camelTo2 '_'} ''Reward)
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("amount_" :: String)) . camelTo2 '_'} ''Amount)
--- TODO: "event_" prefix is missing something.
-$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("event_" :: String)) . camelTo2 '_'} ''Event)
+$( deriveJSON
+     defaultOptions
+       { fieldLabelModifier =
+           \case
+             s | isPrefixOf "eventgift" s -> drop (length ("eventgift_" :: String)) . camelTo2 '_' $ s
+             s | isPrefixOf "eventstream" s -> drop (length ("eventstream_" :: String)) . camelTo2 '_' $ s
+             s -> drop (length ("event_" :: String)) . camelTo2 '_' $ s
+       }
+     ''Event
+ )
