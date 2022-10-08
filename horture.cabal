@@ -41,12 +41,30 @@ library horture-lib
                                 , Horture.Effect
                                 , Horture.Gif
                                 , Twitch
+                                , Twitch.EventSub
                                 , Run
 
     -- Modules included in this library but not exported.
     other-modules:              Twitch.Server
-                                , Twitch.Types
                                 , Twitch.Rest
+                                , Twitch.Types
+                                , Twitch.EventSub.Condition
+                                , Twitch.EventSub.Event
+                                , Twitch.EventSub.Request
+                                , Twitch.EventSub.Response
+                                , Twitch.EventSub.Transport
+                                , Twitch.EventSub.BitsVoting
+                                , Twitch.EventSub.ChannelPointsVoting
+                                , Twitch.EventSub.Choices
+                                , Twitch.EventSub.EntitlementObject
+                                , Twitch.EventSub.GlobalCooldown
+                                , Twitch.EventSub.Image
+                                , Twitch.EventSub.Contribution
+                                , Twitch.EventSub.Message
+                                , Twitch.EventSub.Outcomes
+                                , Twitch.EventSub.Poll
+                                , Twitch.EventSub.Product
+                                , Twitch.EventSub.Reward
 
     -- LANGUAGE extensions used by modules in this package. other-extensions:
     build-depends:              base ^>=4.14.3.0
@@ -87,9 +105,12 @@ library horture-lib
                                 , wai-websockets
                                 , websockets
                                 , http-types
+                                , http-api-data
     ghc-options:
                                 -Wall
                                 -fno-warn-name-shadowing
+                                -fno-warn-unticked-promoted-constructors
+                                -fno-warn-orphans
     hs-source-dirs:             src
     default-language:           Haskell2010
 
