@@ -28,4 +28,5 @@ instance FromJSON WebhookRequest where
       v
 
 instance ToJSON WebhookRequest where
-  toJSON (WebhookRequest v c t) = object ["type" .= conditionTag c, "version" .= v, "condition" .= c, "transport" .= t]
+  toJSON (WebhookRequest v c t) = object [
+    "type" .= conditionTag c, "version" .= v, "condition" .= c, "transport" .= t]

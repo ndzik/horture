@@ -1,6 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
-
 module Twitch.EventSub.Transport (Transport(..)) where
 
 import Data.Aeson

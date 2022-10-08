@@ -1,5 +1,7 @@
 module Twitch.EventSub.Product (Product (..)) where
 
+import Data.Aeson
+import Data.Aeson.TH
 import Data.Text (Text)
 
 data Product = Product
@@ -9,3 +11,5 @@ data Product = Product
   , productInDevelopment :: !Bool
   }
   deriving (Show)
+
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("product_" :: String)) . camelTo2 '_'} ''Product)

@@ -1,6 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
-
 module Twitch.EventSub.Response
   ( SubscriptionResponse (..),
     ResponseObject (..),

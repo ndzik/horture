@@ -1,14 +1,16 @@
 module Twitch.EventSub.Outcomes (Outcome (..), TopPredictor (..)) where
 
+import Data.Aeson
+import Data.Aeson.TH
 import Data.Text (Text)
 
 data Outcome = Outcome
-  { outcomesId :: !Text,
-    outcomesTitle :: !Text,
-    outcomesColor :: !Text,
-    outcomesUsers :: !Int,
-    outcomesChannelPoints :: !Int,
-    outcomesTopPredictors :: ![TopPredictor]
+  { outcomeId :: !Text,
+    outcomeTitle :: !Text,
+    outcomeColor :: !Text,
+    outcomeUsers :: !Int,
+    outcomeChannelPoints :: !Int,
+    outcomeTopPredictors :: ![TopPredictor]
   }
   deriving (Show)
 
@@ -20,3 +22,6 @@ data TopPredictor = TopPredictor
     toppredictorChannelPointsUsed :: !Int
   }
   deriving (Show)
+
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("outcome_" :: String)) . camelTo2 '_'} ''Outcome)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("toppredictor_" :: String)) . camelTo2 '_'} ''TopPredictor)

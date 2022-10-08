@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module Twitch.EventSub.Event
   ( Event (..),
     Reward (..),
@@ -9,15 +7,14 @@ where
 
 import Data.Aeson
 import Data.Aeson.TH
-import Data.Char (toLower)
 import Data.Text (Text)
 import Twitch.EventSub.BitsVoting
 import Twitch.EventSub.ChannelPointsVoting
 import Twitch.EventSub.Choices
+import Twitch.EventSub.Contribution
 import Twitch.EventSub.EntitlementObject
 import Twitch.EventSub.GlobalCooldown
 import Twitch.EventSub.Image
-import Twitch.EventSub.Contribution
 import Twitch.EventSub.Message
 import Twitch.EventSub.Outcomes
 import Twitch.EventSub.Poll
@@ -473,5 +470,10 @@ data Reward = Reward
   }
   deriving (Show)
 
-$(deriveJSON defaultOptions {constructorTagModifier = map toLower} ''EventStatus)
+$(deriveJSON defaultOptions {constructorTagModifier = camelTo2 '_'} ''StreamType)
+$(deriveJSON defaultOptions {constructorTagModifier = camelTo2 '_'} ''EventStatus)
+$(deriveJSON defaultOptions {constructorTagModifier = camelTo2 '_'} ''GoalsType)
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("rreward_" :: String)) . camelTo2 '_'} ''Reward)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("amount_" :: String)) . camelTo2 '_'} ''Amount)
+-- TODO: "event_" prefix is missing something.
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("event_" :: String)) . camelTo2 '_'} ''Event)

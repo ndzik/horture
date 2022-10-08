@@ -1,5 +1,7 @@
-module Twitch.EventSub.Message (Message (..), Emote(..)) where
+module Twitch.EventSub.Message (Message (..), Emote (..)) where
 
+import Data.Aeson
+import Data.Aeson.TH
 import Data.Text (Text)
 
 data Message = Message
@@ -14,3 +16,6 @@ data Emote = Emote
     emoteId :: !Text
   }
   deriving (Show)
+
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("message_" :: String)) . camelTo2 '_'} ''Message)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("emote_" :: String)) . camelTo2 '_'} ''Emote)

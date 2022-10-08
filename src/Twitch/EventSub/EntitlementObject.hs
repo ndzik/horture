@@ -1,5 +1,7 @@
 module Twitch.EventSub.EntitlementObject (EntitlementObject (..)) where
 
+import Data.Aeson
+import Data.Aeson.TH
 import Data.Text (Text)
 
 data EntitlementObject = EntitlementObject
@@ -15,3 +17,5 @@ data EntitlementObject = EntitlementObject
     entitlementCreatedAt :: !Text
   }
   deriving (Show)
+
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("entitlement_" :: String)) . camelTo2 '_'} ''EntitlementObject)

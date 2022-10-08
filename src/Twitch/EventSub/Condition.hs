@@ -1,12 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
 
 -- | Condition types according to the twitch specification:
 --
 -- https://dev.twitch.tv/docs/eventsub/eventsub-reference#conditions
-module Twitch.EventSub.Condition (Condition (..), conditionTag) where
+module Twitch.EventSub.Condition
+  ( Condition (..),
+    conditionTag,
+  )
+where
 
 import Data.Aeson
 import Data.Aeson.TH
