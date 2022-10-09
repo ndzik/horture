@@ -50,7 +50,7 @@ library horture-lib
                             , Run
 
     -- Modules included in this library but not exported.
-    other-modules:          Twitch.Server
+    other-modules:            Horture.Server.Server
                             , Twitch.Rest.Authentication
                             , Twitch.Rest.Authorization
                             , Twitch.Rest.Token
