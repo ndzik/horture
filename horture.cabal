@@ -51,6 +51,7 @@ library horture-lib
 
     -- Modules included in this library but not exported.
     other-modules:            Horture.Server.Server
+                            , Horture.Server.Config
                             , Horture.Server.Message
                             , Twitch.Rest.Authentication
                             , Twitch.Rest.Authorization
