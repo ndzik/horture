@@ -16,119 +16,119 @@ import Data.Text (Text)
 import Prelude hiding (unwords)
 
 data Condition
-  = ChannelPointsCustomRewardAdd
+  = ChannelPointsCustomRewardAddCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelPointsCustomRewardUpdate
+  | ChannelPointsCustomRewardUpdateCondition
       { broadcasterUserId :: !Text,
         rewardId :: !(Maybe Text)
       }
-  | ChannelPointsCustomRewardRemove
+  | ChannelPointsCustomRewardRemoveCondition
       { broadcasterUserId :: !Text,
         rewardId :: !(Maybe Text)
       }
-  | ChannelPointsCustomRewardRedemptionAdd
+  | ChannelPointsCustomRewardRedemptionAddCondition
       { broadcasterUserId :: !Text,
         rewardId :: !(Maybe Text)
       }
-  | ChannelPointsCustomRewardRedemptionUpdate
+  | ChannelPointsCustomRewardRedemptionUpdateCondition
       { broadcasterUserId :: !Text,
         rewardId :: !(Maybe Text)
       }
-  | ChannelPollBegin
+  | ChannelPollBeginCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelPollProgress
+  | ChannelPollProgressCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelPollEnd
+  | ChannelPollEndCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelPredictionBegin
+  | ChannelPredictionBeginCondition
       { userId :: !Text
       }
-  | ChannelPredictionProgress
+  | ChannelPredictionProgressCondition
       { userId :: !Text
       }
-  | ChannelPredictionLock
+  | ChannelPredictionLockCondition
       { userId :: !Text
       }
-  | ChannelPredictionEnd
+  | ChannelPredictionEndCondition
       { userId :: !Text
       }
-  | ChannelRaid
+  | ChannelRaidCondition
       { fromBroadcasterUserId :: !(Maybe Text),
         toBroadcasterUserId :: !(Maybe Text)
       }
-  | DropEntitlementGrant
+  | DropEntitlementGrantCondition
       { organizationId :: !Text,
         categoryId :: !(Maybe Text),
         campaignId :: !(Maybe Text)
       }
-  | ChannelFollow
+  | ChannelFollowCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelUpdate
+  | ChannelUpdateCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelCheer
+  | ChannelCheerCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelSubscribe
+  | ChannelSubscribeCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelSubscriptionEnd
+  | ChannelSubscriptionEndCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelSubscriptionGift
+  | ChannelSubscriptionGiftCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelBan
+  | ChannelBanCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelUnban
+  | ChannelUnbanCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelModeratorAdd
+  | ChannelModeratorAddCondition
       { broadcasterUserId :: !Text
       }
-  | ChannelModeratorRemove
+  | ChannelModeratorRemoveCondition
       { broadcasterUserId :: !Text
       }
-  | GoalBegin
+  | GoalBeginCondition
       { broadcasterUserId :: !Text
       }
-  | GoalProgress
+  | GoalProgressCondition
       { broadcasterUserId :: !Text
       }
-  | GoalEnd
+  | GoalEndCondition
       { broadcasterUserId :: !Text
       }
-  | HypeTrainBegin
+  | HypeTrainBeginCondition
       { broadcasterUserId :: !Text
       }
-  | HypeTrainProgress
+  | HypeTrainProgressCondition
       { broadcasterUserId :: !Text
       }
-  | HypeTrainEnd
+  | HypeTrainEndCondition
       { broadcasterUserId :: !Text
       }
-  | StreamOnline
+  | StreamOnlineCondition
       { broadcasterUserId :: !Text
       }
-  | StreamOffline
+  | StreamOfflineCondition
       { broadcasterUserId :: !Text
       }
-  | AuthorizationGrant
+  | AuthorizationGrantCondition
       { clientId :: !Text
       }
-  | AuthorizationRevoke
+  | AuthorizationRevokeCondition
       { clientId :: !Text
       }
-  | UserUpdate
+  | UserUpdateCondition
       { userId :: !Text
       }
-  | ExtensionBitsTransactionCreate
+  | ExtensionBitsTransactionCreateCondition
       { clientId :: !Text
       }
   deriving (Show)
@@ -138,150 +138,150 @@ instance FromJSON Condition where
     (.:) @Text o "type" >>= \case
       "channel.update" -> do
         condition <- o .: "condition"
-        ChannelUpdate <$> condition .: "broadcaster_user_id"
+        ChannelUpdateCondition <$> condition .: "broadcaster_user_id"
       "channel.follow" -> do
         condition <- o .: "condition"
-        ChannelFollow <$> condition .: "broadcaster_user_id"
+        ChannelFollowCondition <$> condition .: "broadcaster_user_id"
       "channel.subscribe" -> do
         condition <- o .: "condition"
-        ChannelSubscribe <$> condition .: "broadcaster_user_id"
+        ChannelSubscribeCondition <$> condition .: "broadcaster_user_id"
       "channel.subscription.end" -> do
         condition <- o .: "condition"
-        ChannelSubscriptionEnd <$> condition .: "broadcaster_user_id"
+        ChannelSubscriptionEndCondition <$> condition .: "broadcaster_user_id"
       "Channel.subscription.gift" -> do
         condition <- o .: "condition"
-        ChannelSubscriptionGift <$> condition .: "broadcaster_user_id"
+        ChannelSubscriptionGiftCondition <$> condition .: "broadcaster_user_id"
       "channel.cheer" -> do
         condition <- o .: "condition"
-        ChannelCheer <$> condition .: "broadcaster_user_id"
+        ChannelCheerCondition <$> condition .: "broadcaster_user_id"
       "channel.raid" -> do
         condition <- o .: "condition"
-        ChannelRaid <$> condition .:? "from_broadcaster_user_id" <*> condition .:? "to_broadcaster_user_id"
+        ChannelRaidCondition <$> condition .:? "from_broadcaster_user_id" <*> condition .:? "to_broadcaster_user_id"
       "channel.ban" -> do
         condition <- o .: "condition"
-        ChannelBan <$> condition .: "broadcaster_user_id"
+        ChannelBanCondition <$> condition .: "broadcaster_user_id"
       "channel.unban" -> do
         condition <- o .: "condition"
-        ChannelUnban <$> condition .: "broadcaster_user_id"
+        ChannelUnbanCondition <$> condition .: "broadcaster_user_id"
       "channel.moderator.add" -> do
         condition <- o .: "condition"
-        ChannelModeratorAdd <$> condition .: "broadcaster_user_id"
+        ChannelModeratorAddCondition <$> condition .: "broadcaster_user_id"
       "channel.moderator.remove" -> do
         condition <- o .: "condition"
-        ChannelModeratorRemove <$> condition .: "broadcaster_user_id"
+        ChannelModeratorRemoveCondition <$> condition .: "broadcaster_user_id"
       "channel.channel_points_custom_reward.add" -> do
         condition <- o .: "condition"
-        ChannelPointsCustomRewardAdd <$> condition .: "broadcaster_user_id"
+        ChannelPointsCustomRewardAddCondition <$> condition .: "broadcaster_user_id"
       "channel.channel_points_custom_reward.update" -> do
         condition <- o .: "condition"
-        ChannelPointsCustomRewardUpdate <$> condition .: "broadcaster_user_id" <*> condition .:? "reward_id"
+        ChannelPointsCustomRewardUpdateCondition <$> condition .: "broadcaster_user_id" <*> condition .:? "reward_id"
       "channel.channel_points_custom_reward.remove" -> do
         condition <- o .: "condition"
-        ChannelPointsCustomRewardRemove <$> condition .: "broadcaster_user_id" <*> condition .:? "reward_id"
+        ChannelPointsCustomRewardRemoveCondition <$> condition .: "broadcaster_user_id" <*> condition .:? "reward_id"
       "channel.channel_points_custom_reward_redemption.add" -> do
         condition <- o .: "condition"
-        ChannelPointsCustomRewardRedemptionAdd <$> condition .: "broadcaster_user_id" <*> condition .:? "reward_id"
+        ChannelPointsCustomRewardRedemptionAddCondition <$> condition .: "broadcaster_user_id" <*> condition .:? "reward_id"
       "channel.channel_points_custom_reward_redemption.update" -> do
         condition <- o .: "condition"
-        ChannelPointsCustomRewardRedemptionUpdate <$> condition .: "broadcaster_user_id" <*> condition .:? "reward_id"
+        ChannelPointsCustomRewardRedemptionUpdateCondition <$> condition .: "broadcaster_user_id" <*> condition .:? "reward_id"
       "channel.poll.begin" -> do
         condition <- o .: "condition"
-        ChannelPollBegin <$> condition .: "broadcaster_user_id"
+        ChannelPollBeginCondition <$> condition .: "broadcaster_user_id"
       "channel.poll.progress" -> do
         condition <- o .: "condition"
-        ChannelPollProgress <$> condition .: "broadcaster_user_id"
+        ChannelPollProgressCondition <$> condition .: "broadcaster_user_id"
       "channel.poll.end" -> do
         condition <- o .: "condition"
-        ChannelPollEnd <$> condition .: "broadcaster_user_id"
+        ChannelPollEndCondition <$> condition .: "broadcaster_user_id"
       "channel.prediction.begin" -> do
         condition <- o .: "condition"
-        ChannelPredictionBegin <$> condition .: "user_id"
+        ChannelPredictionBeginCondition <$> condition .: "user_id"
       "channel.prediction.progress" -> do
         condition <- o .: "condition"
-        ChannelPredictionProgress <$> condition .: "user_id"
+        ChannelPredictionProgressCondition <$> condition .: "user_id"
       "channel.prediction.lock" -> do
         condition <- o .: "condition"
-        ChannelPredictionLock <$> condition .: "user_id"
+        ChannelPredictionLockCondition <$> condition .: "user_id"
       "channel.prediction.end" -> do
         condition <- o .: "condition"
-        ChannelPredictionEnd <$> condition .: "user_id"
+        ChannelPredictionEndCondition <$> condition .: "user_id"
       "drop.entitlement.grant" -> do
         condition <- o .: "condition"
-        DropEntitlementGrant <$> condition .: "organization_id" <*> condition .:? "category_id" <*> condition .:? "campaign_id"
+        DropEntitlementGrantCondition <$> condition .: "organization_id" <*> condition .:? "category_id" <*> condition .:? "campaign_id"
       "extension.bits_transaction.create" -> do
         condition <- o .: "condition"
-        ExtensionBitsTransactionCreate <$> condition .: "client_id"
+        ExtensionBitsTransactionCreateCondition <$> condition .: "client_id"
       "channel.goal.begin" -> do
         condition <- o .: "condition"
-        GoalBegin <$> condition .: "broadcaster_user_id"
+        GoalBeginCondition <$> condition .: "broadcaster_user_id"
       "channel.goal.progress" -> do
         condition <- o .: "condition"
-        GoalProgress <$> condition .: "broadcaster_user_id"
+        GoalProgressCondition <$> condition .: "broadcaster_user_id"
       "channel.goal.end" -> do
         condition <- o .: "condition"
-        GoalEnd <$> condition .: "broadcaster_user_id"
+        GoalEndCondition <$> condition .: "broadcaster_user_id"
       "channel.hype_train.begin" -> do
         condition <- o .: "condition"
-        HypeTrainBegin <$> condition .: "broadcaster_user_id"
+        HypeTrainBeginCondition <$> condition .: "broadcaster_user_id"
       "channel.hype_train.progress" -> do
         condition <- o .: "condition"
-        HypeTrainProgress <$> condition .: "broadcaster_user_id"
+        HypeTrainProgressCondition <$> condition .: "broadcaster_user_id"
       "channel.hype_train.end" -> do
         condition <- o .: "condition"
-        HypeTrainEnd <$> condition .: "broadcaster_user_id"
+        HypeTrainEndCondition <$> condition .: "broadcaster_user_id"
       "stream.online" -> do
         condition <- o .: "condition"
-        StreamOnline <$> condition .: "broadcaster_user_id"
+        StreamOnlineCondition <$> condition .: "broadcaster_user_id"
       "stream.offline" -> do
         condition <- o .: "condition"
-        StreamOffline <$> condition .: "broadcaster_user_id"
+        StreamOfflineCondition <$> condition .: "broadcaster_user_id"
       "user.authorization.grant" -> do
         condition <- o .: "condition"
-        AuthorizationGrant <$> condition .: "client_id"
+        AuthorizationGrantCondition <$> condition .: "client_id"
       "user.authorization.revoke" -> do
         condition <- o .: "condition"
-        AuthorizationRevoke <$> condition .: "client_id"
+        AuthorizationRevokeCondition <$> condition .: "client_id"
       "user.update" -> do
         condition <- o .: "condition"
-        UserUpdate <$> condition .: "user_id"
+        UserUpdateCondition <$> condition .: "user_id"
       _otherwise -> parseFail "unhandled subscription type"
 
 conditionTag :: Condition -> Text
-conditionTag ChannelUpdate {} = "channel.update"
-conditionTag ChannelFollow {} = "channel.follow"
-conditionTag ChannelSubscribe {} = "channel.subscribe"
-conditionTag ChannelSubscriptionEnd {} = "channel.subscription.end"
-conditionTag ChannelSubscriptionGift {} = "Channel.subscription.gift"
-conditionTag ChannelCheer {} = "channel.cheer"
-conditionTag ChannelRaid {} = "channel.raid"
-conditionTag ChannelBan {} = "channel.ban"
-conditionTag ChannelUnban {} = "channel.unban"
-conditionTag ChannelModeratorAdd {} = "channel.moderator.add"
-conditionTag ChannelModeratorRemove {} = "channel.moderator.remove"
-conditionTag ChannelPointsCustomRewardAdd {} = "channel.channel_points_custom_reward.add"
-conditionTag ChannelPointsCustomRewardUpdate {} = "channel.channel_points_custom_reward.update"
-conditionTag ChannelPointsCustomRewardRemove {} = "channel.channel_points_custom_reward.remove"
-conditionTag ChannelPointsCustomRewardRedemptionAdd {} = "channel.channel_points_custom_reward_redemption.add"
-conditionTag ChannelPointsCustomRewardRedemptionUpdate {} = "channel.channel_points_custom_reward_redemption.update"
-conditionTag ChannelPollBegin {} = "channel.poll.begin"
-conditionTag ChannelPollProgress {} = "channel.poll.progress"
-conditionTag ChannelPollEnd {} = "channel.poll.end"
-conditionTag ChannelPredictionBegin {} = "channel.prediction.begin"
-conditionTag ChannelPredictionProgress {} = "channel.prediction.progress"
-conditionTag ChannelPredictionLock {} = "channel.prediction.lock"
-conditionTag ChannelPredictionEnd {} = "channel.prediction.end"
-conditionTag DropEntitlementGrant {} = "drop.entitlement.grant"
-conditionTag ExtensionBitsTransactionCreate {} = "extension.bits_transaction.create"
-conditionTag GoalBegin {} = "channel.goal.begin"
-conditionTag GoalProgress {} = "channel.goal.progress"
-conditionTag GoalEnd {} = "channel.goal.end"
-conditionTag HypeTrainBegin {} = "channel.hype_train.begin"
-conditionTag HypeTrainProgress {} = "channel.hype_train.progress"
-conditionTag HypeTrainEnd {} = "channel.hype_train.end"
-conditionTag StreamOnline {} = "stream.online"
-conditionTag StreamOffline {} = "stream.offline"
-conditionTag AuthorizationGrant {} = "user.authorization.grant"
-conditionTag AuthorizationRevoke {} = "user.authorization.revoke"
-conditionTag UserUpdate {} = "user.update"
+conditionTag ChannelUpdateCondition {} = "channel.update"
+conditionTag ChannelFollowCondition {} = "channel.follow"
+conditionTag ChannelSubscribeCondition {} = "channel.subscribe"
+conditionTag ChannelSubscriptionEndCondition {} = "channel.subscription.end"
+conditionTag ChannelSubscriptionGiftCondition {} = "Channel.subscription.gift"
+conditionTag ChannelCheerCondition {} = "channel.cheer"
+conditionTag ChannelRaidCondition {} = "channel.raid"
+conditionTag ChannelBanCondition {} = "channel.ban"
+conditionTag ChannelUnbanCondition {} = "channel.unban"
+conditionTag ChannelModeratorAddCondition {} = "channel.moderator.add"
+conditionTag ChannelModeratorRemoveCondition {} = "channel.moderator.remove"
+conditionTag ChannelPointsCustomRewardAddCondition {} = "channel.channel_points_custom_reward.add"
+conditionTag ChannelPointsCustomRewardUpdateCondition {} = "channel.channel_points_custom_reward.update"
+conditionTag ChannelPointsCustomRewardRemoveCondition {} = "channel.channel_points_custom_reward.remove"
+conditionTag ChannelPointsCustomRewardRedemptionAddCondition {} = "channel.channel_points_custom_reward_redemption.add"
+conditionTag ChannelPointsCustomRewardRedemptionUpdateCondition {} = "channel.channel_points_custom_reward_redemption.update"
+conditionTag ChannelPollBeginCondition {} = "channel.poll.begin"
+conditionTag ChannelPollProgressCondition {} = "channel.poll.progress"
+conditionTag ChannelPollEndCondition {} = "channel.poll.end"
+conditionTag ChannelPredictionBeginCondition {} = "channel.prediction.begin"
+conditionTag ChannelPredictionProgressCondition {} = "channel.prediction.progress"
+conditionTag ChannelPredictionLockCondition {} = "channel.prediction.lock"
+conditionTag ChannelPredictionEndCondition {} = "channel.prediction.end"
+conditionTag DropEntitlementGrantCondition {} = "drop.entitlement.grant"
+conditionTag ExtensionBitsTransactionCreateCondition {} = "extension.bits_transaction.create"
+conditionTag GoalBeginCondition {} = "channel.goal.begin"
+conditionTag GoalProgressCondition {} = "channel.goal.progress"
+conditionTag GoalEndCondition {} = "channel.goal.end"
+conditionTag HypeTrainBeginCondition {} = "channel.hype_train.begin"
+conditionTag HypeTrainProgressCondition {} = "channel.hype_train.progress"
+conditionTag HypeTrainEndCondition {} = "channel.hype_train.end"
+conditionTag StreamOnlineCondition {} = "stream.online"
+conditionTag StreamOfflineCondition {} = "stream.offline"
+conditionTag AuthorizationGrantCondition {} = "user.authorization.grant"
+conditionTag AuthorizationRevokeCondition {} = "user.authorization.revoke"
+conditionTag UserUpdateCondition {} = "user.update"
 
 $(deriveToJSON defaultOptions {fieldLabelModifier = camelTo2 '_', sumEncoding = UntaggedValue} ''Condition)

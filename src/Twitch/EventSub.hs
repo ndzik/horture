@@ -15,12 +15,9 @@ module Twitch.EventSub
     module Response,
     module Reward,
     module Transport,
+    module Event,
   )
 where
-
-
--- How to handle conflicting exports for record fields here?
--- import Twitch.EventSub.Event as Event
 
 import Twitch.EventSub.BitsVoting as BitsVoting
 import Twitch.EventSub.ChannelPointsVoting as ChannelPointsVoting
@@ -28,6 +25,7 @@ import Twitch.EventSub.Choices as Choices
 import Twitch.EventSub.Condition as Condition
 import Twitch.EventSub.Contribution as Contribution
 import Twitch.EventSub.EntitlementObject as EntitlementObject
+import Twitch.EventSub.Event as Event
 import Twitch.EventSub.GlobalCooldown as GlobalCooldown
 import Twitch.EventSub.Image as Image
 import Twitch.EventSub.Message as Message

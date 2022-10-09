@@ -25,10 +25,10 @@ instance FromHttpApiData AccessTokenCodeType where
   parseUrlPiece = Right . AccessTokenCodeType . words . decodeUtf8 . urlDecode True . encodeUtf8
 
 data AuthorizationCodeRequest = AuthorizationCodeRequest
-  { clientId :: !Text,
-    clientSecret :: !Text,
-    code :: !Text,
-    redirectUri :: !Text
+  { authorizationcoderequesetClientId :: !Text,
+    authorizationcoderequesetClientSecret :: !Text,
+    authorizationcoderequesetCode :: !Text,
+    authorizationcoderequesetRedirectUri :: !Text
   }
   deriving (Show)
 
