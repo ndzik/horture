@@ -1,9 +1,5 @@
-module Twitch (
-  module Twitch.Server
-, module Twitch.Types
-              , module Twitch.Rest
-  ) where
+{-# LANGUAGE DuplicateRecordFields #-}
 
-import Twitch.Server
-import Twitch.Types
-import Twitch.Rest
+module Twitch () where
+
+-- TODO: Convenience-Exports which do not conflict.

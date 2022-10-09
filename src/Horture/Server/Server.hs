@@ -1,6 +1,7 @@
-module Horture.Server.Server (runHortureServer) where
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
+
+module Horture.Server.Server (runHortureServer) where
 
 import Control.Monad (guard)
 import Crypto.Hash.Algorithms (SHA256)
@@ -124,8 +125,8 @@ notFound = responseBuilder status404 [("Content-Type", "text/plain")] mempty
 badRequest :: Response
 badRequest = responseBuilder status400 [("Content-Type", "text/plain")] mempty
 
-badRequestBody :: Response
-badRequestBody = responseBuilder status422 [("Content-Type", "text/plain")] mempty
+-- badRequestBody :: Response
+-- badRequestBody = responseBuilder status422 [("Content-Type", "text/plain")] mempty
 
 methodNotAllowed :: Response
 methodNotAllowed = responseBuilder status405 [("Content-Type", "text/plain")] mempty
