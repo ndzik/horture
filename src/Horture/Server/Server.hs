@@ -1,6 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
-
 module Horture.Server.Server (runHortureServer) where
 
 import Control.Monad (guard)
@@ -9,12 +6,11 @@ import Crypto.MAC.HMAC
 import Data.ByteArray.Encoding
 import Data.ByteString (ByteString, concat)
 import Data.Maybe
-import Data.Text (Text)
+import Horture.Server.Config
+import Horture.Server.Websocket
 import Network.HTTP.Types
 import Network.Wai
 import Network.Wai.Handler.Warp
-import Network.Wai.Handler.WebSockets
-import Network.WebSockets hiding (Request, Response, requestHeaders)
 import System.Random.Stateful
 import Prelude hiding (concat)
 
@@ -22,33 +18,17 @@ import Prelude hiding (concat)
 -- <your-domain>/eventsub endpoint. This can only be used with the production
 -- twitch api if served in conjunction with a SSL termination proxy from port
 -- 443 to your local port.
-runHortureServer :: Port -> IO ()
-runHortureServer port = server (run port)
-
-server :: (Application -> IO ()) -> IO ()
-server runApp = do
+runHortureServer :: HortureServerConfig -> IO ()
+runHortureServer conf = do
   secret <- uniformByteStringM 64 globalStdGen
-  runApp . hortureApp $ secret
+  run (_port conf) . hortureApp conf $ secret
 
-hortureApp :: ByteString -> Application
-hortureApp secret req respondWith = do
+hortureApp :: HortureServerConfig -> ByteString -> Application
+hortureApp _conf secret req respondWith = do
   case pathInfo req of
     ["eventsub"] -> handleTwitchNotification secret req respondWith
     ["ws"] -> handleWebsocketConn req respondWith
     _otherwise -> respondWith notFound
-
-handleWebsocketConn :: Application
-handleWebsocketConn = websocketsOr defaultConnectionOptions hortureWS invalidWSApplication
-  where
-    invalidWSApplication :: Application
-    invalidWSApplication _ respond = respond $ responseLBS status400 [] "Not a WebSocket request"
-
--- | hortureWSApp will forward and multiplex received webhook messages to a
--- connected client.
-hortureWS :: ServerApp
-hortureWS pendingConn = do
-  conn <- acceptRequest pendingConn
-  sendTextData @Text conn "Hello, client!"
 
 handleTwitchNotification :: ByteString -> Application
 handleTwitchNotification secret req respondWith =

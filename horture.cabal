@@ -53,6 +53,7 @@ library horture-lib
     other-modules:            Horture.Server.Server
                             , Horture.Server.Config
                             , Horture.Server.Message
+                            , Horture.Server.Websocket
                             , Twitch.Rest.Authentication
                             , Twitch.Rest.Authorization
                             , Twitch.Rest.Token
