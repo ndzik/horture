@@ -133,8 +133,8 @@ test-suite horture-test
                             , tasty-hunit
   default-language:         Haskell2010
 
-executable horture-exe
-    hs-source-dirs:         app/Exe
+executable horture-client
+    hs-source-dirs:         app/Client
     main-is:                Main.hs
     ghc-options:
                             -fno-warn-name-shadowing
@@ -142,6 +142,7 @@ executable horture-exe
                             -O2
     build-depends:          base ^>=4.14.3.0
                             , horture-lib
+                            , optparse-applicative
     default-language:       Haskell2010
 
 executable horture-server
