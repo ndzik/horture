@@ -101,5 +101,8 @@ grabFragmentPortionHTML =
         }
     );
   </script>
+  <h1>
+    Forwarded authorization token to client, check your CLI for more information.
+  </h1>
 </html>
   |]
