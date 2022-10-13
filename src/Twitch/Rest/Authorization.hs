@@ -4,25 +4,26 @@ module Twitch.Rest.Authorization
   ( AuthorizationCodeRequest (..),
     AuthorizationResponseType (..),
     AuthorizationRequest (..),
-    AccessTokenCodeType (..),
+    AuthorizationResponse (..),
+    AccessTokenScopes (..),
   )
 where
 
 import Data.Text (Text, unwords, words)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import GHC.Exts
+import Network.HTTP.Types (urlDecode)
 import Web.FormUrlEncoded hiding (fieldLabelModifier)
 import Web.HttpApiData
 import Prelude hiding (unwords, words)
-import Network.HTTP.Types (urlDecode)
 
-newtype AccessTokenCodeType = AccessTokenCodeType [Text] deriving (Show)
+newtype AccessTokenScopes = AccessTokenScopes [Text] deriving (Show)
 
-instance ToHttpApiData AccessTokenCodeType where
-  toQueryParam (AccessTokenCodeType ss) = toQueryParam . unwords $ ss
+instance ToHttpApiData AccessTokenScopes where
+  toQueryParam (AccessTokenScopes ss) = toQueryParam . unwords $ ss
 
-instance FromHttpApiData AccessTokenCodeType where
-  parseUrlPiece = Right . AccessTokenCodeType . words . decodeUtf8 . urlDecode True . encodeUtf8
+instance FromHttpApiData AccessTokenScopes where
+  parseUrlPiece = Right . AccessTokenScopes . words . decodeUtf8 . urlDecode True . encodeUtf8
 
 data AuthorizationCodeRequest = AuthorizationCodeRequest
   { authorizationcoderequesetClientId :: !Text,
@@ -61,31 +62,36 @@ instance FromHttpApiData AuthorizationResponseType where
   parseUrlPiece other = Left $ "unknown autorization code type encountered: " <> other
 
 data AuthorizationResponse = AuthorizationResponse
-  { authorizationresponseCode :: !Text,
-    authorizationresponseScope :: !AccessTokenCodeType,
-    authorizationresponseState :: !Text
+  { authorizationresponseAccessToken :: !Text,
+    authorizationresponseScope :: !AccessTokenScopes,
+    authorizationresponseState :: !(Maybe Text)
   }
   deriving (Show)
 
 instance FromForm AuthorizationResponse where
   fromForm f =
     AuthorizationResponse
-      <$> parseUnique "code" f
+      <$> parseUnique "access_token" f
       <*> parseUnique "scope" f
-      <*> parseUnique "state" f
+      <*> parseMaybe "state" f
 
 instance ToForm AuthorizationResponse where
   toForm acr =
-    [ ("code", toQueryParam . authorizationresponseCode $ acr),
-      ("scope", toQueryParam . authorizationresponseScope $ acr),
-      ("state", toQueryParam . authorizationresponseState $ acr)
-    ]
+    fromList
+      . prependIfJust "state" (authorizationresponseState acr)
+      $ [ ("access_token", toQueryParam . authorizationresponseAccessToken $ acr),
+          ("scope", toQueryParam . authorizationresponseScope $ acr)
+        ]
+    where
+      prependIfJust :: (ToHttpApiData a) => Text -> Maybe a -> [Item Form] -> [Item Form]
+      prependIfJust label (Just v) rs = (label, toQueryParam v) : rs
+      prependIfJust _ Nothing rs = rs
 
 data AuthorizationRequest = AuthorizationRequest
   { authorizationrequestClientId :: !Text,
     authorizationrequestForceVerify :: !(Maybe Bool),
     authorizationrequestRedirectUri :: !Text,
-    authorizationrequestScope :: !AccessTokenCodeType,
+    authorizationrequestScope :: !AccessTokenScopes,
     authorizationrequestResponseType :: !AuthorizationResponseType,
     authorizationrequestState :: !(Maybe Text)
   }
