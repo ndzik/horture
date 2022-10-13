@@ -27,6 +27,7 @@ library horture-lib
                             , TypeOperators
                             , OverloadedStrings
     exposed-modules:        Horture
+                            , Horture.Authorize
                             , Horture.CommandCenter.CommandCenter
                             , Horture.CommandCenter.Event
                             , Horture.CommandCenter.State
@@ -75,10 +76,11 @@ library horture-lib
                             , Twitch.EventSub.Product
                             , Twitch.EventSub.Reward
 
-    -- LANGUAGE extensions used by modules in this package. other-extensions:
+    -- LANGUAGE extensions used by modules in this package.
     build-depends:          base ^>=4.14.3.0
                             , X11
                             , text
+                            , raw-strings-qq
                             , aeson
                             , OpenGL
                             , mtl
@@ -152,6 +154,13 @@ executable horture-server
                             -fno-warn-name-shadowing
                             -threaded
                             -O2
+  other-modules:            Config
   build-depends:            base ^>=4.14.3.0
                             , horture-lib
+                            , optparse-applicative
+                            , aeson
+                            , text
+                            , servant-client
+                            , http-client
+                            , bytestring
   default-language:         Haskell2010
