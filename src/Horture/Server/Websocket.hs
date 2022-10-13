@@ -19,16 +19,16 @@ import Network.Wai.Handler.WebSockets
 import Network.WebSockets hiding (Request, Response, requestHeaders)
 import Prelude hiding (concat)
 
-handleWebsocketConn :: Application
-handleWebsocketConn = websocketsOr defaultConnectionOptions hortureWS invalidWSApplication
+handleWebsocketConn :: Text -> Application
+handleWebsocketConn aat = websocketsOr defaultConnectionOptions (hortureWS aat) invalidWSApplication
   where
     invalidWSApplication :: Application
     invalidWSApplication _ respond = respond $ responseLBS status400 [] "Not a WebSocket request"
 
 -- | hortureWSApp will forward and multiplex received webhook messages to a
 -- connected client.
-hortureWS :: ServerApp
-hortureWS pendingConn = do
+hortureWS :: Text -> ServerApp
+hortureWS aat pendingConn = do
   conn <- acceptRequest pendingConn
   chan <- newChan @HortureClientMessage
   -- TODO: What should I do with the ThreadID? Cache and terminate externally?
@@ -36,13 +36,15 @@ hortureWS pendingConn = do
   let conf =
         HortureClientConfig
           { _conn = conn,
-            _messageQueue = chan
+            _messageQueue = chan,
+            _appAccess = aat
           }
   evalRWST hortureClientConn conf def <&> fst
 
 data HortureClientConfig = HortureClientConfig
   { _conn :: !Connection,
-    _messageQueue :: !(Chan HortureClientMessage)
+    _messageQueue :: !(Chan HortureClientMessage),
+    _appAccess :: !Text
   }
 
 data HortureClientState = HortureClientState
@@ -75,12 +77,12 @@ hortureClientConn = do
 
 handleClientMessage :: HortureClientMessage -> HortureClient ()
 handleClientMessage HortureGarbage = return ()
-handleClientMessage (HortureAuthorization uat aat) = updateTokens (uat, aat)
-handleClientMessage (HortureUpdate uat aat) = updateTokens (uat, aat)
+handleClientMessage (HortureAuthorization uat) = updateToken uat
+handleClientMessage (HortureUpdate uat) = updateToken uat
 
 -- | Update tokens used by the external server to respond to EventSub
 -- notifications.
 --
 -- TODO: Set up the subscription when tokens are updated.
-updateTokens :: (Text, Text) -> HortureClient ()
-updateTokens (uat, aat) = modify (\hs -> hs {_hcsuserAccessToken = Just uat, _hcsappAccessToken = Just aat})
+updateToken :: Text -> HortureClient ()
+updateToken uat = modify (\hs -> hs {_hcsuserAccessToken = Just uat})

@@ -27,7 +27,7 @@ hortureApp :: HortureServerConfig -> ByteString -> Application
 hortureApp _conf secret req respondWith = do
   case pathInfo req of
     ["eventsub"] -> handleTwitchNotification secret req respondWith
-    ["ws"] -> handleWebsocketConn req respondWith
+    ["ws"] -> handleWebsocketConn (_appToken _conf) req respondWith
     _otherwise -> respondWith notFound
 
 handleTwitchNotification :: ByteString -> Application

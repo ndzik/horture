@@ -8,12 +8,10 @@ import Network.WebSockets
 
 data HortureClientMessage
   = HortureAuthorization
-      { _userAccessToken :: !Text,
-        _appAccessToken :: !Text
+      { _userAccessToken :: !Text
       }
   | HortureUpdate
-      { _userAccessToken :: !Text,
-        _appAccessToken :: !Text
+      { _userAccessToken :: !Text
       }
   | HortureGarbage
 
