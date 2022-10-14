@@ -46,7 +46,7 @@ main = execParser opts >>= main'
 
 main' :: ServerParams -> IO ()
 main' (ServerParams cf db) = do
-  Config {_clientId, _clientSecret} <-
+  Config {twitchClientId, twitchClientSecret} <-
     parseConfig cf >>= \case
       Nothing -> error "Config file ill-formatted or not available"
       Just cfg -> return cfg
@@ -54,7 +54,7 @@ main' (ServerParams cf db) = do
   let TwitchTokenClient {getAppAccessToken} = twitchTokenClient
       twitchUrl = BaseUrl Https "id.twitch.tv" 443 "oauth2"
       clientEnv = mkClientEnv mgr twitchUrl
-  res <- runClientM (getAppAccessToken (ClientCredentialRequest _clientId _clientSecret)) clientEnv
+  res <- runClientM (getAppAccessToken (ClientCredentialRequest twitchClientId twitchClientSecret)) clientEnv
   creds <- case res of
     Left err -> print err >> error "app access token retrieval denied"
     Right r -> return r

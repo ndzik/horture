@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Config
   ( Config (..),
@@ -10,12 +10,12 @@ where
 
 import Data.Aeson
 import Data.Aeson.TH
-import Data.Text (Text)
 import qualified Data.ByteString.Lazy as BSL
+import Data.Text (Text)
 
 data Config = Config
-  { _clientId :: !Text,
-    _clientSecret :: !Text
+  { twitchClientId :: !Text,
+    twitchClientSecret :: !Text
   }
   deriving (Show)
 
@@ -24,4 +24,4 @@ parseConfig fp = do
   bytes <- BSL.readFile fp
   return . decode @Config $ bytes
 
-$(deriveJSON defaultOptions {fieldLabelModifier = drop 1} ''Config)
+$(deriveJSON defaultOptions {fieldLabelModifier = camelTo2 '_'} ''Config)
