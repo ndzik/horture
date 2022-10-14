@@ -6,6 +6,7 @@ module Twitch.Rest.Authorization
     AuthorizationRequest (..),
     AuthorizationResponse (..),
     AccessTokenScopes (..),
+AuthorizationErrorResponse (..),
   )
 where
 
@@ -60,6 +61,32 @@ instance FromHttpApiData AuthorizationResponseType where
   parseUrlPiece "token" = Right Token
   parseUrlPiece "code" = Right Code
   parseUrlPiece other = Left $ "unknown autorization code type encountered: " <> other
+
+data AuthorizationErrorResponse = AuthorizationErrorResponse
+  { authorizationerrorError :: !Text,
+    authorizationerrorErrorDescription :: !Text,
+    authorizationerrorState :: !(Maybe Text)
+  }
+  deriving (Show)
+
+instance FromForm AuthorizationErrorResponse where
+  fromForm f =
+    AuthorizationErrorResponse
+      <$> parseUnique "error" f
+      <*> parseUnique "error_description" f
+      <*> parseMaybe "state" f
+
+instance ToForm AuthorizationErrorResponse where
+  toForm aerr =
+    fromList
+      . prependIfJust "state" (authorizationerrorState aerr)
+      $ [ ("error", toQueryParam . authorizationerrorError $ aerr),
+          ("error_description", toQueryParam . authorizationerrorErrorDescription $ aerr)
+        ]
+    where
+      prependIfJust :: (ToHttpApiData a) => Text -> Maybe a -> [Item Form] -> [Item Form]
+      prependIfJust label (Just v) rs = (label, toQueryParam v) : rs
+      prependIfJust _ Nothing rs = rs
 
 data AuthorizationResponse = AuthorizationResponse
   { authorizationresponseAccessToken :: !Text,
