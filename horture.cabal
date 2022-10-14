@@ -165,6 +165,7 @@ executable horture-server
                             , optparse-applicative
                             , aeson
                             , text
+                            , http-client-tls
                             , servant-client
                             , http-client
                             , bytestring

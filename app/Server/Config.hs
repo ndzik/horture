@@ -12,10 +12,12 @@ import Data.Aeson
 import Data.Aeson.TH
 import qualified Data.ByteString.Lazy as BSL
 import Data.Text (Text)
+import Servant.Client (BaseUrl)
 
 data Config = Config
   { twitchClientId :: !Text,
-    twitchClientSecret :: !Text
+    twitchClientSecret :: !Text,
+    twitchAuthorizationEndpoint :: !BaseUrl
   }
   deriving (Show)
 

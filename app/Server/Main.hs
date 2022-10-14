@@ -5,10 +5,13 @@ module Main (main) where
 
 import Config
 import Data.Aeson (decode)
+import Data.Functor ((<&>))
 import Data.IORef (IORef, atomicModifyIORef, newIORef)
 import Data.Semigroup ((<>))
 import Horture.CommandCenter.CommandCenter
+import Horture.Path
 import Network.HTTP.Client (defaultManagerSettings, newManager)
+import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Options.Applicative
 import Options.Applicative.Common (runParser)
 import Servant.Client
@@ -47,14 +50,16 @@ main = execParser opts >>= main'
 
 main' :: ServerParams -> IO ()
 main' (ServerParams cf db) = do
-  Config {twitchClientId, twitchClientSecret} <-
-    parseConfig cf >>= \case
+  Config {twitchClientId, twitchClientSecret, twitchAuthorizationEndpoint} <-
+    resolvePath cf >>= parseConfig >>= \case
       Nothing -> print "Config file ill-formatted or not available" >> exitFailure
       Just cfg -> return cfg
-  mgr <- newManager defaultManagerSettings
+  mgr <-
+    newManager =<< case baseUrlScheme twitchAuthorizationEndpoint of
+      Https -> return tlsManagerSettings
+      Http -> return defaultManagerSettings
   let TwitchTokenClient {getAppAccessToken} = twitchTokenClient
-      twitchUrl = BaseUrl Https "id.twitch.tv" 443 "oauth2"
-      clientEnv = mkClientEnv mgr twitchUrl
+      clientEnv = mkClientEnv mgr twitchAuthorizationEndpoint
   res <- runClientM (getAppAccessToken (ClientCredentialRequest twitchClientId twitchClientSecret)) clientEnv
   creds <- case res of
     Left err -> print err >> exitFailure
