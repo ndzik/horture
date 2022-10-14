@@ -41,6 +41,7 @@ library horture-lib
                             , Horture.Event
                             , Horture.State
                             , Horture.Render
+                            , Horture.Config
                             , Horture.Object
                             , Horture.Loader
                             , Horture.Effect

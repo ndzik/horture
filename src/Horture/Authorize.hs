@@ -1,20 +1,25 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QuasiQuotes #-}
 
 -- | Follows the credential flows given at:
 -- https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#client-credentials-grant-flow
-module Horture.Authorize (authorize, retrieveUserAccessToken) where
+module Horture.Authorize (authorize) where
 
 import Control.Concurrent (MVar, newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.Async (race)
 import Data.ByteString.Builder (Builder, byteString, toLazyByteString)
 import Data.ByteString.Char8 (drop)
+import Data.ByteString.Lazy.Char8 (unpack)
 import Data.Functor ((<&>))
 import Data.Text (Text, pack)
 import Data.Word (Word8)
+import Horture.Config
 import Network.HTTP.Types (status200, status400)
 import Network.Wai
 import Network.Wai.Handler.Warp
+import Servant.Client (BaseUrl (..), showBaseUrl)
+import System.Exit (exitFailure)
 import System.Random.Stateful (globalStdGen, uniformListM)
 import Text.RawString.QQ
 import Twitch.Rest.Authorization
@@ -28,49 +33,43 @@ import Web.FormUrlEncoded (urlDecodeAsForm, urlEncodeAsForm)
 import Prelude hiding (drop)
 
 authorize :: FilePath -> IO ()
-authorize _pathToConfig = return ()
-
--- | retrieveAppAccessToken follows the client-credentials-grant-flow, where a
--- client is able to authorize this application by granting certain scope
--- accesses.
---
--- `https://id.twitch.tv/oauth2/token` POST request with URL encoded body:
--- client_id=<app-client-id>
--- &client_secret=<app-client-secret>
--- &grant_type=client_credentials
---
--- Upon success, returns an `app-access-token`:
--- {
---   "access_token": "jostpf5q0uzmxmkba9iyug38kjtgh",
---   "expires_in": 5011271,
---   "token_type": "bearer"
--- }
--- retrieveAppAccessToken :: IO ()
--- retrieveAppAccessToken = return ()
+authorize pathToConfig = do
+  cfg <-
+    parseHortureClientConfig pathToConfig >>= \case
+      Nothing -> print @String "invalid horture client config" >> exitFailure
+      Just cfg -> return cfg
+  res <-
+    retrieveUserAccessToken
+      ""
+      (twitchAuthorizationEndpoint cfg)
+      (AccessTokenScopes ["channel:redemptions:manage"])
+  case res of
+    Nothing -> print @String "Unable to authorize user"
+    Just _ -> print @String "Success authorizing user, have fun horturing"
 
 -- | retrieveUserAccessToken follows the implicit client-credentials flow,
 -- where the user is directed to `https://id.twitch.tv/oauth2/authorize` and
 -- redirected to `http://localhost:3000`. The fragment part of the redirection
 -- (everything after `#`) contains the authorization response.
-retrieveUserAccessToken :: AccessTokenScopes -> IO (Maybe Text)
-retrieveUserAccessToken (AccessTokenScopes []) = do
+retrieveUserAccessToken :: Text -> BaseUrl -> AccessTokenScopes -> IO (Maybe Text)
+retrieveUserAccessToken _ _ (AccessTokenScopes []) = do
   print @String "No scopes given to request from user, aborting..."
   return Nothing
-retrieveUserAccessToken scopes = do
+retrieveUserAccessToken clientId twitchEndpoint scopes = do
   print @String
     "Please open the following authorization link in your browser to give horture access to interact with your account"
   xsrfState <- uniformListM 32 globalStdGen <&> pack . concatMap (show @Word8)
   accessTokenMVar <- newEmptyMVar
   let ar =
         AuthorizationRequest
-          { authorizationrequestClientId = "skkzs4x5fdhpjgfq2w8vfbgf691y8j",
+          { authorizationrequestClientId = clientId,
             authorizationrequestForceVerify = Nothing,
             authorizationrequestRedirectUri = "http://localhost:3000",
-            authorizationrequestScope = scopes, -- AccessTokenScopes ["channel:manage:redemptions"],
+            authorizationrequestScope = scopes,
             authorizationrequestResponseType = Token,
             authorizationrequestState = Just xsrfState
           }
-  print $ "https://id.twitch.tv/oauth2/authorize?" <> urlEncodeAsForm ar
+  print $ showBaseUrl twitchEndpoint <> "?" <> unpack (urlEncodeAsForm ar)
   -- Wait for accessToken to be retrieved, if this never happens the user
   -- aborted the process and the thread will be cleaned up anyway.
   res <-
