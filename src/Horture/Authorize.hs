@@ -6,6 +6,7 @@
 module Horture.Authorize (authorize, retrieveUserAccessToken) where
 
 import Data.ByteString.Builder (Builder, byteString, toLazyByteString)
+import Data.ByteString.Char8 (drop)
 import Data.Functor (void, (<&>))
 import Data.Text (Text, pack)
 import Data.Word (Word8)
@@ -16,11 +17,13 @@ import System.Random.Stateful (globalStdGen, uniformListM)
 import Text.RawString.QQ
 import Twitch.Rest.Authorization
   ( AccessTokenScopes (AccessTokenScopes),
+    AuthorizationErrorResponse (..),
     AuthorizationRequest (..),
     AuthorizationResponse (..),
     AuthorizationResponseType (Token),
   )
 import Web.FormUrlEncoded (urlDecodeAsForm, urlEncodeAsForm)
+import Prelude hiding (drop)
 
 authorize :: FilePath -> IO ()
 authorize _pathToConfig = return ()
@@ -62,15 +65,17 @@ retrieveUserAccessToken = do
             authorizationrequestState = Just xsrfState
           }
   print $ "https://id.twitch.tv/oauth2/authorize?" <> urlEncodeAsForm ar
-  runSettings (setNoParsePath True defaultSettings) (userAccessTokenApp xsrfState)
+  runSettings defaultSettings (userAccessTokenApp xsrfState)
 
 -- | userAccessTokenApp is a simple server waiting for a single redirection to
 -- happen via the twitch API upon user authorization. Shuts down afterwards.
 userAccessTokenApp :: Text -> Application
 userAccessTokenApp xsrfState req respondWith = do
-  print $ pathInfo req
   case pathInfo req of
-    [] -> respondWith $ responseBuilder status200 [] grabFragmentPortionHTML
+    [] -> do
+      case tryDecodeQueryString . rawQueryString $ req of
+        Right err -> print err >> respondWith (responseBuilder status200 [] informUserDeniedHTML)
+        Left ttt -> print ttt >> respondWith (responseBuilder status200 [] grabFragmentPortionHTML)
     ["authorization"] -> do
       eitherAR <- getRequestBodyChunk req <&> urlDecodeAsForm @AuthorizationResponse . toLazyByteString . byteString
       case eitherAR of
@@ -80,6 +85,9 @@ userAccessTokenApp xsrfState req respondWith = do
         Left err -> print $ "authorization failed: " <> err
       respondWith $ responseBuilder status200 [] "All done, you can proceed in the client"
     _otherwise -> respondWith $ responseBuilder status400 [] "something went wrong"
+  where
+    tryDecodeQueryString "" = Left "empty query string"
+    tryDecodeQueryString qs = urlDecodeAsForm @AuthorizationErrorResponse . toLazyByteString . byteString . drop 1 $ qs
 
 grabFragmentPortionHTML :: Builder
 grabFragmentPortionHTML =
@@ -104,5 +112,13 @@ grabFragmentPortionHTML =
   <h1>
     Forwarded authorization token to client, check your CLI for more information.
   </h1>
+</html>
+  |]
+
+informUserDeniedHTML :: Builder
+informUserDeniedHTML =
+  [r|
+<html>
+  <h1>User Denied Authorization, aborting...</h1>
 </html>
   |]
