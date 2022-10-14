@@ -28,6 +28,7 @@ library horture-lib
                             , OverloadedStrings
     exposed-modules:        Horture
                             , Horture.Authorize
+                            , Horture.Path
                             , Horture.CommandCenter.CommandCenter
                             , Horture.CommandCenter.Event
                             , Horture.CommandCenter.State
