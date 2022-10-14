@@ -92,6 +92,7 @@ library horture-lib
                             , servant-client
                             , servant-client-core
                             , http-client
+                            , async
                             , memory
                             , bytestring
                             , clock

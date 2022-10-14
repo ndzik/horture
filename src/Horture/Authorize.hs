@@ -5,9 +5,11 @@
 -- https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#client-credentials-grant-flow
 module Horture.Authorize (authorize, retrieveUserAccessToken) where
 
+import Control.Concurrent (MVar, newEmptyMVar, putMVar, takeMVar)
+import Control.Concurrent.Async (race)
 import Data.ByteString.Builder (Builder, byteString, toLazyByteString)
 import Data.ByteString.Char8 (drop)
-import Data.Functor (void, (<&>))
+import Data.Functor ((<&>))
 import Data.Text (Text, pack)
 import Data.Word (Word8)
 import Network.HTTP.Types (status200, status400)
@@ -16,7 +18,7 @@ import Network.Wai.Handler.Warp
 import System.Random.Stateful (globalStdGen, uniformListM)
 import Text.RawString.QQ
 import Twitch.Rest.Authorization
-  ( AccessTokenScopes (AccessTokenScopes),
+  ( AccessTokenScopes (..),
     AuthorizationErrorResponse (..),
     AuthorizationRequest (..),
     AuthorizationResponse (..),
@@ -50,40 +52,68 @@ authorize _pathToConfig = return ()
 -- where the user is directed to `https://id.twitch.tv/oauth2/authorize` and
 -- redirected to `http://localhost:3000`. The fragment part of the redirection
 -- (everything after `#`) contains the authorization response.
-retrieveUserAccessToken :: IO ()
-retrieveUserAccessToken = do
+retrieveUserAccessToken :: AccessTokenScopes -> IO (Maybe Text)
+retrieveUserAccessToken (AccessTokenScopes []) = do
+  print @String "No scopes given to request from user, aborting..."
+  return Nothing
+retrieveUserAccessToken scopes = do
   print @String
     "Please open the following authorization link in your browser to give horture access to interact with your account"
   xsrfState <- uniformListM 32 globalStdGen <&> pack . concatMap (show @Word8)
+  accessTokenMVar <- newEmptyMVar
   let ar =
         AuthorizationRequest
           { authorizationrequestClientId = "skkzs4x5fdhpjgfq2w8vfbgf691y8j",
             authorizationrequestForceVerify = Nothing,
             authorizationrequestRedirectUri = "http://localhost:3000",
-            authorizationrequestScope = AccessTokenScopes ["channel:manage:redemptions"],
+            authorizationrequestScope = scopes, -- AccessTokenScopes ["channel:manage:redemptions"],
             authorizationrequestResponseType = Token,
             authorizationrequestState = Just xsrfState
           }
   print $ "https://id.twitch.tv/oauth2/authorize?" <> urlEncodeAsForm ar
-  runSettings defaultSettings (userAccessTokenApp xsrfState)
+  -- Wait for accessToken to be retrieved, if this never happens the user
+  -- aborted the process and the thread will be cleaned up anyway.
+  res <-
+    race (takeMVar accessTokenMVar) $
+      runSettings defaultSettings (userAccessTokenApp accessTokenMVar xsrfState)
+  case res of
+    Left mAccessToken -> return mAccessToken
+    -- User either denied authorization or something else went wrong which
+    -- killed the server.
+    Right _ -> return Nothing
 
 -- | userAccessTokenApp is a simple server waiting for a single redirection to
 -- happen via the twitch API upon user authorization. Shuts down afterwards.
-userAccessTokenApp :: Text -> Application
-userAccessTokenApp xsrfState req respondWith = do
+userAccessTokenApp :: MVar (Maybe Text) -> Text -> Application
+userAccessTokenApp accessTokenMVar xsrfState req respondWith = do
   case pathInfo req of
     [] -> do
       case tryDecodeQueryString . rawQueryString $ req of
-        Right err -> print err >> respondWith (responseBuilder status200 [] informUserDeniedHTML)
-        Left ttt -> print ttt >> respondWith (responseBuilder status200 [] grabFragmentPortionHTML)
+        -- User denied authorization, shutdown the server and clean up.
+        Right err -> do
+          print err
+          putMVar accessTokenMVar Nothing
+          respondWith (responseBuilder status200 [] informUserDeniedHTML)
+        -- User authorized this application, serve JS to grab URI-fragment
+        -- containing necessary data.
+        Left _ -> respondWith (responseBuilder status200 [] grabFragmentPortionHTML)
     ["authorization"] -> do
       eitherAR <- getRequestBodyChunk req <&> urlDecodeAsForm @AuthorizationResponse . toLazyByteString . byteString
       case eitherAR of
         Right ar
-          | authorizationresponseState ar == Just xsrfState -> void . print . authorizationresponseAccessToken $ ar
-          | otherwise -> print @String "XSRF detected, not using twitch response. Try again."
-        Left err -> print $ "authorization failed: " <> err
-      respondWith $ responseBuilder status200 [] "All done, you can proceed in the client"
+          -- Everything went right, proceed.
+          | authorizationresponseState ar == Just xsrfState -> do
+            putMVar accessTokenMVar . Just . authorizationresponseAccessToken $ ar
+          -- Received wrong state variable from Twitch, user can simply reload
+          -- and try again.
+          | otherwise -> do
+            print @String "XSRF detected, not using twitch response. Try again."
+            print @String "Simply try to reauthorize by clicking on the link again."
+        -- Twitch sent ill-formatted tokens, user can reload and try again.
+        Left err -> do
+          print ("authorization failed: " <> err)
+          print @String "Simply try to reauthorize by clicking on the link again."
+      respondWith $ responseBuilder status200 [] "Check your CLI client for more steps"
     _otherwise -> respondWith $ responseBuilder status400 [] "something went wrong"
   where
     tryDecodeQueryString "" = Left "empty query string"
