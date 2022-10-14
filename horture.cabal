@@ -142,6 +142,7 @@ executable horture-client
     hs-source-dirs:         app/Client
     main-is:                Main.hs
     ghc-options:
+                            -Wall
                             -fno-warn-name-shadowing
                             -threaded
                             -O2
@@ -154,6 +155,7 @@ executable horture-server
   hs-source-dirs:           app/Server
   main-is:                  Main.hs
   ghc-options:
+                            -Wall
                             -fno-warn-name-shadowing
                             -threaded
                             -O2
