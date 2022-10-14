@@ -23,7 +23,13 @@ import Options.Applicative
 -- The authorization uses an adaption of the credential flow below:
 -- https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#client-credentials-grant-flow
 main :: IO ()
-main = runCommandCenter
+main = execParser opts >>= handleParams
+  where
+    opts = info (cmdParser <**> helper)
+                ( fullDesc
+                    <> progDesc "Horture Client used to authorize and manage channel redemptions for twitch chat interactivity"
+                    <> header "Horture-Client"
+                )
 
 data HortureParams = HortureParams
   { _config :: !FilePath,
@@ -48,5 +54,5 @@ cmdParser =
       )
 
 handleParams :: HortureParams -> IO ()
-handleParams (HortureParams fp False) = undefined
+handleParams (HortureParams fp False) = runCommandCenter
 handleParams (HortureParams fp True) = authorize fp
