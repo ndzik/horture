@@ -1,6 +1,5 @@
 module Main (main) where
 
-import Data.Semigroup ((<>))
 import Horture.Authorize
 import Horture.CommandCenter.CommandCenter
 import Options.Applicative
@@ -25,11 +24,13 @@ import Options.Applicative
 main :: IO ()
 main = execParser opts >>= handleParams
   where
-    opts = info (cmdParser <**> helper)
-                ( fullDesc
-                    <> progDesc "Horture Client used to authorize and manage channel redemptions for twitch chat interactivity"
-                    <> header "Horture-Client"
-                )
+    opts =
+      info
+        (cmdParser <**> helper)
+        ( fullDesc
+            <> progDesc "Horture Client used to authorize and manage channel redemptions for twitch chat interactivity"
+            <> header "Horture-Client"
+        )
 
 data HortureParams = HortureParams
   { _config :: !FilePath,
@@ -54,5 +55,5 @@ cmdParser =
       )
 
 handleParams :: HortureParams -> IO ()
-handleParams (HortureParams fp False) = runCommandCenter
+handleParams (HortureParams _fp False) = runCommandCenter
 handleParams (HortureParams fp True) = authorize fp
