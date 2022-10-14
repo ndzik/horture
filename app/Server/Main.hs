@@ -12,6 +12,7 @@ import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Options.Applicative
 import Options.Applicative.Common (runParser)
 import Servant.Client
+import System.Exit (exitFailure)
 import Twitch.Rest
 
 -- | Handling twitch:
@@ -48,7 +49,7 @@ main' :: ServerParams -> IO ()
 main' (ServerParams cf db) = do
   Config {twitchClientId, twitchClientSecret} <-
     parseConfig cf >>= \case
-      Nothing -> error "Config file ill-formatted or not available"
+      Nothing -> print "Config file ill-formatted or not available" >> exitFailure
       Just cfg -> return cfg
   mgr <- newManager defaultManagerSettings
   let TwitchTokenClient {getAppAccessToken} = twitchTokenClient
@@ -56,7 +57,7 @@ main' (ServerParams cf db) = do
       clientEnv = mkClientEnv mgr twitchUrl
   res <- runClientM (getAppAccessToken (ClientCredentialRequest twitchClientId twitchClientSecret)) clientEnv
   creds <- case res of
-    Left err -> print err >> error "app access token retrieval denied"
+    Left err -> print err >> exitFailure
     Right r -> return r
   print creds
 
