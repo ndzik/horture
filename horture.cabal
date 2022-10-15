@@ -65,6 +65,7 @@ library horture-lib
                             , Twitch.Rest.Authorization
                             , Twitch.Rest.Token
                             , Twitch.EventSub.Condition
+                            , Twitch.EventSub.Notification
                             , Twitch.EventSub.Event
                             , Twitch.EventSub.Request
                             , Twitch.EventSub.Response
