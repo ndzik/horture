@@ -63,12 +63,15 @@ newRandomEffect ::
 newRandomEffect = newRandomGif
 
 {-# ANN newRandomGif ("HLint: ignore" :: String) #-}
-
 newRandomGif ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRandomGif =
   AddGif
-    <$> (ask @StaticEffectRandomizerEnv >>= \gifs -> uniformRM' 0 (length gifs) <&> (gifs !!))
+    <$> (ask @StaticEffectRandomizerEnv >>= \gifs -> uniformRM' 0 (length gifs - 1) <&> (gifs !!))
     <*> (Limited <$> uniformRM' 8 18)
-    <*> (V3 <$> randomM' <*> randomM' <*> randomM')
+    <*> ( V3
+            <$> (randomM' <&> (sin . (* 20)))
+            <*> (randomM' <&> (cos . (* 33)))
+            <*> return 0
+        )
