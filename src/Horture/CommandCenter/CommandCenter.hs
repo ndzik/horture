@@ -18,7 +18,7 @@ import Control.Monad.Except
 import Data.Default
 import Data.List (intercalate)
 import Data.Text (Text)
-import Graphics.Vty hiding (Event)
+import Graphics.Vty hiding (Event, Config)
 import Graphics.X11 (Window)
 import Horture
 import Horture.Command
@@ -26,6 +26,7 @@ import Horture.CommandCenter.Event
 import Horture.CommandCenter.State
 import Horture.Event
 import Horture.Loader (loadDirectory)
+import Horture.Config
 import Numeric (showHex)
 import Run
 import System.Directory
@@ -176,8 +177,8 @@ app =
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
-runCommandCenter :: IO ()
-runCommandCenter = do
+runCommandCenter :: Config -> IO ()
+runCommandCenter _cfg = do
   let gifDirectory = "./gifs"
   gifs <- makeAbsolute gifDirectory >>= loadDirectory
   appChan <- newBChan 10

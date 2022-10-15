@@ -49,7 +49,7 @@ main = execParser opts >>= main'
         )
 
 main' :: ServerParams -> IO ()
-main' (ServerParams cf db) = do
+main' (ServerParams cf _db) = do
   Config {twitchClientId, twitchClientSecret, twitchAuthorizationEndpoint} <-
     resolvePath cf >>= parseConfig >>= \case
       Nothing -> print "Config file ill-formatted or not available" >> exitFailure

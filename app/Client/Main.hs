@@ -1,8 +1,13 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Main (main) where
 
 import Horture.Authorize
+import Horture.Path
 import Horture.CommandCenter.CommandCenter
+import Horture.Config
 import Options.Applicative
+import System.Exit (exitFailure)
 
 -- | Horture-Client:
 -- This is the frontend client for horture.
@@ -55,5 +60,8 @@ cmdParser =
       )
 
 handleParams :: HortureParams -> IO ()
-handleParams (HortureParams _fp False) = runCommandCenter
+handleParams (HortureParams fp False) =
+  resolvePath fp >>= parseHortureClientConfig >>= \case
+    Just cfg -> runCommandCenter cfg
+    Nothing -> print "invalid client config" >> exitFailure
 handleParams (HortureParams fp True) = authorize fp

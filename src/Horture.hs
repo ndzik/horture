@@ -179,7 +179,7 @@ ximageData (Image p) = peek (plusPtr @Image @(Ptr CIntPtr) p xdataPtr) >>= \buf 
 initGLFW :: IO GLFW.Window
 initGLFW = do
   i <- GLFW.init
-  unless i $ print "GLFW.init failed" >> exitFailure
+  unless i $ print @String "GLFW.init failed" >> exitFailure
 
   GLFW.defaultWindowHints
   GLFW.windowHint $ GLFW.WindowHint'Floating True
