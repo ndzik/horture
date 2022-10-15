@@ -57,10 +57,15 @@ library horture-lib
                             , Horture.Server.Config
                             , Horture.Server.Message
                             , Horture.Server.Websocket
+                            , Horture.EventSource.EventSource
+                            , Horture.EventSource.Random
+                            , Horture.EventSource.Local
+                            , Horture.EventSource.WebSocketClient
                             , Twitch.Rest.Authentication
                             , Twitch.Rest.Authorization
                             , Twitch.Rest.Token
                             , Twitch.EventSub.Condition
+                            , Twitch.EventSub.Notification
                             , Twitch.EventSub.Event
                             , Twitch.EventSub.Request
                             , Twitch.EventSub.Response
@@ -84,6 +89,7 @@ library horture-lib
                             , text
                             , raw-strings-qq
                             , aeson
+                            , freer-simple
                             , OpenGL
                             , mtl
                             , GLFW-b

@@ -3,10 +3,12 @@ module Horture.Effect
     GifIndex,
     Position,
     mkGifEffects,
+    FromText (..),
   )
 where
 
 import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Horture.Gif
 import Horture.Object
 import Linear.V3
@@ -36,6 +38,19 @@ instance Show Effect where
   show BlazeIt = "BlazeIt"
   show Flashbang = "Flashbang"
   show Noop = "Noop"
+
+class FromText d where
+  fromText :: Text -> d
+
+instance FromText Effect where
+  fromText "ShakeIt" = ShakeIt
+  fromText "ZoomIt" = ZoomIt
+  fromText "FlipIt" = FlipIt
+  fromText "Rollercoaster" = Rollercoaster
+  fromText "BlazeIt" = BlazeIt
+  fromText "Flashbang" = Flashbang
+  fromText "AddGif" = AddGif "" (Limited 8) (V3 0 0 0)
+  fromText _= Noop
 
 -- | mkGifEffects creates effect constructors from the given HortureGIF cache.
 mkGifEffects :: Map.Map FilePath HortureGIF -> [Lifetime -> Position -> Effect]

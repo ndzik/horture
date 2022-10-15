@@ -17,18 +17,19 @@ import Network.HTTP.Types
 import Network.Wai
 import Network.Wai.Handler.WebSockets
 import Network.WebSockets hiding (Request, Response, requestHeaders)
+import qualified Twitch.EventSub.Event as Twitch
 import Prelude hiding (concat)
 
-handleWebsocketConn :: Text -> Application
-handleWebsocketConn aat = websocketsOr defaultConnectionOptions (hortureWS aat) invalidWSApplication
+handleWebsocketConn :: Chan Twitch.Event -> Text -> Application
+handleWebsocketConn tevChan aat = websocketsOr defaultConnectionOptions (hortureWS tevChan aat) invalidWSApplication
   where
     invalidWSApplication :: Application
     invalidWSApplication _ respond = respond $ responseLBS status400 [] "Not a WebSocket request"
 
 -- | hortureWSApp will forward and multiplex received webhook messages to a
 -- connected client.
-hortureWS :: Text -> ServerApp
-hortureWS aat pendingConn = do
+hortureWS :: Chan Twitch.Event -> Text -> ServerApp
+hortureWS tevChan aat pendingConn = do
   conn <- acceptRequest pendingConn
   chan <- newChan @HortureClientMessage
   -- TODO: What should I do with the ThreadID? Cache and terminate externally?
@@ -37,6 +38,7 @@ hortureWS aat pendingConn = do
         HortureClientConfig
           { _conn = conn,
             _messageQueue = chan,
+            _twitchEventQueue = tevChan,
             _appAccess = aat
           }
   evalRWST hortureClientConn conf def <&> fst
@@ -44,6 +46,7 @@ hortureWS aat pendingConn = do
 data HortureClientConfig = HortureClientConfig
   { _conn :: !Connection,
     _messageQueue :: !(Chan HortureClientMessage),
+    _twitchEventQueue :: !(Chan Twitch.Event),
     _appAccess :: !Text
   }
 
@@ -69,11 +72,15 @@ hortureClientConn :: HortureClient ()
 hortureClientConn = do
   conn <- asks _conn
   clientMessages <- asks _messageQueue
+  twitchMessages <- asks _twitchEventQueue
   forever $ do
     liftIO (tryReadChan clientMessages) >>= \case
       Success cm -> handleClientMessage cm
       _otherwise -> return ()
-    liftIO $ sendTextData @Text conn "Hello, client!"
+    -- Blocking read on twitchMessages.
+    msg <- liftIO (HortureEventSub <$> readChan twitchMessages)
+    -- Forward twitch event to connected client.
+    liftIO (sendTextData @HortureServerMessage conn msg)
 
 handleClientMessage :: HortureClientMessage -> HortureClient ()
 handleClientMessage HortureGarbage = return ()
