@@ -133,6 +133,8 @@ data Condition
       }
   deriving (Show)
 
+-- TODO: This is bad, because it requires to ALWAYS parse a condition within an
+-- object with a `"type"` key.
 instance FromJSON Condition where
   parseJSON = withObject "Condition" $ \o ->
     (.:) @Text o "type" >>= \case
