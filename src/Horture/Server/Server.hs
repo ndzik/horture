@@ -86,17 +86,15 @@ handleMessageType _ "revocation" req = handleRevocation req
 handleMessageType _ _ _req = return okNoContent
 
 handleCallbackVerification :: Request -> IO Response
-handleCallbackVerification _req = do return okNoContent
-
---  verification <- getRequestBodyChunk req >>= return . decodeStrict @Verification
---  maybe badRequestBody respondWithChallenge verification
---  where
---    respondWithChallenge verification =
---      return
---        . responseBuilder status200 [("Content-Type", "text/plain")]
---        . encodeUtf8Builder
---        . verificationChallenge
---        $ verification
+handleCallbackVerification req = do
+  mChallenge <- getRequestBodyChunk req >>= return . decodeStrict @Twitch.ChallengeNotification
+  return $ maybe badRequestBody respondWithChallenge mChallenge
+  where
+    respondWithChallenge mChallenge =
+        responseBuilder status200 [("Content-Type", "text/plain")]
+        . encodeUtf8Builder
+        . Twitch.challengenotificationChallenge
+        $ mChallenge
 
 handleNotification :: Chan Twitch.Event -> Request -> IO Response
 handleNotification tevChan req = do
@@ -123,8 +121,8 @@ notFound = responseBuilder status404 [("Content-Type", "text/plain")] mempty
 badRequest :: Response
 badRequest = responseBuilder status400 [("Content-Type", "text/plain")] mempty
 
--- badRequestBody :: Response
--- badRequestBody = responseBuilder status422 [("Content-Type", "text/plain")] mempty
+badRequestBody :: Response
+badRequestBody = responseBuilder status422 [("Content-Type", "text/plain")] mempty
 
 methodNotAllowed :: Response
 methodNotAllowed = responseBuilder status405 [("Content-Type", "text/plain")] mempty
