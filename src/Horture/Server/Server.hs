@@ -1,17 +1,23 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Horture.Server.Server (runHortureServer) where
 
-import Control.Monad (guard)
+import Control.Concurrent.Chan.Synchronous
 import Crypto.Hash.Algorithms (SHA256)
 import Crypto.MAC.HMAC
+import Data.Aeson
 import Data.ByteArray.Encoding
 import Data.ByteString (ByteString, concat)
 import Data.Maybe
+import Data.Text.Encoding
 import Horture.Server.Config
 import Horture.Server.Websocket
 import Network.HTTP.Types
 import Network.Wai
 import Network.Wai.Handler.Warp
 import System.Random.Stateful
+import qualified Twitch.EventSub.Event as Twitch
+import qualified Twitch.EventSub.Notification as Twitch
 import Prelude hiding (concat)
 
 -- | runHortureServer runs the horture server which is exposing the
@@ -21,29 +27,33 @@ import Prelude hiding (concat)
 runHortureServer :: HortureServerConfig -> IO ()
 runHortureServer conf = do
   secret <- uniformByteStringM 64 globalStdGen
-  run (_port conf) . hortureApp conf $ secret
+  tevChan <- newChan @Twitch.Event
+  run (_port conf) . hortureApp conf tevChan $ secret
 
-hortureApp :: HortureServerConfig -> ByteString -> Application
-hortureApp _conf secret req respondWith = do
+hortureApp :: HortureServerConfig -> Chan Twitch.Event -> ByteString -> Application
+hortureApp _conf tevChan secret req respondWith = do
   case pathInfo req of
-    ["eventsub"] -> handleTwitchNotification secret req respondWith
-    ["ws"] -> handleWebsocketConn (_appToken _conf) req respondWith
+    -- TODO: Split the singleton `eventsub` endpoint up, s.t. it is
+    -- dynamically created after a user has authorized via a websocket
+    -- connection. We will use the singleton for now, since this is a MVP.
+    ["eventsub"] -> handleTwitchNotification tevChan secret req respondWith
+    ["ws"] -> handleWebsocketConn tevChan (_appToken _conf) req respondWith
     _otherwise -> respondWith notFound
 
-handleTwitchNotification :: ByteString -> Application
-handleTwitchNotification secret req respondWith =
+handleTwitchNotification :: Chan Twitch.Event -> ByteString -> Application
+handleTwitchNotification tevChan secret req respondWith =
   if not . isPOST . requestMethod $ req
     then respondWith methodNotAllowed
     else do
       let headers = requestHeaders req
-      -- TODO: Throws `user error: mzero`, how to properly handle early abort
-      -- without breaking middleware?
-      guard =<< case lookup "Twitch-Eventsub-Message-Signature" headers of
+      res <- case lookup "Twitch-Eventsub-Message-Signature" headers of
         Just sig -> verifyFromTwitch req secret sig
         _otherwise -> return False
-      case requestHeaders req of
-        [("Twitch-Eventsub-Message-Type", messageType)] -> handleMessageType messageType req >>= respondWith
-        _otherwise -> respondWith badRequest
+      if not res
+        then respondWith badRequest
+        else case requestHeaders req of
+          [("Twitch-Eventsub-Message-Type", messageType)] -> handleMessageType tevChan messageType req >>= respondWith
+          _otherwise -> respondWith badRequest
 
 verifyFromTwitch :: Request -> ByteString -> ByteString -> IO Bool
 verifyFromTwitch req secret twitchSig = do
@@ -69,11 +79,11 @@ createHmacHex secret hmacMsg = concat ["sha256=", convertToBase Base16 (hmac sec
 verifySignature :: ByteString -> ByteString -> Bool
 verifySignature expectedSig actualSig = expectedSig == actualSig
 
-handleMessageType :: ByteString -> Request -> IO Response
-handleMessageType "webhook_callback_verification" req = handleCallbackVerification req
-handleMessageType "notification" req = handleNotification req
-handleMessageType "revocation" req = handleRevocation req
-handleMessageType _ _req = return okNoContent
+handleMessageType :: Chan Twitch.Event -> ByteString -> Request -> IO Response
+handleMessageType _ "webhook_callback_verification" req = handleCallbackVerification req
+handleMessageType tevChan "notification" req = handleNotification tevChan req
+handleMessageType _ "revocation" req = handleRevocation req
+handleMessageType _ _ _req = return okNoContent
 
 handleCallbackVerification :: Request -> IO Response
 handleCallbackVerification _req = do return okNoContent
@@ -88,9 +98,17 @@ handleCallbackVerification _req = do return okNoContent
 --        . verificationChallenge
 --        $ verification
 
--- TODO: Handle incoming events and push over websocket if available.
-handleNotification :: Request -> IO Response
-handleNotification _req = return okNoContent
+handleNotification :: Chan Twitch.Event -> Request -> IO Response
+handleNotification tevChan req = do
+  getRequestBodyChunk req
+    >>= ( \case
+            Nothing -> return ()
+            Just (Twitch.EventNotification _ ev) -> writeChan tevChan ev
+        )
+      . (decodeStrict @Twitch.EventNotification)
+  -- Always returning okNoContent, since we cannot ask twitch to resend this
+  -- message if ill-formatted.
+  return okNoContent
 
 -- TODO: Resubscribe to twitch events of interest here.
 handleRevocation :: Request -> IO Response
