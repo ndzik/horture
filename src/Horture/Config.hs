@@ -15,7 +15,8 @@ import Servant.Client
 data Config = Config
   { twitchClientId :: !Text,
     twitchAuthorizationEndpoint :: !BaseUrl,
-    twitchApiEndpoint :: !BaseUrl
+    twitchApiEndpoint :: !BaseUrl,
+    gifDirectory :: !FilePath
   }
   deriving (Show)
 
@@ -24,7 +25,8 @@ instance Default Config where
     Config
       { twitchClientId = "invalid-client-id",
         twitchAuthorizationEndpoint = BaseUrl Https "id.twitch.tv" 443 "oauth2/authorize",
-        twitchApiEndpoint = BaseUrl Https "api.twitch.tv" 443 ""
+        twitchApiEndpoint = BaseUrl Https "api.twitch.tv" 443 "",
+        gifDirectory = "./gifs"
       }
 
 parseHortureClientConfig :: FilePath -> IO (Maybe Config)

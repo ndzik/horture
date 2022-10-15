@@ -9,6 +9,7 @@ import Data.Text (Text)
 import Graphics.X11
 import Horture.CommandCenter.Event
 import Horture.Event
+import Control.Concurrent (ThreadId)
 
 data CommandCenterState = CCState
   { _ccEventChan :: !(Maybe (Chan Event)),
@@ -16,6 +17,7 @@ data CommandCenterState = CCState
     _ccCapturedWin :: !(Maybe (String, Window)),
     _ccLog :: ![Text],
     _ccGifs :: ![FilePath],
+    _ccTIDsToClean :: ![ThreadId],
     -- | Timeout in microseconds for events to be generated. Only works in
     -- DEBUG mode.
     _ccTimeout :: !Int
@@ -29,5 +31,6 @@ instance Default CommandCenterState where
         _ccCapturedWin = Nothing,
         _ccLog = [],
         _ccGifs = [],
+        _ccTIDsToClean = [],
         _ccTimeout = 100_000
       }

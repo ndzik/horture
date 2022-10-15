@@ -12,7 +12,7 @@ import Brick.Widgets.Border
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center
 import Brick.Widgets.List
-import Control.Concurrent (forkIO, forkOS)
+import Control.Concurrent (forkIO, forkOS, killThread)
 import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Except
 import Data.Default
@@ -132,15 +132,17 @@ stopApplication = do
     Just chan -> writeExit chan >> halt
 
 stopHorture :: EventM Name CommandCenterState ()
-stopHorture =
+stopHorture = do
   gets _ccEventChan >>= mapM_ writeExit
-    >> modify
-      ( \ccs ->
-          ccs
-            { _ccEventChan = Nothing,
-              _ccCapturedWin = Nothing
-            }
-      )
+  gets _ccTIDsToClean >>= liftIO . mapM_ killThread
+  modify
+    ( \ccs ->
+        ccs
+          { _ccEventChan = Nothing,
+            _ccCapturedWin = Nothing,
+            _ccTIDsToClean = []
+          }
+    )
 
 writeExit :: Chan Event -> EventM Name CommandCenterState ()
 writeExit chan = liftIO $ writeChan chan (EventCommand Exit)
@@ -157,10 +159,11 @@ grabHorture = do
     Just res@(_, w) -> do
       case brickChanM of
         Just brickChan -> do
-          void . liftIO . forkOS $ run (Just logChan) evChan w
-          void . liftIO . forkIO . forever $ do
           evSourceTID <- liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
+          _ <- liftIO . forkOS $ run (Just logChan) evChan w
+          logSourceTID <- liftIO . forkIO . forever $ do
             readChan logChan >>= writeBChan brickChan . CCLog
+          modify (\cs -> cs {_ccTIDsToClean = [evSourceTID, logSourceTID]})
         _otherwise -> return ()
       modify $ \ccs ->
         ccs
