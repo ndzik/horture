@@ -3,9 +3,11 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Run (initialise, run) where
+module Run
+  ( run,
+  )
+where
 
-import Control.Concurrent (forkOS, threadDelay)
 import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Except
 import Data.Default
@@ -23,29 +25,15 @@ import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
 import Graphics.X11.Xlib.Extras hiding (Event)
 import Horture
-import Horture.Effect
 import Horture.Event
-import qualified Horture.Event as H
 import Horture.Horture
 import Horture.Loader
-import Horture.Object
 import Horture.Render
 import Horture.Scene
 import Horture.State
-import Linear.V3
 import System.Exit
-import qualified System.Random as Random
 import Prelude hiding (readFile)
 
--- | initialise initialises horture by letting the user pick an application to
--- use together with the given event channel as an event source.
-initialise :: Maybe (Chan Text) -> Chan Event -> IO ()
-initialise logChan evChan =
-  x11UserGrabWindow >>= \case
-    Nothing -> print "No window to horture yourself on selected 🤨, aborting" >> exitFailure
-    Just w -> run logChan evChan $ snd w
-
--- TODO: Remove `exitFailure` usage.
 run :: Maybe (Chan Text) -> Chan Event -> Window -> IO ()
 run logChan evChan w = do
   glW <- initGLFW
@@ -96,7 +84,6 @@ run logChan evChan w = do
     _otherwise -> do
       let resolvedGifs = _resolvedGifs loaderState
       return resolvedGifs
-  let gifEffects = mkGifEffects hortureGifs
   activeTexture $= screenTextureUnit
   currentProgram $= Just prog
   --
@@ -159,7 +146,6 @@ run logChan evChan w = do
   blend $= Enabled
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
 
-  gen <- Random.getStdGen
   let scene =
         Scene
           { _screen = def,
@@ -173,14 +159,6 @@ run logChan evChan w = do
             _capture = pm,
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr)
           }
-  let generateEvents evChan gen = do
-        let (i, gen') = Random.randomR (0, length gifEffects - 1) gen
-            (v, _) = Random.random @Float gen
-            ev = (gifEffects !! i) (Limited 8) (V3 (sin (20 * v)) (cos (33 * v)) 0)
-        threadDelay 100000
-        writeChan evChan (H.EventEffect ev)
-        generateEvents evChan gen'
-  _threadId <- forkOS (generateEvents evChan gen)
   let hc =
         HortureStatic
           { _backgroundProg = prog,

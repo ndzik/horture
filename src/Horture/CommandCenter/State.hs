@@ -1,3 +1,5 @@
+{-# LANGUAGE NumericUnderscores #-}
+
 module Horture.CommandCenter.State (CommandCenterState (..)) where
 
 import Brick.BChan
@@ -13,7 +15,10 @@ data CommandCenterState = CCState
     _brickEventChan :: !(Maybe (BChan CommandCenterEvent)),
     _ccCapturedWin :: !(Maybe (String, Window)),
     _ccLog :: ![Text],
-    _ccGifs :: ![FilePath]
+    _ccGifs :: ![FilePath],
+    -- | Timeout in microseconds for events to be generated. Only works in
+    -- DEBUG mode.
+    _ccTimeout :: !Int
   }
 
 instance Default CommandCenterState where
@@ -23,5 +28,6 @@ instance Default CommandCenterState where
         _brickEventChan = Nothing,
         _ccCapturedWin = Nothing,
         _ccLog = [],
-        _ccGifs = []
+        _ccGifs = [],
+        _ccTimeout = 100_000
       }

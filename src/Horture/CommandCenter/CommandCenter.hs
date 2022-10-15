@@ -18,15 +18,16 @@ import Control.Monad.Except
 import Data.Default
 import Data.List (intercalate)
 import Data.Text (Text)
-import Graphics.Vty hiding (Event, Config)
+import Graphics.Vty hiding (Config, Event)
 import Graphics.X11 (Window)
 import Horture
 import Horture.Command
 import Horture.CommandCenter.Event
 import Horture.CommandCenter.State
-import Horture.Event
-import Horture.Loader (loadDirectory)
 import Horture.Config
+import Horture.Event
+import Horture.EventSource.Local
+import Horture.Loader (loadDirectory)
 import Numeric (showHex)
 import Run
 import System.Directory
@@ -149,6 +150,8 @@ grabHorture = do
   brickChanM <- gets _brickEventChan
   logChan <- liftIO $ newChan @Text
   evChan <- liftIO $ newChan @Event
+  timeout <- gets _ccTimeout
+  gifs <- gets _ccGifs
   liftIO x11UserGrabWindow >>= \case
     Nothing -> return ()
     Just res@(_, w) -> do
@@ -156,6 +159,7 @@ grabHorture = do
         Just brickChan -> do
           void . liftIO . forkOS $ run (Just logChan) evChan w
           void . liftIO . forkIO . forever $ do
+          evSourceTID <- liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
             readChan logChan >>= writeBChan brickChan . CCLog
         _otherwise -> return ()
       modify $ \ccs ->
@@ -178,9 +182,8 @@ prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
 runCommandCenter :: Config -> IO ()
-runCommandCenter _cfg = do
-  let gifDirectory = "./gifs"
-  gifs <- makeAbsolute gifDirectory >>= loadDirectory
+runCommandCenter cfg = do
+  gifs <- makeAbsolute (gifDirectory cfg) >>= loadDirectory
   appChan <- newBChan 10
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
