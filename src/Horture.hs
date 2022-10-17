@@ -48,6 +48,7 @@ import Horture.Horture
 import Horture.Logging
 import Horture.Render
 import Horture.Scene
+import Horture.Shaders
 import Horture.State
 import System.Exit
 import Text.RawString.QQ
