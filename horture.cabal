@@ -66,6 +66,11 @@ library horture-lib
                             , Twitch.Rest.Authentication
                             , Twitch.Rest.Authorization
                             , Twitch.Rest.Token
+                            , Horture.Loader.Error
+                            , Horture.Loader.State
+                            , Horture.Loader.Config
+                            , Horture.Loader.TextureLoader
+                            , Horture.Loader.FilePreloader
                             , Twitch.EventSub.Condition
                             , Twitch.EventSub.Notification
                             , Twitch.EventSub.Event
