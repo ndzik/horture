@@ -12,6 +12,7 @@ module Horture.Render
 where
 
 import Codec.Picture.Gif
+import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
@@ -25,6 +26,7 @@ import Horture.Effect
 import Horture.Gif
 import Horture.Horture
 import Horture.Object
+import Horture.Program
 import Horture.Scene
 import Horture.State
 import Horture.X11
@@ -34,12 +36,12 @@ import Linear.V4
 renderGifs :: Double -> Map.Map GifIndex [ActiveGIF] -> Horture l ()
 renderGifs _ m | Map.null m = return ()
 renderGifs dt m = do
-  gifProg <- asks _gifProg
-  modelUniform <- asks _gifModelUniform
-  gifIndexUniform <- asks _gifIndexUniform
-  gifTextureUnit <- asks _gifTextureUnit
+  prog <- asks (^. gifProg . shader)
+  modelUniform <- asks (^. gifProg . modelUniform)
+  gifIndexUniform <- asks (^. gifProg . indexUniform)
+  gifTextureUnit <- asks (^. gifProg . textureUnit)
   activeTexture $= gifTextureUnit
-  currentProgram $= Just gifProg
+  currentProgram $= Just prog
   -- General preconditions are set. Render all GIFs of the same type at once.
   mapM_ (renderGifType modelUniform gifIndexUniform) . Map.toList $ m
   where
@@ -78,10 +80,10 @@ indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxInd
 -- the horture texture was already initialized at this point.
 renderScreen :: Double -> Object -> Horture l ()
 renderScreen _ s = do
-  backgroundProg <- asks _backgroundProg
-  modelUniform <- asks _modelUniform
-  screenTexUnit <- asks _screenTexUnit
-  screenTexObject <- asks _screenTexObject
+  backgroundProg <- asks (^. screenProg . shader)
+  modelUniform <- asks (^. screenProg . modelUniform)
+  screenTexUnit <- asks (^. screenProg . textureUnit)
+  screenTexObject <- asks (^. screenProg . textureObject)
   (HortureState dp _ pm dim) <- get
   currentProgram $= Just backgroundProg
   activeTexture $= screenTexUnit

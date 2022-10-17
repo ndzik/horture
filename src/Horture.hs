@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -24,12 +23,11 @@ module Horture
   )
 where
 
+import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Bits
-import Data.ByteString.Char8 (ByteString, pack)
-import Data.Functor ((<&>))
 import Data.Word
 import Foreign.C.String
 import Foreign.C.Types
@@ -46,12 +44,12 @@ import Horture.Error
 import Horture.Events
 import Horture.Horture
 import Horture.Logging
+import Horture.Program
 import Horture.Render
 import Horture.Scene
 import Horture.Shaders
 import Horture.State
 import System.Exit
-import Text.RawString.QQ
 
 hortureName :: String
 hortureName = "horture"
@@ -89,10 +87,10 @@ pollGLFWEvents = liftIO GLFW.pollEvents
 pollXEvents :: Horture l ()
 pollXEvents = do
   glWin <- asks _glWin
-  projectionUniform <- asks _projUniform
-  modelUniform <- asks _modelUniform
-  screenTexObj <- asks _screenTexObject
-  screenTexUnit <- asks _screenTexUnit
+  modelUniform <- asks (^. screenProg . modelUniform)
+  projectionUniform <- asks (^. screenProg . projectionUniform)
+  screenTexObj <- asks (^. screenProg . textureObject)
+  screenTexUnit <- asks (^. screenProg . textureUnit)
   xWin <- gets _xWin
   dp <- gets _display
   pm <- gets _capture
@@ -223,84 +221,6 @@ initResources = do
   veo <- genObjectName
   bindBuffer ArrayBuffer $= Just veo
   return (vao, vbo, veo, prog, gifProg)
-
-hortureVertexGIF :: ByteString
-hortureVertexGIF =
-  pack
-    [r|
-#version 410
-
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec2 aTexCoord;
-uniform float dt;
-uniform mat4 model;
-
-out vec2 texCoord;
-
-void main() {
-  gl_Position = model * vec4(aPos.x, aPos.y, aPos.z, 1.0);
-  texCoord = aTexCoord;
-}
-   |]
-
-hortureFragmentGIF :: ByteString
-hortureFragmentGIF =
-  pack
-    [r|
-#version 410
-
-in vec2 texCoord;
-
-uniform int index;
-uniform sampler2DArray gifTexture;
-
-out vec4 frag_colour;
-
-void main() {
-  frag_colour = texture(gifTexture, vec3(texCoord.x, texCoord.y, index));
-}
-    |]
-
-hortureVertexShader :: ByteString
-hortureVertexShader =
-  pack
-    [r|
-#version 410
-
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec2 aTexCoord;
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 proj;
-uniform float dt;
-
-out vec2 texCoord;
-
-void main() {
-  gl_Position = proj * view * model * vec4(aPos.x, aPos.y, aPos.z, 1.0);
-  texCoord = aTexCoord;
-}
-   |]
-
-hortureFragmentShader :: ByteString
-hortureFragmentShader =
-  pack
-    [r|
-#version 410
-
-in vec2 texCoord;
-
-uniform float dt;
-uniform sampler2D texture1;
-
-out vec4 frag_colour;
-
-void main() {
-  vec4 colour = texture(texture1, texCoord);
-  // frag_colour = vec4(colour.x+sin(4*texCoord.x+dt), colour.y+cos(12*texCoord.y+dt), colour.z-sin(3*dt), colour.w);
-  frag_colour = vec4(colour.x, colour.y, colour.z, 1);
-}
-    |]
 
 data SizeUpdate = GLFWUpdate !(Int, Int) | XUpdate !(CInt, CInt) deriving (Show, Eq)
 

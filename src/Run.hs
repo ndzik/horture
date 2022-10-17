@@ -28,6 +28,7 @@ import Horture
 import Horture.Event
 import Horture.Horture
 import Horture.Loader
+import Horture.Program
 import Horture.Render
 import Horture.Scene
 import Horture.State
@@ -161,21 +162,28 @@ run logChan evChan w = do
           }
   let hc =
         HortureStatic
-          { _backgroundProg = prog,
+          { _screenProg =
+              HortureScreenProgram
+                { _hortureScreenProgramShader = prog,
+                  _hortureScreenProgramModelUniform = modelUniform,
+                  _hortureScreenProgramProjectionUniform = projectionUniform,
+                  _hortureScreenProgramViewUniform = viewUniform,
+                  _hortureScreenProgramTimeUniform = timeUniform,
+                  _hortureScreenProgramTextureObject = screenTexObject,
+                  _hortureScreenProgramTextureUnit = screenTextureUnit
+                },
+            _gifProg =
+              HortureGifProgram
+                { _hortureGifProgramShader = gifProg,
+                  _hortureGifProgramModelUniform = gifModelUniform,
+                  _hortureGifProgramIndexUniform = gifTexIndex,
+                  _hortureGifProgramTextureUnit = gifTextureUnit,
+                  _hortureGifProgramAssets = hortureGifs
+                },
             _eventChan = evChan,
             _logChan = logChan,
-            _gifProg = gifProg,
-            _modelUniform = modelUniform,
-            _viewUniform = viewUniform,
-            _projUniform = projectionUniform,
             _planeVertexLocation = vertexAttributeLocation,
             _planeTexLocation = texAttributeLocation,
-            _screenTexUnit = screenTextureUnit,
-            _screenTexObject = screenTexObject,
-            _gifIndexUniform = gifTexIndex,
-            _gifTextureUnit = gifTextureUnit,
-            _gifModelUniform = gifModelUniform,
-            _loadedGifs = hortureGifs,
             _glWin = glW,
             _backgroundColor = Color4 0.1 0.1 0.1 1
           }

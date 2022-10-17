@@ -45,6 +45,7 @@ library horture-lib
                             , Horture.Render
                             , Horture.Config
                             , Horture.Object
+                            , Horture.Program
                             , Horture.Loader
                             , Horture.Effect
                             , Horture.Gif
@@ -113,6 +114,7 @@ library horture-lib
                             , vector
                             , random
                             , co-log
+                            , lens
                             , directory
                             , data-default
                             , filepath
