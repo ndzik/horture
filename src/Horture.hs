@@ -44,6 +44,7 @@ import Horture.Error
 import Horture.Events
 import Horture.Horture
 import Horture.Logging
+import Horture.Gif
 import Horture.Program
 import Horture.Render
 import Horture.Scene

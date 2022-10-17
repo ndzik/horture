@@ -7,6 +7,7 @@ module Horture.Effect
   )
 where
 
+import Control.Lens
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Horture.Gif
@@ -53,5 +54,5 @@ instance FromText Effect where
   fromText _= Noop
 
 -- | mkGifEffects creates effect constructors from the given HortureGIF cache.
-mkGifEffects :: Map.Map FilePath HortureGIF -> [Lifetime -> Position -> Effect]
-mkGifEffects = Map.foldr (\hg effs -> AddGif (_gifFullPath hg) : effs) []
+mkGifEffects :: Map.Map FilePath HortureGif -> [Lifetime -> Position -> Effect]
+mkGifEffects = Map.foldr (\hg effs -> AddGif (hg ^. fullPath) : effs) []

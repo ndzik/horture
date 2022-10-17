@@ -9,6 +9,7 @@ module Run
 where
 
 import Control.Concurrent.Chan.Synchronous
+import Control.Lens
 import Control.Monad.Except
 import Data.Default
 import Data.List (find)
@@ -28,6 +29,7 @@ import Horture
 import Horture.Event
 import Horture.Horture
 import Horture.Loader
+import Horture.Loader.Asset
 import Horture.Program
 import Horture.Render
 import Horture.Scene
@@ -35,8 +37,8 @@ import Horture.State
 import System.Exit
 import Prelude hiding (readFile)
 
-run :: Maybe (Chan Text) -> Chan Event -> Window -> IO ()
-run logChan evChan w = do
+run :: [(FilePath, Asset)] -> Maybe (Chan Text) -> Chan Event -> Window -> IO ()
+run gifs logChan evChan w = do
   glW <- initGLFW
   (vao, vbo, veo, prog, gifProg) <- initResources
   dp <- openDisplay ""
@@ -69,13 +71,12 @@ run logChan evChan w = do
   gifTexUni <- uniformLocation gifProg "gifTexture"
   gifTexIndex <- uniformLocation gifProg "index"
   (loaderResult, loaderState) <-
-    runLoader
+    runTextureLoader
       ( LC
-          { _lcgifDirectory = "./gifs",
-            _lcgifProg = gifProg,
-            _lcgifTexUniform = gifTexUni,
-            _lcGifTextureUnit = gifTextureUnit,
-            _lcdefaultGifDelay = defaultGifDelay
+          { _loaderConfigPreloadedGifs = gifs,
+            _loaderConfigGifProg = gifProg,
+            _loaderConfigGifTexUniform = gifTexUni,
+            _loaderConfigGifTextureUnit = gifTextureUnit
           }
       )
       def
@@ -83,8 +84,7 @@ run logChan evChan w = do
   hortureGifs <- case loaderResult of
     Left _ -> exitFailure
     _otherwise -> do
-      let resolvedGifs = _resolvedGifs loaderState
-      return resolvedGifs
+      return $ loaderState ^. resolvedGifs
   activeTexture $= screenTextureUnit
   currentProgram $= Just prog
   --

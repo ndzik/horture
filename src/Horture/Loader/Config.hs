@@ -3,23 +3,20 @@
 
 module Horture.Loader.Config where
 
-import Codec.Picture.Gif
 import Control.Lens.TH
 import Graphics.Rendering.OpenGL
+import Horture.Loader.Asset
 
 data LoaderConfig = LC
   { -- | Directory where gif files are presumably stored.
-    _lcgifDirectory :: !FilePath,
+    _loaderConfigPreloadedGifs :: ![(FilePath, Asset)],
     -- | Shaderprogram to load when binding textures.
-    _lcgifProg :: !Program,
+    _loaderConfigGifProg :: !Program,
     -- | Location for sampler2DArray in fragment shader.
-    _lcgifTexUniform :: !UniformLocation,
-    -- | Default delay to use for gifs without a specified delay.
-    _lcdefaultGifDelay :: !GifDelay,
+    _loaderConfigGifTexUniform :: !UniformLocation,
     -- | Texture unit which holds GIF images.
-    _lcGifTextureUnit :: !TextureUnit
+    _loaderConfigGifTextureUnit :: !TextureUnit
   }
-  deriving (Show)
 
 -- | PreloaderConfig is the configuration for the asset preloader.
 newtype PreloaderConfig = PLC
@@ -29,3 +26,4 @@ newtype PreloaderConfig = PLC
   deriving (Show)
 
 makeFields ''PreloaderConfig
+makeFields ''LoaderConfig

@@ -67,6 +67,7 @@ library horture-lib
                             , Twitch.Rest.Authorization
                             , Twitch.Rest.Token
                             , Horture.Loader.Error
+                            , Horture.Loader.Asset
                             , Horture.Loader.State
                             , Horture.Loader.Config
                             , Horture.Loader.TextureLoader

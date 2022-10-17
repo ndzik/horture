@@ -27,10 +27,11 @@ import Horture.CommandCenter.State
 import Horture.Config
 import Horture.Event
 import Horture.EventSource.Local
-import Horture.Loader (loadDirectory)
+import Horture.Loader
 import Numeric (showHex)
 import Run
 import System.Directory
+import System.Exit (exitFailure)
 
 data Name
   = Main
@@ -154,13 +155,14 @@ grabHorture = do
   evChan <- liftIO $ newChan @Event
   timeout <- gets _ccTimeout
   gifs <- gets _ccGifs
+  plg <- gets _ccPreloadedGifs
   liftIO x11UserGrabWindow >>= \case
     Nothing -> return ()
     Just res@(_, w) -> do
       case brickChanM of
         Just brickChan -> do
           evSourceTID <- liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
-          _ <- liftIO . forkOS $ run (Just logChan) evChan w
+          _ <- liftIO . forkOS $ run plg (Just logChan) evChan w
           logSourceTID <- liftIO . forkIO . forever $ do
             readChan logChan >>= writeBChan brickChan . CCLog
           modify (\cs -> cs {_ccTIDsToClean = [evSourceTID, logSourceTID]})
@@ -185,8 +187,12 @@ prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
 runCommandCenter :: Config -> IO ()
-runCommandCenter cfg = do
-  gifs <- makeAbsolute (gifDirectory cfg) >>= loadDirectory
+runCommandCenter (Config _ _ _ dir) = do
+  gifs <- makeAbsolute dir >>= loadDirectory
+  preloadedGifs <-
+    runPreloader (PLC dir) loadGifsInMemory >>= \case
+      Left err -> print err >> exitFailure
+      Right plg -> return plg
   appChan <- newBChan 10
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
@@ -198,5 +204,6 @@ runCommandCenter cfg = do
       app
       def
         { _ccGifs = gifs,
+          _ccPreloadedGifs = preloadedGifs,
           _brickEventChan = Just appChan
         }

@@ -1,13 +1,19 @@
-module Horture.Gif (HortureGIF (..)) where
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+
+module Horture.Gif where
 
 import Codec.Picture.Gif
+import Control.Lens.TH
 import Graphics.Rendering.OpenGL
 
-data HortureGIF = HortureGIF
-  { _gifFullPath :: !FilePath,
-    _gifName :: !String,
-    _gifTextureObject :: !TextureObject,
-    _gifNumOfImgs :: !Int,
-    _gifDelays :: ![GifDelay]
+data HortureGif = HortureGif
+  { _hortureGifFullPath :: !FilePath,
+    _hortureGifName :: !String,
+    _hortureGifTextureObject :: !TextureObject,
+    _hortureGifNumOfImgs :: !Int,
+    _hortureGifDelays :: ![GifDelay]
   }
   deriving (Show)
+
+makeFields ''HortureGif

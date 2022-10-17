@@ -2,6 +2,7 @@ module Horture.Loader.FilePreloader
   ( FilePreloader,
     loadGifsInMemory,
     runPreloader,
+    loadDirectory,
   )
 where
 
@@ -12,7 +13,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Data.ByteString (readFile)
 import Data.Word
-import Foreign (Storable (poke, sizeOf), plusPtr)
+import Foreign (Storable (poke), plusPtr)
 import Foreign.ForeignPtr
 import Horture.Loader.Asset
 import Horture.Loader.Config
@@ -40,9 +41,22 @@ loadDirectory fp = listDirectory fp <&> map ((fp ++ "/") ++)
 readImagesAndMetadata :: FilePath -> FilePreloader (FilePath, Asset)
 readImagesAndMetadata gif = do
   content <- liftIO $ readFile gif
-  (i, imgs) <- case decodeGifImages content of
+  (nrOfImgs, (w, h), imgs) <- case decodeGifImages content of
     Left err -> throwError $ "decoding gif: " <> err
-    Right imgs@(ImageRGBA8 i : _) -> unifyDynamicImages (imageWidth i, imageHeight i) imgs >>= \imgVector -> return (i, imgVector)
+    Right imgs@(img : _) -> do
+      ((w, h), imgVector) <- case img of
+        ImageRGBA8 i -> do
+          let w = imageWidth i
+              h = imageHeight i
+          imgVector <- unifyDynamicImages (w, h) imgs
+          return ((w, h), imgVector)
+        ImageRGB8 i -> do
+          let w = imageWidth i
+              h = imageHeight i
+          imgVector <- unifyDynamicImages (w, h) imgs
+          return ((w, h), imgVector)
+        _otherwise -> throwError "wrong encoding encountered"
+      return (length imgs, (w, h), imgVector)
     Right _ -> throwError "invalid gif encountered"
   delaysms <- case getDelaysGifImages content of
     Left err -> throwError $ "retrieving gif delays: " <> err
@@ -50,8 +64,9 @@ readImagesAndMetadata gif = do
   return
     ( gif,
       AssetGif
-        { _assetGifWidth = imageWidth i,
-          _assetGifHeight = imageHeight i,
+        { _assetGifWidth = w,
+          _assetGifHeight = h,
+          _assetNumberOfFrames = nrOfImgs,
           _assetGifDelays = delaysms,
           _assetGifImages = imgs
         }
@@ -59,8 +74,9 @@ readImagesAndMetadata gif = do
 
 unifyDynamicImages :: (Int, Int) -> [DynamicImage] -> FilePreloader (ForeignPtr Word8)
 unifyDynamicImages (w, h) imgs = do
-  let stride = w * h * 4 * szByte
-      szByte = sizeOf @Word8 undefined
+  let -- stride is the number of bytes each image occupies.
+      stride = w * h * 4
+  -- bytes in a single horizontal scanline.
   farr <- liftIO $ mallocForeignPtrArray (stride * length imgs)
   liftIO $
     withForeignPtr farr $ \arr -> do
@@ -69,10 +85,10 @@ unifyDynamicImages (w, h) imgs = do
           _ <-
             imageIPixels
               ( \(x, y, PixelRGBA8 r g b a) -> do
-                  poke (plusPtr arr (idx * stride + x + y * w + 0 * szByte)) r
-                  poke (plusPtr arr (idx * stride + x + y * w + 1 * szByte)) g
-                  poke (plusPtr arr (idx * stride + x + y * w + 2 * szByte)) b
-                  poke (plusPtr arr (idx * stride + x + y * w + 3 * szByte)) a
+                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 0)) r
+                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 1)) g
+                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 2)) b
+                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 3)) a
                   return (PixelRGBA8 r g b a)
               )
               i
@@ -81,10 +97,10 @@ unifyDynamicImages (w, h) imgs = do
           _ <-
             imageIPixels
               ( \(x, y, PixelRGB8 r g b) -> do
-                  poke (plusPtr arr (idx * stride + x + y * w + 0 * szByte)) r
-                  poke (plusPtr arr (idx * stride + x + y * w + 1 * szByte)) g
-                  poke (plusPtr arr (idx * stride + x + y * w + 2 * szByte)) b
-                  poke (plusPtr @_ @Word8 arr (idx * stride + x + y * w + 3 * szByte)) 0xff
+                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 0)) r
+                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 1)) g
+                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 2)) b
+                  poke (plusPtr @_ @Word8 arr (idx * stride + (x * 4) + (y * 4 * w) + 3)) 0xff
                   return (PixelRGB8 r g b)
               )
               i

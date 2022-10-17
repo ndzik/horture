@@ -23,10 +23,11 @@ data HortureGifProgram = HortureGifProgram
   { _hortureGifProgramShader :: !Program,
     _hortureGifProgramModelUniform :: !UniformLocation,
     _hortureGifProgramIndexUniform :: !UniformLocation,
-    _hortureGifProgramAssets :: !(Map FilePath HortureGIF),
+    _hortureGifProgramAssets :: !(Map FilePath HortureGif),
     _hortureGifProgramTextureUnit :: !TextureUnit
   }
   deriving (Show)
+
 
 makeFields ''HortureScreenProgram
 makeFields ''HortureGifProgram

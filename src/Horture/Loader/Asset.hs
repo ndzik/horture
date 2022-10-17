@@ -12,6 +12,7 @@ import Foreign.ForeignPtr
 data Asset = AssetGif
   { _assetGifWidth :: !Int,
     _assetGifHeight :: !Int,
+    _assetNumberOfFrames :: !Int,
     _assetGifDelays :: ![GifDelay],
     _assetGifImages :: !(ForeignPtr Word8)
   }

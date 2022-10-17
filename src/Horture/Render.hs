@@ -33,7 +33,7 @@ import Horture.X11
 import Linear.Matrix
 import Linear.V4
 
-renderGifs :: Double -> Map.Map GifIndex [ActiveGIF] -> Horture l ()
+renderGifs :: Double -> Map.Map GifIndex [ActiveGif] -> Horture l ()
 renderGifs _ m | Map.null m = return ()
 renderGifs dt m = do
   prog <- asks (^. gifProg . shader)
@@ -45,10 +45,10 @@ renderGifs dt m = do
   -- General preconditions are set. Render all GIFs of the same type at once.
   mapM_ (renderGifType modelUniform gifIndexUniform) . Map.toList $ m
   where
-    renderGifType :: UniformLocation -> UniformLocation -> (GifIndex, [ActiveGIF]) -> Horture l ()
+    renderGifType :: UniformLocation -> UniformLocation -> (GifIndex, [ActiveGif]) -> Horture l ()
     renderGifType _ _ (_, []) = return ()
     renderGifType modelUniform gifIndexUniform (_, gifsOfSameType@(g : _)) = do
-      let HortureGIF _ _ gifTextureObject numOfImgs delays = _afGif g
+      let HortureGif _ _ gifTextureObject numOfImgs delays = _afGif g
       textureBinding Texture2DArray $= Just gifTextureObject
       mapM_
         ( ( \o -> do
