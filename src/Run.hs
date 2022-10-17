@@ -3,10 +3,13 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Run (initialise, run) where
+module Run
+  ( run,
+  )
+where
 
-import Control.Concurrent (forkOS, threadDelay)
 import Control.Concurrent.Chan.Synchronous
+import Control.Lens
 import Control.Monad.Except
 import Data.Default
 import Data.List (find)
@@ -23,31 +26,19 @@ import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
 import Graphics.X11.Xlib.Extras hiding (Event)
 import Horture
-import Horture.Effect
 import Horture.Event
-import qualified Horture.Event as H
 import Horture.Horture
 import Horture.Loader
-import Horture.Object
+import Horture.Loader.Asset
+import Horture.Program
 import Horture.Render
 import Horture.Scene
 import Horture.State
-import Linear.V3
 import System.Exit
-import qualified System.Random as Random
 import Prelude hiding (readFile)
 
--- | initialise initialises horture by letting the user pick an application to
--- use together with the given event channel as an event source.
-initialise :: Maybe (Chan Text) -> Chan Event -> IO ()
-initialise logChan evChan =
-  x11UserGrabWindow >>= \case
-    Nothing -> print "No window to horture yourself on selected 🤨, aborting" >> exitFailure
-    Just w -> run logChan evChan $ snd w
-
--- TODO: Remove `exitFailure` usage.
-run :: Maybe (Chan Text) -> Chan Event -> Window -> IO ()
-run logChan evChan w = do
+run :: [(FilePath, Asset)] -> Maybe (Chan Text) -> Chan Event -> Window -> IO ()
+run gifs logChan evChan w = do
   glW <- initGLFW
   (vao, vbo, veo, prog, gifProg) <- initResources
   dp <- openDisplay ""
@@ -80,13 +71,12 @@ run logChan evChan w = do
   gifTexUni <- uniformLocation gifProg "gifTexture"
   gifTexIndex <- uniformLocation gifProg "index"
   (loaderResult, loaderState) <-
-    runLoader
+    runTextureLoader
       ( LC
-          { _lcgifDirectory = "./gifs",
-            _lcgifProg = gifProg,
-            _lcgifTexUniform = gifTexUni,
-            _lcGifTextureUnit = gifTextureUnit,
-            _lcdefaultGifDelay = defaultGifDelay
+          { _loaderConfigPreloadedGifs = gifs,
+            _loaderConfigGifProg = gifProg,
+            _loaderConfigGifTexUniform = gifTexUni,
+            _loaderConfigGifTextureUnit = gifTextureUnit
           }
       )
       def
@@ -94,9 +84,7 @@ run logChan evChan w = do
   hortureGifs <- case loaderResult of
     Left _ -> exitFailure
     _otherwise -> do
-      let resolvedGifs = _resolvedGifs loaderState
-      return resolvedGifs
-  let gifEffects = mkGifEffects hortureGifs
+      return $ loaderState ^. resolvedGifs
   activeTexture $= screenTextureUnit
   currentProgram $= Just prog
   --
@@ -159,7 +147,6 @@ run logChan evChan w = do
   blend $= Enabled
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
 
-  gen <- Random.getStdGen
   let scene =
         Scene
           { _screen = def,
@@ -173,31 +160,30 @@ run logChan evChan w = do
             _capture = pm,
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr)
           }
-  let generateEvents evChan gen = do
-        let (i, gen') = Random.randomR (0, length gifEffects - 1) gen
-            (v, _) = Random.random @Float gen
-            ev = (gifEffects !! i) (Limited 8) (V3 (sin (20 * v)) (cos (33 * v)) 0)
-        threadDelay 100000
-        writeChan evChan (H.EventEffect ev)
-        generateEvents evChan gen'
-  _threadId <- forkOS (generateEvents evChan gen)
   let hc =
         HortureStatic
-          { _backgroundProg = prog,
+          { _screenProg =
+              HortureScreenProgram
+                { _hortureScreenProgramShader = prog,
+                  _hortureScreenProgramModelUniform = modelUniform,
+                  _hortureScreenProgramProjectionUniform = projectionUniform,
+                  _hortureScreenProgramViewUniform = viewUniform,
+                  _hortureScreenProgramTimeUniform = timeUniform,
+                  _hortureScreenProgramTextureObject = screenTexObject,
+                  _hortureScreenProgramTextureUnit = screenTextureUnit
+                },
+            _gifProg =
+              HortureGifProgram
+                { _hortureGifProgramShader = gifProg,
+                  _hortureGifProgramModelUniform = gifModelUniform,
+                  _hortureGifProgramIndexUniform = gifTexIndex,
+                  _hortureGifProgramTextureUnit = gifTextureUnit,
+                  _hortureGifProgramAssets = hortureGifs
+                },
             _eventChan = evChan,
             _logChan = logChan,
-            _gifProg = gifProg,
-            _modelUniform = modelUniform,
-            _viewUniform = viewUniform,
-            _projUniform = projectionUniform,
             _planeVertexLocation = vertexAttributeLocation,
             _planeTexLocation = texAttributeLocation,
-            _screenTexUnit = screenTextureUnit,
-            _screenTexObject = screenTexObject,
-            _gifIndexUniform = gifTexIndex,
-            _gifTextureUnit = gifTextureUnit,
-            _gifModelUniform = gifModelUniform,
-            _loadedGifs = hortureGifs,
             _glWin = glW,
             _backgroundColor = Color4 0.1 0.1 0.1 1
           }

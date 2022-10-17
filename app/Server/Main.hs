@@ -4,16 +4,10 @@
 module Main (main) where
 
 import Config
-import Data.Aeson (decode)
-import Data.Functor ((<&>))
-import Data.IORef (IORef, atomicModifyIORef, newIORef)
-import Data.Semigroup ((<>))
-import Horture.CommandCenter.CommandCenter
 import Horture.Path
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Options.Applicative
-import Options.Applicative.Common (runParser)
 import Servant.Client
 import System.Exit (exitFailure)
 import Twitch.Rest
@@ -49,7 +43,7 @@ main = execParser opts >>= main'
         )
 
 main' :: ServerParams -> IO ()
-main' (ServerParams cf db) = do
+main' (ServerParams cf _db) = do
   Config {twitchClientId, twitchClientSecret, twitchAuthorizationEndpoint} <-
     resolvePath cf >>= parseConfig >>= \case
       Nothing -> print "Config file ill-formatted or not available" >> exitFailure

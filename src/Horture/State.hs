@@ -1,32 +1,19 @@
-module Horture.State
-  ( HortureStatic (..),
-    HortureState (..),
-  )
-where
+module Horture.State where
 
 import Control.Concurrent.Chan.Synchronous
-import qualified Data.Map.Strict as Map
-import Graphics.Rendering.OpenGL hiding (get)
+import Control.Lens.TH
 import Data.Text (Text)
+import Graphics.Rendering.OpenGL hiding (get)
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
 import Horture.Event
-import Horture.Gif
+import Horture.Program
 
 data HortureStatic = HortureStatic
-  { _backgroundProg :: !Program,
-    _gifProg :: !Program,
-    _modelUniform :: !UniformLocation,
-    _viewUniform :: !UniformLocation,
-    _projUniform :: !UniformLocation,
+  { _screenProg :: !HortureScreenProgram,
+    _gifProg :: !HortureGifProgram,
     _planeVertexLocation :: !AttribLocation,
     _planeTexLocation :: !AttribLocation,
-    _screenTexUnit :: !TextureUnit,
-    _screenTexObject :: !TextureObject,
-    _gifIndexUniform :: !UniformLocation,
-    _gifTextureUnit :: !TextureUnit,
-    _gifModelUniform :: !UniformLocation,
-    _loadedGifs :: !(Map.Map FilePath HortureGIF),
     _eventChan :: !(Chan Event),
     _logChan :: !(Maybe (Chan Text)),
     _glWin :: !GLFW.Window,
@@ -39,3 +26,6 @@ data HortureState = HortureState
     _capture :: !Drawable,
     _dim :: !(Int, Int)
   }
+
+makeLenses ''HortureStatic
+makeLenses ''HortureState

@@ -12,23 +12,26 @@ import Brick.Widgets.Border
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center
 import Brick.Widgets.List
-import Control.Concurrent (forkIO, forkOS)
+import Control.Concurrent (forkIO, forkOS, killThread)
 import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Except
 import Data.Default
 import Data.List (intercalate)
 import Data.Text (Text)
-import Graphics.Vty hiding (Event)
+import Graphics.Vty hiding (Config, Event)
 import Graphics.X11 (Window)
 import Horture
 import Horture.Command
 import Horture.CommandCenter.Event
 import Horture.CommandCenter.State
+import Horture.Config
 import Horture.Event
-import Horture.Loader (loadDirectory)
+import Horture.EventSource.Local
+import Horture.Loader
 import Numeric (showHex)
 import Run
 import System.Directory
+import System.Exit (exitFailure)
 
 data Name
   = Main
@@ -130,15 +133,17 @@ stopApplication = do
     Just chan -> writeExit chan >> halt
 
 stopHorture :: EventM Name CommandCenterState ()
-stopHorture =
+stopHorture = do
   gets _ccEventChan >>= mapM_ writeExit
-    >> modify
-      ( \ccs ->
-          ccs
-            { _ccEventChan = Nothing,
-              _ccCapturedWin = Nothing
-            }
-      )
+  gets _ccTIDsToClean >>= liftIO . mapM_ killThread
+  modify
+    ( \ccs ->
+        ccs
+          { _ccEventChan = Nothing,
+            _ccCapturedWin = Nothing,
+            _ccTIDsToClean = []
+          }
+    )
 
 writeExit :: Chan Event -> EventM Name CommandCenterState ()
 writeExit chan = liftIO $ writeChan chan (EventCommand Exit)
@@ -148,14 +153,19 @@ grabHorture = do
   brickChanM <- gets _brickEventChan
   logChan <- liftIO $ newChan @Text
   evChan <- liftIO $ newChan @Event
+  timeout <- gets _ccTimeout
+  gifs <- gets _ccGifs
+  plg <- gets _ccPreloadedGifs
   liftIO x11UserGrabWindow >>= \case
     Nothing -> return ()
     Just res@(_, w) -> do
       case brickChanM of
         Just brickChan -> do
-          void . liftIO . forkOS $ run (Just logChan) evChan w
-          void . liftIO . forkIO . forever $ do
+          evSourceTID <- liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
+          _ <- liftIO . forkOS $ run plg (Just logChan) evChan w
+          logSourceTID <- liftIO . forkIO . forever $ do
             readChan logChan >>= writeBChan brickChan . CCLog
+          modify (\cs -> cs {_ccTIDsToClean = [evSourceTID, logSourceTID]})
         _otherwise -> return ()
       modify $ \ccs ->
         ccs
@@ -176,10 +186,13 @@ app =
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
-runCommandCenter :: IO ()
-runCommandCenter = do
-  let gifDirectory = "./gifs"
-  gifs <- makeAbsolute gifDirectory >>= loadDirectory
+runCommandCenter :: Config -> IO ()
+runCommandCenter (Config _ _ _ dir) = do
+  gifs <- makeAbsolute dir >>= loadDirectory
+  preloadedGifs <-
+    runPreloader (PLC dir) loadGifsInMemory >>= \case
+      Left err -> print err >> exitFailure
+      Right plg -> return plg
   appChan <- newBChan 10
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
@@ -191,5 +204,6 @@ runCommandCenter = do
       app
       def
         { _ccGifs = gifs,
+          _ccPreloadedGifs = preloadedGifs,
           _brickEventChan = Just appChan
         }

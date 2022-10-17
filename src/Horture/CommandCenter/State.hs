@@ -1,3 +1,5 @@
+{-# LANGUAGE NumericUnderscores #-}
+
 module Horture.CommandCenter.State (CommandCenterState (..)) where
 
 import Brick.BChan
@@ -7,13 +9,20 @@ import Data.Text (Text)
 import Graphics.X11
 import Horture.CommandCenter.Event
 import Horture.Event
+import Horture.Loader.Asset
+import Control.Concurrent (ThreadId)
 
 data CommandCenterState = CCState
   { _ccEventChan :: !(Maybe (Chan Event)),
     _brickEventChan :: !(Maybe (BChan CommandCenterEvent)),
     _ccCapturedWin :: !(Maybe (String, Window)),
     _ccLog :: ![Text],
-    _ccGifs :: ![FilePath]
+    _ccGifs :: ![FilePath],
+    _ccPreloadedGifs :: ![(FilePath, Asset)],
+    _ccTIDsToClean :: ![ThreadId],
+    -- | Timeout in microseconds for events to be generated. Only works in
+    -- DEBUG mode.
+    _ccTimeout :: !Int
   }
 
 instance Default CommandCenterState where
@@ -23,5 +32,8 @@ instance Default CommandCenterState where
         _brickEventChan = Nothing,
         _ccCapturedWin = Nothing,
         _ccLog = [],
-        _ccGifs = []
+        _ccGifs = [],
+        _ccPreloadedGifs = [],
+        _ccTIDsToClean = [],
+        _ccTimeout = 100_000
       }

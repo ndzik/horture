@@ -36,6 +36,7 @@ library horture-lib
                             , Horture.Horture
                             , Horture.Logging
                             , Horture.X11
+                            , Horture.Shaders
                             , Horture.Error
                             , Horture.Command
                             , Horture.Events
@@ -44,6 +45,7 @@ library horture-lib
                             , Horture.Render
                             , Horture.Config
                             , Horture.Object
+                            , Horture.Program
                             , Horture.Loader
                             , Horture.Effect
                             , Horture.Gif
@@ -64,6 +66,12 @@ library horture-lib
                             , Twitch.Rest.Authentication
                             , Twitch.Rest.Authorization
                             , Twitch.Rest.Token
+                            , Horture.Loader.Error
+                            , Horture.Loader.Asset
+                            , Horture.Loader.State
+                            , Horture.Loader.Config
+                            , Horture.Loader.TextureLoader
+                            , Horture.Loader.FilePreloader
                             , Twitch.EventSub.Condition
                             , Twitch.EventSub.Notification
                             , Twitch.EventSub.Event
@@ -112,6 +120,7 @@ library horture-lib
                             , vector
                             , random
                             , co-log
+                            , lens
                             , directory
                             , data-default
                             , filepath

@@ -2,7 +2,7 @@ module Horture.Scene
   ( apply,
     applyAll,
     Scene (..),
-    ActiveGIF (..),
+    ActiveGif (..),
     addGif,
     purge,
   )
@@ -21,13 +21,13 @@ import Linear.V4
 -- independent overlay.
 data Scene = Scene
   { _screen :: !Object,
-    _gifs :: !(Map.Map GifIndex [ActiveGIF]),
-    _gifCache :: !(Map.Map FilePath HortureGIF)
+    _gifs :: !(Map.Map GifIndex [ActiveGif]),
+    _gifCache :: !(Map.Map FilePath HortureGif)
   }
 
--- ActiveGIF is a GIF which is about or currently acting in a scene.
-data ActiveGIF = AGIF
-  { _afGif :: !HortureGIF,
+-- ActiveGif is a GIF which is about or currently acting in a scene.
+data ActiveGif = AGIF
+  { _afGif :: !HortureGif,
     _afObject :: !Object
   }
   deriving (Show)
@@ -53,12 +53,18 @@ addGif :: GifIndex -> Double -> Lifetime -> V3 Float -> Scene -> Scene
 addGif i timeNow lt pos s =
   let loadedGifs = _gifCache s
       hGif = Map.lookup i loadedGifs
-      newGif = def {_pos = pos, _lifetime = lt, _birth = timeNow, _scale = V4
-                                                                            (V4 0.33 0 0 0)
-                                                                            (V4 0 0.33 0 0)
-                                                                            (V4 0 0 0.33 0)
-                                                                            (V4 0 0 0 1)
-                                                                            }
+      newGif =
+        def
+          { _pos = pos,
+            _lifetime = lt,
+            _birth = timeNow,
+            _scale =
+              V4
+                (V4 0.33 0 0 0)
+                (V4 0 0.33 0 0)
+                (V4 0 0 0.33 0)
+                (V4 0 0 0 1)
+          }
    in case hGif of
         Nothing -> s
         Just hgif -> s {_gifs = Map.insertWith (++) i [AGIF hgif newGif] . _gifs $ s}
