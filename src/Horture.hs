@@ -42,9 +42,9 @@ import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
 import Horture.Error
 import Horture.Events
+import Horture.Gif
 import Horture.Horture
 import Horture.Logging
-import Horture.Gif
 import Horture.Program
 import Horture.Render
 import Horture.Scene
@@ -128,10 +128,11 @@ pollXEvents = do
                 anyPixelData
               generateMipmap' Texture2D
 
-              let proj = curry projectionForAspectRatio newWFloat newHFloat
+              -- TODO: WHY does this have no effect?
+              let proj = projectionForAspectRatio (newWFloat, newHFloat)
               m44ToGLmatrix proj >>= (uniform projectionUniform $=)
 
-              let model = curry scaleForAspectRatio newWInt newHInt
+              let model = scaleForAspectRatio (newWInt, newHInt)
               m44ToGLmatrix model >>= (uniform modelUniform $=)
 
               return (newPm, (newWInt, newHInt))

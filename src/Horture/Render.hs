@@ -22,7 +22,7 @@ import Data.Text (pack)
 import Foreign.Ptr
 import Foreign.Storable
 import Graphics.GLUtil.Camera3D as Util
-import Graphics.Rendering.OpenGL hiding (get)
+import Graphics.Rendering.OpenGL hiding (get, scale)
 import Graphics.X11
 import Horture.Effect
 import Horture.Gif
@@ -73,8 +73,6 @@ renderGifs dt m = do
 indexForGif :: [GifDelay] -> Double -> Int -> Int
 indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxIndex + 1)
   where
-    -- TODO: Something is wrong here, GIFs are displayed (in percent)
-    -- 25-50-25-50-75-100.
     go :: [GifDelay] -> Double -> Int -> Int
     go [] _ i = i
     go (d : gifDelays) accumulatedTime i
@@ -83,20 +81,22 @@ indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxInd
 
 -- | renderScreen renders the captured application window. It is assumed that
 -- the horture texture was already initialized at this point.
-renderScreen :: Double -> Object -> Horture l ()
+renderScreen :: (HortureLogger (Horture l)) => Double -> Object -> Horture l ()
 renderScreen _ s = do
   backgroundProg <- asks (^. screenProg . shader)
   modelUniform <- asks (^. screenProg . modelUniform)
+  projectionUniform <- asks (^. screenProg . projectionUniform)
   screenTexUnit <- asks (^. screenProg . textureUnit)
   screenTexObject <- asks (^. screenProg . textureObject)
-  (HortureState dp _ pm dim) <- get
+  (HortureState dp _ pm dim@(w, h)) <- get
   currentProgram $= Just backgroundProg
   activeTexture $= screenTexUnit
   textureBinding Texture2D $= Just screenTexObject
   liftIO $ getWindowImage dp pm dim >>= updateWindowTexture dim
-  let scale = scaleForAspectRatio dim
-      m = model s !*! scale
-  liftIO $ m44ToGLmatrix m >>= (uniform modelUniform $=)
+  let s' = s & scale .~ scaleForAspectRatio dim
+      proj = projectionForAspectRatio (fromIntegral w, fromIntegral h)
+  liftIO $ m44ToGLmatrix proj >>= (uniform projectionUniform $=)
+  liftIO $ m44ToGLmatrix (model s') >>= (uniform modelUniform $=)
   liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
 
 -- | m44ToGLmatrix converts the row based representation of M44 to a GLmatrix
@@ -115,9 +115,8 @@ identityM44 =
     (V4 0 0 0 1)
 
 scaleForAspectRatio :: (Int, Int) -> M44 Float
-scaleForAspectRatio (ww, wh) = model
+scaleForAspectRatio (ww, wh) = scaling
   where
-    ident = identityM44
     aspectRatio = fromIntegral ww / fromIntegral wh
     scaling =
       V4
@@ -125,7 +124,6 @@ scaleForAspectRatio (ww, wh) = model
         (V4 0 1 0 0)
         (V4 0 0 1 0)
         (V4 0 0 0 1)
-    model = scaling !*! ident
 
 -- | getWindowImage fetches the image of the currently captured application
 -- window.
