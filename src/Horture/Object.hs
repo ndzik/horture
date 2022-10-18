@@ -1,14 +1,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Horture.Object
-  ( Object (..),
-    Lifetime (..),
-    Renderable (..),
-    isStillAlive,
-  )
-where
+module Horture.Object where
 
+import Control.Lens.TH
 import Data.Default
 import Linear.Matrix
 import Linear.Quaternion
@@ -31,9 +26,11 @@ data Object = Object
     -- | How long this object is supposed to live.
     _lifetime :: !Lifetime,
     -- | When was this object created.
-    _birth :: !Double
+    _birth :: !Double,
+    -- | How will this object behave during its lifetime. An empty list means a
+    -- static object.
+    _behaviours :: ![Behaviour]
   }
-  deriving (Show, Eq)
 
 instance Default Object where
   def =
@@ -47,7 +44,8 @@ instance Default Object where
             (V4 0 0 1 0)
             (V4 0 0 0 1),
         _lifetime = Forever,
-        _birth = 0
+        _birth = 0,
+        _behaviours = []
       }
 
 -- | Renderable is every object capable of giving a model description in form of
@@ -65,3 +63,10 @@ isStillAlive :: Double -> Object -> Bool
 isStillAlive timeNow o = case _lifetime o of
   Forever -> True
   Limited s -> (timeNow - _birth o) <= s
+
+-- | Each object can have multiple behaviours attached to it. The behaviour
+-- decides how this object will be displayed during its lifetime depending on
+-- how long it already exists.
+type Behaviour = Double -> Object -> Object
+
+makeLenses ''Object

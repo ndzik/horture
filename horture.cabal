@@ -42,6 +42,7 @@ library horture-lib
                             , Horture.Events
                             , Horture.Event
                             , Horture.State
+                            , Horture.Behaviour
                             , Horture.Render
                             , Horture.Config
                             , Horture.Object
@@ -98,6 +99,7 @@ library horture-lib
                             , raw-strings-qq
                             , aeson
                             , freer-simple
+                            , array
                             , OpenGL
                             , mtl
                             , GLFW-b

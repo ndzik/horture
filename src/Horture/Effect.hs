@@ -20,7 +20,7 @@ type GifIndex = FilePath
 type Position = V3 Float
 
 data Effect
-  = AddGif !GifIndex !Lifetime !Position
+  = AddGif !GifIndex !Lifetime !Position ![Behaviour]
   | ShakeIt
   | ZoomIt
   | FlipIt
@@ -28,10 +28,9 @@ data Effect
   | BlazeIt
   | Flashbang
   | Noop
-  deriving (Eq)
 
 instance Show Effect where
-  show (AddGif fp lt pos) = unwords ["AddGif", takeFileName fp, show lt, show pos]
+  show (AddGif fp lt pos _) = unwords ["AddGif", takeFileName fp, show lt, show pos]
   show ShakeIt = "ShakeIt"
   show ZoomIt = "ZoomIt"
   show FlipIt = "FlipIt"
@@ -50,9 +49,9 @@ instance FromText Effect where
   fromText "Rollercoaster" = Rollercoaster
   fromText "BlazeIt" = BlazeIt
   fromText "Flashbang" = Flashbang
-  fromText "AddGif" = AddGif "" (Limited 8) (V3 0 0 0)
+  fromText "AddGif" = AddGif "" (Limited 8) (V3 0 0 0) []
   fromText _= Noop
 
 -- | mkGifEffects creates effect constructors from the given HortureGIF cache.
-mkGifEffects :: Map.Map FilePath HortureGif -> [Lifetime -> Position -> Effect]
+mkGifEffects :: Map.Map FilePath HortureGif -> [Lifetime -> Position -> [Behaviour]-> Effect]
 mkGifEffects = Map.foldr (\hg effs -> AddGif (hg ^. fullPath) : effs) []

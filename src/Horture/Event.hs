@@ -6,4 +6,4 @@ import Horture.Effect
 data Event
   = EventEffect !Effect
   | EventCommand !Command
-  deriving (Show, Eq)
+  deriving (Show)

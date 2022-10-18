@@ -30,13 +30,12 @@ data ActiveGif = AGIF
   { _afGif :: !HortureGif,
     _afObject :: !Object
   }
-  deriving (Show)
 
 -- apply applies the given effect at the time given using the elapsed time
 -- since the last frame to the scene.
 apply :: Double -> Double -> Effect -> Scene -> Scene
 apply _timeNow _dt Noop s = s
-apply timeNow _dt (AddGif i lt pos) s = addGif i timeNow lt pos s
+apply timeNow _dt (AddGif i lt pos bs) s = addGif i timeNow lt bs pos s
 apply _timeNow _dt ShakeIt s = s
 apply _timeNow _dt ZoomIt s = s
 apply _timeNow _dt FlipIt s = s
@@ -44,13 +43,13 @@ apply _timeNow _dt Rollercoaster s = s
 apply _timeNow _dt BlazeIt s = s
 apply _timeNow _dt Flashbang s = s
 
--- applyAll composes all given effects at the time given time using the time
+-- applyAll composes all given effects at the given time using the time
 -- since the last frame as a progression point.
 applyAll :: [Effect] -> Double -> Double -> Scene -> Scene
 applyAll effs timeNow dt s = foldr (apply timeNow dt) s (Noop : effs)
 
-addGif :: GifIndex -> Double -> Lifetime -> V3 Float -> Scene -> Scene
-addGif i timeNow lt pos s =
+addGif :: GifIndex -> Double -> Lifetime -> [Behaviour] -> V3 Float -> Scene -> Scene
+addGif i timeNow lt bs pos s =
   let loadedGifs = _gifCache s
       hGif = Map.lookup i loadedGifs
       newGif =
@@ -63,7 +62,8 @@ addGif i timeNow lt pos s =
                 (V4 0.33 0 0 0)
                 (V4 0 0.33 0 0)
                 (V4 0 0 0.33 0)
-                (V4 0 0 0 1)
+                (V4 0 0 0 1),
+            _behaviours = bs
           }
    in case hGif of
         Nothing -> s

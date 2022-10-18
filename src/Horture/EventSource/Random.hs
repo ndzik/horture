@@ -9,10 +9,13 @@ module Horture.EventSource.Random
   )
 where
 
+import Control.Monad
 import Control.Monad.Freer
 import Control.Monad.Freer.Reader
 import Control.Monad.IO.Class (MonadIO (liftIO))
+import Data.Array.IO
 import Data.Functor ((<&>))
+import Horture.Behaviour
 import Horture.Effect
 import Horture.EventSource.EventSource
 import Horture.Object
@@ -62,7 +65,6 @@ newRandomEffect ::
   Eff effs Effect
 newRandomEffect = newRandomGif
 
-{-# ANN newRandomGif ("HLint: ignore" :: String) #-}
 newRandomGif ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Effect
@@ -75,3 +77,29 @@ newRandomGif =
             <*> (randomM' <&> (cos . (* 33)))
             <*> return 0
         )
+    <*> (uniformRM' 0 3 >>= newRandomBehaviours)
+
+newRandomBehaviours ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Int ->
+  Eff effs [Behaviour]
+newRandomBehaviours n = do
+  shake' <- shake <$> randomM' <*> uniformRM' 80 160 <*> randomM'
+  moveTo' <- moveTo <$> (V3 <$> randomM' <*> randomM' <*> randomM')
+  pulse' <- pulse <$> randomM' <*> randomM' <*> ((*) <$> uniformRM' 1 100 <*> randomM')
+  circle' <- circle <$> ((*) <$> randomM' <*> uniformRM' 1 100)
+  take n . cycle <$> liftIO (shuffle [shake', moveTo', pulse', circle', convolute])
+
+shuffle :: [a] -> IO [a]
+shuffle xs = do
+  ar <- newArray n xs
+  forM [1 .. n] $ \i -> do
+    j <- randomRIO (i, n)
+    vi <- readArray ar i
+    vj <- readArray ar j
+    writeArray ar j vi
+    return vj
+  where
+    n = length xs
+    newArray :: Int -> [a] -> IO (IOArray Int a)
+    newArray n xs = newListArray (1, n) xs

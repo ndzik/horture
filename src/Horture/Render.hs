@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Horture.Render
@@ -17,6 +18,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import qualified Data.Map.Strict as Map
+import Data.Text (pack)
 import Foreign.Ptr
 import Foreign.Storable
 import Graphics.GLUtil.Camera3D as Util
@@ -25,6 +27,7 @@ import Graphics.X11
 import Horture.Effect
 import Horture.Gif
 import Horture.Horture
+import Horture.Logging
 import Horture.Object
 import Horture.Program
 import Horture.Scene
@@ -33,7 +36,7 @@ import Horture.X11
 import Linear.Matrix
 import Linear.V4
 
-renderGifs :: Double -> Map.Map GifIndex [ActiveGif] -> Horture l ()
+renderGifs :: (HortureLogger (Horture l)) => Double -> Map.Map GifIndex [ActiveGif] -> Horture l ()
 renderGifs _ m | Map.null m = return ()
 renderGifs dt m = do
   prog <- asks (^. gifProg . shader)
@@ -45,16 +48,18 @@ renderGifs dt m = do
   -- General preconditions are set. Render all GIFs of the same type at once.
   mapM_ (renderGifType modelUniform gifIndexUniform) . Map.toList $ m
   where
-    renderGifType :: UniformLocation -> UniformLocation -> (GifIndex, [ActiveGif]) -> Horture l ()
+    renderGifType :: (HortureLogger (Horture l)) => UniformLocation -> UniformLocation -> (GifIndex, [ActiveGif]) -> Horture l ()
     renderGifType _ _ (_, []) = return ()
     renderGifType modelUniform gifIndexUniform (_, gifsOfSameType@(g : _)) = do
       let HortureGif _ _ gifTextureObject numOfImgs delays = _afGif g
       textureBinding Texture2DArray $= Just gifTextureObject
       mapM_
         ( ( \o -> do
-              let timeSinceBirth = dt - _birth o
+              let bs = o ^. behaviours
+                  timeSinceBirth = dt - _birth o
+                  o' = foldr (\f o -> f timeSinceBirth o) o bs
                   texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
-              liftIO $ m44ToGLmatrix (model o !*! _scale o) >>= (uniform modelUniform $=)
+              liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform modelUniform $=)
               uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
               liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
           )
