@@ -35,5 +35,5 @@ instance Default CommandCenterState where
         _ccGifs = [],
         _ccPreloadedGifs = [],
         _ccTIDsToClean = [],
-        _ccTimeout = 100_000
+        _ccTimeout = 1_000_000
       }
