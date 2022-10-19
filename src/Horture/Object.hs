@@ -28,8 +28,9 @@ data Object = Object
     -- | When was this object created.
     _birth :: !Double,
     -- | How will this object behave during its lifetime. An empty list means a
-    -- static object.
-    _behaviours :: ![Behaviour]
+    -- static object. Each behaviour has an associated lifetime and time of
+    -- birth.
+    _behaviours :: ![(Behaviour, Double, Lifetime)]
   }
 
 instance Default Object where
@@ -59,10 +60,9 @@ instance Renderable Object where
       trans = mkTransformation @Float (_orientation o) (_pos o)
       m = trans !*! _scale o
 
-isStillAlive :: Double -> Object -> Bool
-isStillAlive timeNow o = case _lifetime o of
-  Forever -> True
-  Limited s -> (timeNow - _birth o) <= s
+isStillAlive :: Double -> Lifetime -> Double -> Bool
+isStillAlive _ Forever _ = True
+isStillAlive timeNow (Limited s) tob = (timeNow - tob) <= s
 
 -- | Each object can have multiple behaviours attached to it. The behaviour
 -- decides how this object will be displayed during its lifetime depending on

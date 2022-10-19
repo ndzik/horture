@@ -18,11 +18,10 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import qualified Data.Map.Strict as Map
-import Data.Text (pack)
 import Foreign.Ptr
 import Foreign.Storable
 import Graphics.GLUtil.Camera3D as Util
-import Graphics.Rendering.OpenGL hiding (get, scale)
+import Graphics.Rendering.OpenGL hiding (get, lookAt, scale)
 import Graphics.X11
 import Horture.Effect
 import Horture.Gif
@@ -34,6 +33,7 @@ import Horture.Scene
 import Horture.State
 import Horture.X11
 import Linear.Matrix
+import Linear.Projection
 import Linear.V4
 
 renderGifs :: (HortureLogger (Horture l)) => Double -> Map.Map GifIndex [ActiveGif] -> Horture l ()
@@ -57,7 +57,7 @@ renderGifs dt m = do
         ( ( \o -> do
               let bs = o ^. behaviours
                   timeSinceBirth = dt - _birth o
-                  o' = foldr (\f o -> f timeSinceBirth o) o bs
+                  o' = foldr (\(f, _, _) o -> f timeSinceBirth o) o bs
                   texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
               liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform modelUniform $=)
               uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
@@ -82,22 +82,43 @@ indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxInd
 -- | renderScreen renders the captured application window. It is assumed that
 -- the horture texture was already initialized at this point.
 renderScreen :: (HortureLogger (Horture l)) => Double -> Object -> Horture l ()
-renderScreen _ s = do
+renderScreen t s = do
   backgroundProg <- asks (^. screenProg . shader)
-  modelUniform <- asks (^. screenProg . modelUniform)
-  projectionUniform <- asks (^. screenProg . projectionUniform)
   screenTexUnit <- asks (^. screenProg . textureUnit)
   screenTexObject <- asks (^. screenProg . textureObject)
-  (HortureState dp _ pm dim@(w, h)) <- get
+  (HortureState dp _ pm dim) <- get
   currentProgram $= Just backgroundProg
   activeTexture $= screenTexUnit
   textureBinding Texture2D $= Just screenTexObject
+  applyScreenBehaviours t s >>= trackScreen t >>= projectScreen
   liftIO $ getWindowImage dp pm dim >>= updateWindowTexture dim
+  liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
+
+applyScreenBehaviours :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
+applyScreenBehaviours t screen = do
+  let bs = screen ^. behaviours
+      s = foldr (\(f, _, _) o -> f t o) screen bs
+  return s
+
+trackScreen :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
+trackScreen _ screen = do
+  viewUniform <- asks (^. screenProg . viewUniform)
+  let s = screen
+      (Camera _ up _ _ camPos) = Util.fpsCamera @Float
+      screenPos = s ^. pos
+      lookAtM = lookAt camPos screenPos up
+  liftIO $ m44ToGLmatrix lookAtM >>= (uniform viewUniform $=)
+  return s
+
+projectScreen :: (HortureLogger (Horture l)) => Object -> Horture l ()
+projectScreen s = do
+  modelUniform <- asks (^. screenProg . modelUniform)
+  projectionUniform <- asks (^. screenProg . projectionUniform)
+  dim@(w, h) <- gets (^. dim)
   let s' = s & scale .~ scaleForAspectRatio dim
       proj = projectionForAspectRatio (fromIntegral w, fromIntegral h)
   liftIO $ m44ToGLmatrix proj >>= (uniform projectionUniform $=)
   liftIO $ m44ToGLmatrix (model s') >>= (uniform modelUniform $=)
-  liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
 
 -- | m44ToGLmatrix converts the row based representation of M44 to a GLmatrix
 -- representation which is column based.
@@ -157,4 +178,4 @@ updateWindowTexture (w, h) i = do
 projectionForAspectRatio :: (Float, Float) -> M44 Float
 projectionForAspectRatio (ww, wh) = proj
   where
-    proj = Util.projectionMatrix (Util.deg2rad 90) (ww / wh) 1 100
+    proj = Util.projectionMatrix (Util.deg2rad 90) (ww / wh) 0.1 1000
