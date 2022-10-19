@@ -63,7 +63,12 @@ runAnyEffectRandomizer = interpret $ \case
 newRandomEffect ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Effect
-newRandomEffect = newRandomGif
+newRandomEffect = randomM' @_ @Float >>= \r -> if r < 0.5 then newRandomGif else newRandomScreenEffect
+
+newRandomScreenEffect ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Effect
+newRandomScreenEffect = AddScreenBehaviour <$> (Limited <$> uniformRM' 6 10) <*> newRandomBehaviours 1
 
 newRandomGif ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
@@ -84,11 +89,31 @@ newRandomBehaviours ::
   Int ->
   Eff effs [Behaviour]
 newRandomBehaviours n = do
-  shake' <- shake <$> randomM' <*> uniformRM' 80 160 <*> randomM'
-  moveTo' <- moveTo <$> (V3 <$> randomM' <*> randomM' <*> randomM')
-  pulse' <- pulse <$> randomM' <*> randomM' <*> ((*) <$> uniformRM' 1 100 <*> randomM')
-  circle' <- circle <$> ((*) <$> randomM' <*> uniformRM' 1 100)
+  shake' <- newRandomShake
+  moveTo' <- newRandomMoveTo
+  pulse' <- newRandomPulse
+  circle' <- newRandomCircle
   take n . cycle <$> liftIO (shuffle [shake', moveTo', pulse', circle', convolute])
+
+newRandomShake ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Behaviour
+newRandomShake = shake <$> randomM' <*> uniformRM' 80 160 <*> randomM'
+
+newRandomMoveTo ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Behaviour
+newRandomMoveTo = moveTo <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM'))
+
+newRandomPulse ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Behaviour
+newRandomPulse = pulse <$> randomM' <*> randomM' <*> ((*) <$> uniformRM' 1 10 <*> randomM')
+
+newRandomCircle ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Behaviour
+newRandomCircle = circle <$> ((*) <$> randomM' <*> uniformRM' 1 10)
 
 shuffle :: [a] -> IO [a]
 shuffle xs = do

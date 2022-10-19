@@ -5,9 +5,16 @@ module Horture.Scene
     ActiveGif (..),
     addGif,
     purge,
+    -- | Lenses.
+    screen,
+    gifs,
+    gifCache,
+    afGif,
+    afObject,
   )
 where
 
+import Control.Lens
 import Data.Default
 import qualified Data.Map.Strict as Map
 import Horture.Effect
@@ -31,15 +38,15 @@ data ActiveGif = AGIF
     _afObject :: !Object
   }
 
+makeLenses ''Scene
+makeLenses ''ActiveGif
+
 -- apply applies the given effect at the time given using the elapsed time
 -- since the last frame to the scene.
 apply :: Double -> Double -> Effect -> Scene -> Scene
 apply _timeNow _dt Noop s = s
-apply timeNow _dt (AddGif i lt pos bs) s = addGif i timeNow lt bs pos s
-apply _timeNow _dt ShakeIt s = s
-apply _timeNow _dt ZoomIt s = s
-apply _timeNow _dt FlipIt s = s
-apply _timeNow _dt Rollercoaster s = s
+apply timeNow _dt (AddGif i lt pos bs) s = addGif i timeNow lt (zip3 bs (repeat timeNow) (repeat lt)) pos s
+apply timeNow _dt (AddScreenBehaviour lt bs) s = addScreenBehaviour timeNow lt (zip3 bs (repeat timeNow) (repeat lt)) s
 apply _timeNow _dt BlazeIt s = s
 apply _timeNow _dt Flashbang s = s
 
@@ -48,7 +55,7 @@ apply _timeNow _dt Flashbang s = s
 applyAll :: [Effect] -> Double -> Double -> Scene -> Scene
 applyAll effs timeNow dt s = foldr (apply timeNow dt) s (Noop : effs)
 
-addGif :: GifIndex -> Double -> Lifetime -> [Behaviour] -> V3 Float -> Scene -> Scene
+addGif :: GifIndex -> Double -> Lifetime -> [(Behaviour, Double, Lifetime)] -> V3 Float -> Scene -> Scene
 addGif i timeNow lt bs pos s =
   let loadedGifs = _gifCache s
       hGif = Map.lookup i loadedGifs
@@ -69,7 +76,15 @@ addGif i timeNow lt bs pos s =
         Nothing -> s
         Just hgif -> s {_gifs = Map.insertWith (++) i [AGIF hgif newGif] . _gifs $ s}
 
--- purge purges the given scene using timenow by removing all transient objects
--- which died off.
+addScreenBehaviour :: Double -> Lifetime -> [(Behaviour, Double, Lifetime)] -> Scene -> Scene
+addScreenBehaviour _timeNow _lt bs scene =
+  let s = scene & screen . behaviours %~ (++ bs)
+   in s
+
+-- | purge purges the given scene using timenow by removing all transient
+-- objects and effects that died off.
 purge :: Double -> Scene -> Scene
-purge timeNow s = s {_gifs = Map.map (filter (isStillAlive timeNow . _afObject)) . _gifs $ s}
+purge timeNow scene =
+  let s = scene & gifs %~ Map.map (filter (\(AGIF _ o) -> isStillAlive timeNow (o ^. lifetime) (o ^. birth)))
+      s' = s & screen . behaviours %~ filter (\(_, lt, tob) -> isStillAlive timeNow tob lt)
+   in s'
