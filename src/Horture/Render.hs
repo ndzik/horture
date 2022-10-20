@@ -97,7 +97,7 @@ renderScreen t s = do
 applyScreenBehaviours :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
 applyScreenBehaviours t screen = do
   let bs = screen ^. behaviours
-      s = foldr (\(f, _, _) o -> f t o) screen bs
+      s = foldr (\(f, bt, _) o -> f (t-bt) o) screen bs
   return s
 
 trackScreen :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
