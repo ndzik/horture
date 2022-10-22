@@ -1,6 +1,7 @@
 module Twitch.Rest.Types
   ( GetCustomRewardsData (..),
     CreateCustomRewardBody (..),
+    GetUserInformation (..),
   )
 where
 
@@ -51,7 +52,23 @@ data CreateCustomRewardBody = CreateCustomRewardBody
   }
   deriving (Show)
 
+data GetUserInformation = GetUserInformation
+  { getuserinformationBroadcasterType :: !Text
+  , getuserinformationDescription :: !Text
+  , getuserinformationDisplayName :: !Text
+  , getuserinformationId :: !Text
+  , getuserinformationLogin :: !Text
+  , getuserinformationOfflineImageUrl :: !Text
+  , getuserinformationProfileImageUrl :: !Text
+  , getuserinformationType :: !Text
+  , getuserinformationViewCount :: !Int
+  , getuserinformationEmail :: !(Maybe Text)
+  , getuserinformationCreatedAt :: !Text
+  }
+  deriving (Show)
+
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("getcustomrewardsdata_" :: String)) . camelTo2 '_'} ''GetCustomRewardsData)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("getuserinformation_" :: String)) . camelTo2 '_'} ''GetUserInformation)
 $( deriveJSON
      defaultOptions
        { fieldLabelModifier = drop (length ("createcustomrewardbody_" :: String)) . camelTo2 '_',

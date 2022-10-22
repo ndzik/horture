@@ -8,8 +8,10 @@ module Twitch.Rest
     twitchTokenClient,
     TwitchTokenClient (..),
     TwitchChannelPointsClient (..),
-    AuthorizationToken(..),
+    AuthorizationToken (..),
     twitchChannelPointsClient,
+    TwitchUsersClient (..),
+    twitchUsersClient,
   )
 where
 
@@ -116,3 +118,27 @@ type CreateCustomReward =
     :> QueryParam' [Required, Strict] "broadcaster_id" Text
     :> ReqBody '[JSON] CreateCustomRewardBody
     :> PostAccepted '[JSON] (DataResponse [GetCustomRewardsData])
+
+newtype TwitchUsersClient = TwitchUsersClient
+  { getUsers ::
+      Maybe Text ->
+      [Text] ->
+      ClientM (DataResponse [GetUserInformation])
+  }
+
+twitchUsersClient :: Text -> AuthorizationToken -> TwitchUsersClient
+twitchUsersClient clientid at =
+  let _getUsers = client (Proxy @UsersApi)
+   in TwitchUsersClient
+        { getUsers = _getUsers clientid at
+        }
+
+type UsersApi = GetUsers
+
+type GetUsers =
+  "users"
+    :> Header' [Required, Strict] "Client-Id" Text
+    :> Header' [Required, Strict] "Authorization" AuthorizationToken
+    :> QueryParam "id" Text
+    :> QueryParams "login" Text
+    :> Get '[JSON] (DataResponse [GetUserInformation])
