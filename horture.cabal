@@ -64,15 +64,17 @@ library horture-lib
                             , Horture.EventSource.Random
                             , Horture.EventSource.Local
                             , Horture.EventSource.WebSocketClient
-                            , Twitch.Rest.Authentication
-                            , Twitch.Rest.Authorization
-                            , Twitch.Rest.Token
                             , Horture.Loader.Error
                             , Horture.Loader.Asset
                             , Horture.Loader.State
                             , Horture.Loader.Config
                             , Horture.Loader.TextureLoader
                             , Horture.Loader.FilePreloader
+                            , Twitch.Rest.Authentication
+                            , Twitch.Rest.Authorization
+                            , Twitch.Rest.Token
+                            , Twitch.Rest.Types
+                            , Twitch.Rest.DataResponse
                             , Twitch.EventSub.Condition
                             , Twitch.EventSub.Notification
                             , Twitch.EventSub.Event
