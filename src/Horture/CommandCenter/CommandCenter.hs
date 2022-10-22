@@ -187,7 +187,7 @@ prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
 runCommandCenter :: Config -> IO ()
-runCommandCenter (Config _ _ _ dir) = do
+runCommandCenter (Config _ _ _ _ dir) = do
   gifs <- makeAbsolute dir >>= loadDirectory
   preloadedGifs <-
     runPreloader (PLC dir) loadGifsInMemory >>= \case
