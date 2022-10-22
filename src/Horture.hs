@@ -55,6 +55,7 @@ import System.Exit
 hortureName :: String
 hortureName = "horture"
 
+-- | playScene plays the given scene in a Horture context.
 playScene :: (HortureLogger (Horture l)) => Scene -> Horture l ()
 playScene s = do
   setTime 0
@@ -213,11 +214,11 @@ initResources = do
   bindVertexArrayObject $= Just vao
   vbo <- genObjectName
   bindBuffer ArrayBuffer $= Just vbo
-  vsp <- loadShaderBS "vertex.shader" VertexShader hortureVertexShader
-  fsp <- loadShaderBS "fragment.shader" FragmentShader hortureFragmentShader
+  vsp <- loadShaderBS "mvp.shader" VertexShader mvpVertexShader
+  fsp <- loadShaderBS "display.shader" FragmentShader displayShader
   prog <- linkShaderProgram [vsp, fsp]
-  vspg <- loadShaderBS "gifvertex.shader" VertexShader hortureVertexGIF
-  fspg <- loadShaderBS "giffragment.shader" FragmentShader hortureFragmentGIF
+  vspg <- loadShaderBS "gifvertex.shader" VertexShader gifVertexShader
+  fspg <- loadShaderBS "giffragment.shader" FragmentShader gifFragmentShader
   gifProg <- linkShaderProgram [vspg, fspg]
   currentProgram $= Just prog
   veo <- genObjectName
