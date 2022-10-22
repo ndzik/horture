@@ -62,7 +62,11 @@ library horture-lib
                             , Horture.Server.Websocket
                             , Horture.EventSource.EventSource
                             , Horture.EventSource.Random
+                            , Horture.EventSource.Logger
                             , Horture.EventSource.Local
+                            , Horture.EventSource.Controller
+                            , Horture.EventSource.Controller.Controller
+                            , Horture.EventSource.Controller.TwitchController
                             , Horture.EventSource.WebSocketClient
                             , Horture.Loader.Error
                             , Horture.Loader.Asset

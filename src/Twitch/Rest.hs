@@ -8,6 +8,7 @@ module Twitch.Rest
     twitchTokenClient,
     TwitchTokenClient (..),
     TwitchChannelPointsClient (..),
+    AuthorizationToken(..),
     twitchChannelPointsClient,
   )
 where
