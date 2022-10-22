@@ -25,6 +25,7 @@ import System.Random.Stateful
   ( UniformRange (uniformRM),
     globalStdGen,
     randomM,
+    randomRM,
   )
 
 type StaticEffectRandomizerEnv = [FilePath]
@@ -46,6 +47,9 @@ runStaticEffectRandomizer = interpret $ \case
 uniformRM' :: (UniformRange a, LastMember IO effs) => a -> a -> Eff effs a
 uniformRM' lb ub = liftIO $ uniformRM (lb, ub) globalStdGen
 
+randomRM' :: (Random a, LastMember IO effs) => a -> a -> Eff effs a
+randomRM' lb ub = liftIO $ randomRM (lb, ub) globalStdGen
+
 -- | Generate a pseudo-random value using its `Random` instance.
 randomM' :: (LastMember IO effs, Random a) => Eff effs a
 randomM' = liftIO (randomM globalStdGen)
@@ -63,7 +67,26 @@ runAnyEffectRandomizer = interpret $ \case
 newRandomEffect ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Effect
-newRandomEffect = randomM' @_ @Float >>= \r -> if r < 0.5 then newRandomGif else newRandomScreenEffect
+newRandomEffect =
+  randomM' @_ @Float >>= \r ->
+    if r < 0.4
+      then newRandomGif
+      else
+        if r < 0.6
+          then newRandomScreenEffect
+          else newRandomShaderEffect
+
+newRandomShaderEffect ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Effect
+newRandomShaderEffect = AddShaderEffect <$> (Limited <$> uniformRM' 2 6) <*> newRandomShader
+
+newRandomShader ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs ShaderEffect
+newRandomShader = uniformRM' 0 (length effs - 1) <&> (effs !!)
+  where
+    effs = [Barrel, Blur, Stitch]
 
 newRandomScreenEffect ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
@@ -113,7 +136,7 @@ newRandomPulse = pulse <$> randomM' <*> randomM' <*> ((*) <$> uniformRM' 1 10 <*
 newRandomCircle ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Behaviour
-newRandomCircle = circle <$> ((*) <$> randomM' <*> uniformRM' 1 10)
+newRandomCircle = circle <$> ((*) <$> randomM' <*> randomRM' 1 3)
 
 shuffle :: [a] -> IO [a]
 shuffle xs = do

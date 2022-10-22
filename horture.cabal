@@ -36,7 +36,7 @@ library horture-lib
                             , Horture.Horture
                             , Horture.Logging
                             , Horture.X11
-                            , Horture.Shaders
+                            , Horture.Shader.Shader
                             , Horture.Error
                             , Horture.Command
                             , Horture.Events

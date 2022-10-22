@@ -1,9 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Horture.Render
   ( renderGifs,
-    renderScreen,
+    renderScene,
     scaleForAspectRatio,
     m44ToGLmatrix,
     identityM44,
@@ -17,13 +18,15 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
 import Foreign.Ptr
 import Foreign.Storable
 import Graphics.GLUtil.Camera3D as Util
-import Graphics.Rendering.OpenGL hiding (get, lookAt, scale)
+import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale)
 import Graphics.X11
 import Horture.Effect
+import Horture.Error (HortureError (HE))
 import Horture.Gif
 import Horture.Horture
 import Horture.Logging
@@ -43,6 +46,7 @@ renderGifs dt m = do
   modelUniform <- asks (^. gifProg . modelUniform)
   gifIndexUniform <- asks (^. gifProg . indexUniform)
   gifTextureUnit <- asks (^. gifProg . textureUnit)
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
   activeTexture $= gifTextureUnit
   currentProgram $= Just prog
   -- General preconditions are set. Render all GIFs of the same type at once.
@@ -61,7 +65,7 @@ renderGifs dt m = do
                   texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
               liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform modelUniform $=)
               uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
-              liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
+              drawBaseQuad
           )
             . _afObject
         )
@@ -79,25 +83,88 @@ indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxInd
       | (accumulatedTime + fromIntegral d) < timeSinceBirth = go gifDelays (accumulatedTime + fromIntegral d) (i + 1)
       | otherwise = i
 
--- | renderScreen renders the captured application window. It is assumed that
+-- | renderScene renders the captured application window. It is assumed that
 -- the horture texture was already initialized at this point.
-renderScreen :: (HortureLogger (Horture l)) => Double -> Object -> Horture l ()
-renderScreen t s = do
+renderScene :: (HortureLogger (Horture l)) => Double -> Scene -> Horture l ()
+renderScene t scene = do
+  let s = scene ^. screen
   backgroundProg <- asks (^. screenProg . shader)
-  screenTexUnit <- asks (^. screenProg . textureUnit)
-  screenTexObject <- asks (^. screenProg . textureObject)
   (HortureState dp _ pm dim) <- get
-  currentProgram $= Just backgroundProg
+  screenTexUnit <- asks (^. screenProg . textureUnit)
+  sourceTexObject <- asks (^. screenProg . textureObject)
+  -- Bind texture which we read from.
   activeTexture $= screenTexUnit
-  textureBinding Texture2D $= Just screenTexObject
+  textureBinding Texture2D $= Just sourceTexObject
+  captureApplicationFrame dp pm dim
+  -- Apply shaders to captured texture.
+  applySceneShaders t scene
+  -- Final renderpass rendering scene.
+  currentProgram $= Just backgroundProg
+  -- Apply behavioural effects to the scene itself.
   applyScreenBehaviours t s >>= trackScreen t >>= projectScreen
+  drawBaseQuad
+
+-- | Updates currently bound texture with the pixeldata of the frame for the
+-- captured application.
+captureApplicationFrame ::
+  (HortureLogger (Horture l)) =>
+  Display ->
+  Drawable ->
+  (Int, Int) ->
+  Horture l ()
+captureApplicationFrame dp pm dim =
   liftIO $ getWindowImage dp pm dim >>= updateWindowTexture dim
-  liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
+
+-- | Applies all shader effects in the current scene to the captured window.
+applySceneShaders :: (HortureLogger (Horture l)) => Double -> Scene -> Horture l ()
+applySceneShaders t scene = do
+  fb <- asks (^. screenProg . framebuffer)
+  -- Set custom framebuffer as target for read&writes.
+  bindFramebuffer Framebuffer $= fb
+  frontTexture <- asks (^. screenProg . textureObject)
+  backTexture <- asks (^. screenProg . backTextureObject)
+  -- Use tmp texture with correct dimensions to enable ping-ponging.
+  textureBinding Texture2D $= Just backTexture
+  let effs = scene ^. shaders
+  (finishedTex, _) <- foldrM (applyShaderEffect t) (frontTexture, backTexture) effs
+  -- Unbind post-processing framebuffer and bind default framebuffer for
+  -- on-screen rendering.
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
+  -- Bind final texture for final rendering.
+  textureBinding Texture2D $= Just finishedTex
+  liftIO $ generateMipmap' Texture2D
+
+applyShaderEffect ::
+  (HortureLogger (Horture l)) =>
+  Double ->
+  (ShaderEffect, Double, Lifetime) ->
+  (TextureObject, TextureObject) ->
+  Horture l (TextureObject, TextureObject)
+applyShaderEffect _t (eff, _birth, _lt) buffers = do
+  shaderProgs <-
+    asks (Map.lookup eff . (^. screenProg . shaderEffects)) >>= \case
+      Nothing -> throwError $ HE "unhandled shadereffect encountered"
+      Just sp -> return sp
+  foldrM go buffers shaderProgs
+  where
+    go prog (r, w) = do
+      -- Read from texture r.
+      textureBinding Texture2D $= Just r
+      genMipMap -- Mipmap generation has to happen for everyframe.
+      -- Write to texture w.
+      liftIO $ framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D w 0
+      currentProgram $= Just prog
+      drawBaseQuad
+      genMipMap
+      currentProgram $= Nothing
+      -- Flip textures for next effect. Read from written texture `w` and write to
+      -- read from texture `r`.
+      return (w, r)
 
 applyScreenBehaviours :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
 applyScreenBehaviours t screen = do
   let bs = screen ^. behaviours
-      s = foldr (\(f, _, _) o -> f t o) screen bs
+      s = foldr (\(f, bt, _) o -> f (t - bt) o) screen bs
   return s
 
 trackScreen :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
@@ -119,6 +186,12 @@ projectScreen s = do
       proj = projectionForAspectRatio (fromIntegral w, fromIntegral h)
   liftIO $ m44ToGLmatrix proj >>= (uniform projectionUniform $=)
   liftIO $ m44ToGLmatrix (model s') >>= (uniform modelUniform $=)
+
+drawBaseQuad :: Horture l ()
+drawBaseQuad = liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
+
+genMipMap :: Horture l ()
+genMipMap = liftIO $ generateMipmap' Texture2D
 
 -- | m44ToGLmatrix converts the row based representation of M44 to a GLmatrix
 -- representation which is column based.
@@ -172,7 +245,6 @@ updateWindowTexture (w, h) i = do
     (TexturePosition2D 0 0)
     (TextureSize2D (fromIntegral w) (fromIntegral h))
     pd
-  generateMipmap' Texture2D
   destroyImage i
 
 projectionForAspectRatio :: (Float, Float) -> M44 Float

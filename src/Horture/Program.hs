@@ -4,17 +4,32 @@
 module Horture.Program where
 
 import Control.Lens.TH
-import Data.Map
+import Data.Map.Strict
 import Graphics.Rendering.OpenGL
+import Horture.Effect
 import Horture.Gif
 
+-- | HortureScreenProgram contains all OpenGL informations to handle the
+-- rendering and displaying of the captured screen image.
 data HortureScreenProgram = HortureScreenProgram
-  { _hortureScreenProgramShader :: !Program,
+  { -- | Final screen program shader, which is responsible for finally
+    -- rendering the effect transformed captured image to the screen.
+    _hortureScreenProgramShader :: !Program,
+    -- | Preconfigured shader effects, which receive the captured screen as a
+    -- texture input. This texture could have been modified by by a previous
+    -- shader effect, s.t. ShaderEffects effectively compose. A shadereffect
+    -- can be comprised of multiple shaderprograms.
+    -- Shaderprograms are applied in reversed list order for efficiency
+    -- reasons.
+    _hortureScreenProgramShaderEffects :: !(Map ShaderEffect [Program]),
+    -- | All shaders receive the same uniforms.
     _hortureScreenProgramModelUniform :: !UniformLocation,
     _hortureScreenProgramProjectionUniform :: !UniformLocation,
     _hortureScreenProgramViewUniform :: !UniformLocation,
     _hortureScreenProgramTimeUniform :: !UniformLocation,
     _hortureScreenProgramTextureObject :: !TextureObject,
+    _hortureScreenProgramBackTextureObject :: !TextureObject,
+    _hortureScreenProgramFramebuffer :: !FramebufferObject,
     _hortureScreenProgramTextureUnit :: !TextureUnit
   }
   deriving (Show)
@@ -27,7 +42,6 @@ data HortureGifProgram = HortureGifProgram
     _hortureGifProgramTextureUnit :: !TextureUnit
   }
   deriving (Show)
-
 
 makeFields ''HortureScreenProgram
 makeFields ''HortureGifProgram
