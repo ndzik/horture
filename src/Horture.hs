@@ -29,6 +29,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Bits
 import qualified Data.Map.Strict as Map
+import Data.Text (pack)
 import Data.Word
 import Foreign.C.String
 import Foreign.C.Types
@@ -71,7 +72,8 @@ playScene s = do
       renderGifs dt . _gifs $ s
       updateView
       s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
-      go startTime s'
+      go startTime s' `catchError` handleHortureError >> go startTime (Just s)
+    handleHortureError (HE err) = logError . pack $ err
 
 clearView :: Horture l ()
 clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
