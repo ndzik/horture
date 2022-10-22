@@ -8,10 +8,14 @@
 
 module Horture.EventSource.Controller.TwitchController
   ( handleTwitchEventController,
+    runHortureTwitchEventController,
   )
 where
 
+import Colog (Severity (..))
+import Control.Concurrent.Chan.Synchronous
 import Control.Lens
+import Control.Monad (void)
 import Control.Monad.Freer
 import Control.Monad.Freer.State
 import Control.Monad.IO.Class (MonadIO (liftIO))
@@ -35,6 +39,20 @@ data TwitchControllerState = TCS
   }
 
 makeFields ''TwitchControllerState
+
+runHortureTwitchEventController ::
+  TwitchControllerState ->
+  Chan (Severity, Text) ->
+  Chan EventControllerInput ->
+  Chan EventControllerResponse ->
+  IO ()
+runHortureTwitchEventController s logChan inputChan responseChan =
+  void $
+    controlEventSource inputChan responseChan
+      & handleTwitchEventController
+      & runHortureChannelLogger logChan
+      & runState s
+      & runM
 
 handleTwitchEventController ::
   (Members '[State TwitchControllerState, Logger] effs, LastMember IO effs) =>
