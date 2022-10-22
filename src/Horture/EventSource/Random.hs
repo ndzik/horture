@@ -86,7 +86,7 @@ newRandomShader ::
   Eff effs ShaderEffect
 newRandomShader = uniformRM' 0 (length effs - 1) <&> (effs !!)
   where
-    effs = [Barrel, Blur, Stitch]
+    effs = [Barrel, Blur, Stitch, Flashbang]
 
 newRandomScreenEffect ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>

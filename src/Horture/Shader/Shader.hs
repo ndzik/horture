@@ -11,6 +11,7 @@ module Horture.Shader.Shader
     stitchShader,
     blurVShader,
     blurHShader,
+    flashbangShader,
     gifFragmentShader,
     gifVertexShader,
   )
@@ -247,5 +248,20 @@ vec4 blurHorizontal(sampler2D tex, vec2 uv) {
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
   frag_colour = blurHorizontal(texture1, uv);
+}
+    |]
+
+-- | flashbangShader simply makes the screen bright and white.
+flashbangShader :: ByteString
+flashbangShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+uniform sampler2D texture1;
+layout(location = 0) out vec4 frag_colour;
+
+void main() {
+  frag_colour = vec4(1, 1, 1, 1);
 }
     |]
