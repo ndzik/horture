@@ -28,6 +28,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Bits
+import qualified Data.Map.Strict as Map
 import Data.Word
 import Foreign.C.String
 import Foreign.C.Types
@@ -40,15 +41,16 @@ import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11 hiding (resizeWindow)
 import Graphics.X11.Xlib.Extras
 import Graphics.X11.Xlib.Types
+import Horture.Effect
 import Horture.Error
 import Horture.Events
-import Horture.Gif
 import Horture.Horture
 import Horture.Logging
 import Horture.Program
+import Horture.Gif
 import Horture.Render
 import Horture.Scene
-import Horture.Shaders
+import Horture.Shader.Shader
 import Horture.State
 import System.Exit
 
@@ -65,14 +67,14 @@ playScene s = do
     go startTime (Just s) = do
       dt <- deltaTime startTime
       clearView
-      renderScreen dt . _screen $ s
+      renderScene dt s
       renderGifs dt . _gifs $ s
       updateView
       s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
       go startTime s'
 
 clearView :: Horture l ()
-clearView = liftIO $ GL.clear [ColorBuffer]
+clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
 
 updateView :: Horture l ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
@@ -208,7 +210,10 @@ shutdown win = do
   GLFW.terminate
   void exitSuccess
 
-initResources :: IO (VertexArrayObject, BufferObject, BufferObject, Program, Program)
+-- TODO: Move HortureScreenProgram & HortureGifProgram initialisation code into
+-- this function and return the compound structs instead of this ugly big
+-- tuple.
+initResources :: IO (VertexArrayObject, BufferObject, BufferObject, Program, Program, Map.Map ShaderEffect [Program])
 initResources = do
   vao <- genObjectName
   bindVertexArrayObject $= Just vao
@@ -217,13 +222,21 @@ initResources = do
   vsp <- loadShaderBS "mvp.shader" VertexShader mvpVertexShader
   fsp <- loadShaderBS "display.shader" FragmentShader displayShader
   prog <- linkShaderProgram [vsp, fsp]
+  effs <- loadShaderBS "passthrough.shader" VertexShader passthroughVertexShader >>= compileAndLinkShaderEffects
   vspg <- loadShaderBS "gifvertex.shader" VertexShader gifVertexShader
   fspg <- loadShaderBS "giffragment.shader" FragmentShader gifFragmentShader
   gifProg <- linkShaderProgram [vspg, fspg]
   currentProgram $= Just prog
   veo <- genObjectName
   bindBuffer ArrayBuffer $= Just veo
-  return (vao, vbo, veo, prog, gifProg)
+  return (vao, vbo, veo, prog, gifProg, effs)
+  where
+    compileAndLinkShaderEffects vsp = do
+      barrelProg <- loadShaderBS "barrel.shader" FragmentShader barrelShader >>= linkShaderProgram . (: [vsp])
+      stitchProg <- loadShaderBS "stitch.shader" FragmentShader stitchShader >>= linkShaderProgram . (: [vsp])
+      blurVProg <- loadShaderBS "blurv.shader" FragmentShader blurVShader >>= linkShaderProgram . (: [vsp])
+      blurHProg <- loadShaderBS "blurv.shader" FragmentShader blurHShader >>= linkShaderProgram . (: [vsp])
+      return $ Map.fromList [(Barrel, [barrelProg]), (Stitch, [stitchProg]), (Blur, [blurVProg, blurHProg])]
 
 data SizeUpdate = GLFWUpdate !(Int, Int) | XUpdate !(CInt, CInt) deriving (Show, Eq)
 

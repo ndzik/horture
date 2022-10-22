@@ -11,6 +11,7 @@ module Horture.Scene
     gifCache,
     afGif,
     afObject,
+    shaders,
   )
 where
 
@@ -29,8 +30,16 @@ import Linear.V4
 data Scene = Scene
   { _screen :: !Object,
     _gifs :: !(Map.Map GifIndex [ActiveGif]),
-    _gifCache :: !(Map.Map FilePath HortureGif)
+    _gifCache :: !(Map.Map FilePath HortureGif),
+    _shaders :: ![(ShaderEffect, Double, Lifetime)]
   }
+
+instance Default Scene where
+  def = Scene { _screen = def
+              , _gifs = Map.empty
+              , _gifCache = Map.empty
+              , _shaders = []
+              }
 
 -- ActiveGif is a GIF which is about or currently acting in a scene.
 data ActiveGif = AGIF
@@ -47,8 +56,7 @@ apply :: Double -> Double -> Effect -> Scene -> Scene
 apply _timeNow _dt Noop s = s
 apply timeNow _dt (AddGif i lt pos bs) s = addGif i timeNow lt (zip3 bs (repeat timeNow) (repeat lt)) pos s
 apply timeNow _dt (AddScreenBehaviour lt bs) s = addScreenBehaviour timeNow lt (zip3 bs (repeat timeNow) (repeat lt)) s
-apply _timeNow _dt BlazeIt s = s
-apply _timeNow _dt Flashbang s = s
+apply timeNow _dt (AddShaderEffect lt eff) s = addShaderEffect timeNow lt eff s
 
 -- applyAll composes all given effects at the given time using the time
 -- since the last frame as a progression point.
@@ -81,10 +89,16 @@ addScreenBehaviour _timeNow _lt bs scene =
   let s = scene & screen . behaviours %~ (++ bs)
    in s
 
+addShaderEffect :: Double -> Lifetime -> ShaderEffect -> Scene -> Scene
+addShaderEffect timeNow lt eff scene =
+  let s = scene & shaders %~ ((eff, timeNow, lt) :)
+   in s
+
 -- | purge purges the given scene using timenow by removing all transient
 -- objects and effects that died off.
 purge :: Double -> Scene -> Scene
 purge timeNow scene =
   let s = scene & gifs %~ Map.map (filter (\(AGIF _ o) -> isStillAlive timeNow (o ^. lifetime) (o ^. birth)))
-      s' = s & screen . behaviours %~ filter (\(_, lt, tob) -> isStillAlive timeNow tob lt)
-   in s'
+      s' = s & screen . behaviours %~ filter (\(_, tob, lt) -> isStillAlive timeNow lt tob)
+      s'' = s' & shaders %~ filter (\(_, tob, lt) -> isStillAlive timeNow lt tob)
+   in s''

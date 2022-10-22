@@ -40,7 +40,7 @@ import Prelude hiding (readFile)
 run :: [(FilePath, Asset)] -> Maybe (Chan Text) -> Chan Event -> Window -> IO ()
 run gifs logChan evChan w = do
   glW <- initGLFW
-  (vao, vbo, veo, prog, gifProg) <- initResources
+  (vao, vbo, veo, prog, gifProg, effs) <- initResources
   dp <- openDisplay ""
   let ds = defaultScreen dp
   root <- rootWindow dp ds
@@ -103,7 +103,6 @@ run gifs logChan evChan w = do
 
   GL.clearColor $= Color4 0.1 0.1 0.1 1
 
-  screenTexObject <- genObjectName @TextureObject
   -- CompositeRedirectManual to avoid unnecessarily drawing the captured
   -- window, which is overlayed anyway by our application.
   _ <- xCompositeRedirectWindow dp w CompositeRedirectManual
@@ -113,8 +112,10 @@ run gifs logChan evChan w = do
       wh = wa_height attr
   GLFW.setFramebufferSizeCallback glW (Just resizeWindow')
 
+  -- Initialize source texture holding captured window image.
+  renderedTexture <- genObjectName
   let !anyPixelData = PixelData BGRA UnsignedByte nullPtr
-  textureBinding Texture2D $= Just screenTexObject
+  textureBinding Texture2D $= Just renderedTexture
   texImage2D
     Texture2D
     NoProxy
@@ -123,6 +124,17 @@ run gifs logChan evChan w = do
     (TextureSize2D (fromIntegral ww) (fromIntegral wh))
     0
     anyPixelData
+
+  -- FRAMEBUFFER SETUP BEGIN
+  -- fb is the framebuffer, grouping our textures.
+  fb <- genObjectName
+  bindFramebuffer Framebuffer $= fb
+
+  -- Configure framebuffer. We will directly bind our source texture as a
+  -- colorattachment.
+  framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D renderedTexture 0
+  drawBuffers $= [FBOColorAttachment 0]
+  -- FRAMEBUFFER SETUP END
 
   let proj = curry projectionForAspectRatio (fromIntegral ww) (fromIntegral wh)
   projectionUniform <- uniformLocation prog "proj"
@@ -148,7 +160,7 @@ run gifs logChan evChan w = do
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
 
   let scene =
-        Scene
+        def
           { _screen = def,
             _gifs = Map.empty,
             _gifCache = hortureGifs
@@ -165,11 +177,13 @@ run gifs logChan evChan w = do
           { _screenProg =
               HortureScreenProgram
                 { _hortureScreenProgramShader = prog,
+                  _hortureScreenProgramShaderEffects = effs,
                   _hortureScreenProgramModelUniform = modelUniform,
                   _hortureScreenProgramProjectionUniform = projectionUniform,
                   _hortureScreenProgramViewUniform = viewUniform,
                   _hortureScreenProgramTimeUniform = timeUniform,
-                  _hortureScreenProgramTextureObject = screenTexObject,
+                  _hortureScreenProgramFramebuffer = fb,
+                  _hortureScreenProgramTextureObject = renderedTexture,
                   _hortureScreenProgramTextureUnit = screenTextureUnit
                 },
             _gifProg =

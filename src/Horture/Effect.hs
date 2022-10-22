@@ -1,5 +1,6 @@
 module Horture.Effect
   ( Effect (..),
+    ShaderEffect (..),
     GifIndex,
     Position,
     FromText (..),
@@ -18,23 +19,26 @@ type Position = V3 Float
 data Effect
   = AddGif !GifIndex !Lifetime !Position ![Behaviour]
   | AddScreenBehaviour !Lifetime ![Behaviour]
-  | BlazeIt
-  | Flashbang
+  | AddShaderEffect !Lifetime !ShaderEffect
   | Noop
+
+data ShaderEffect
+  = Barrel
+  | Blur
+  | Stitch
+  | Flashbang
+  deriving (Eq, Ord, Show)
 
 instance Show Effect where
   show (AddGif fp lt pos _) = unwords ["AddGif", takeFileName fp, show lt, show pos]
   show (AddScreenBehaviour _ _) = "AddScreenBehaviour"
-  show BlazeIt = "BlazeIt"
-  show Flashbang = "Flashbang"
+  show (AddShaderEffect lt eff) = unwords ["AddShaderEffect", show lt, show eff]
   show Noop = "Noop"
 
 class FromText d where
   fromText :: Text -> d
 
 instance FromText Effect where
-  fromText "BlazeIt" = BlazeIt
-  fromText "Flashbang" = Flashbang
   fromText "AddGif" = AddGif "" (Limited 8) (V3 0 0 0) []
   fromText "AddScreenBehaviour" = AddScreenBehaviour (Limited 8) []
   fromText _ = Noop
