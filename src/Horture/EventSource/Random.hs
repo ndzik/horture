@@ -63,7 +63,26 @@ runAnyEffectRandomizer = interpret $ \case
 newRandomEffect ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Effect
-newRandomEffect = randomM' @_ @Float >>= \r -> if r < 0.5 then newRandomGif else newRandomScreenEffect
+newRandomEffect =
+  randomM' @_ @Float >>= \r ->
+    if r < 0.6
+      then newRandomGif
+      else
+        if r < 0.9
+          then newRandomScreenEffect
+          else newRandomShaderEffect
+
+newRandomShaderEffect ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Effect
+newRandomShaderEffect = AddShaderEffect <$> (Limited <$> uniformRM' 2 6) <*> newRandomShader
+
+newRandomShader ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs ShaderEffect
+newRandomShader = uniformRM' 0 (length effs - 1) <&> (effs !!)
+  where
+    effs = [Barrel, Blur, Stitch]
 
 newRandomScreenEffect ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
