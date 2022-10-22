@@ -25,6 +25,7 @@ import System.Random.Stateful
   ( UniformRange (uniformRM),
     globalStdGen,
     randomM,
+    randomRM,
   )
 
 type StaticEffectRandomizerEnv = [FilePath]
@@ -46,6 +47,9 @@ runStaticEffectRandomizer = interpret $ \case
 uniformRM' :: (UniformRange a, LastMember IO effs) => a -> a -> Eff effs a
 uniformRM' lb ub = liftIO $ uniformRM (lb, ub) globalStdGen
 
+randomRM' :: (Random a, LastMember IO effs) => a -> a -> Eff effs a
+randomRM' lb ub = liftIO $ randomRM (lb, ub) globalStdGen
+
 -- | Generate a pseudo-random value using its `Random` instance.
 randomM' :: (LastMember IO effs, Random a) => Eff effs a
 randomM' = liftIO (randomM globalStdGen)
@@ -65,10 +69,10 @@ newRandomEffect ::
   Eff effs Effect
 newRandomEffect =
   randomM' @_ @Float >>= \r ->
-    if r < 0.6
+    if r < 0.4
       then newRandomGif
       else
-        if r < 0.9
+        if r < 0.6
           then newRandomScreenEffect
           else newRandomShaderEffect
 
@@ -132,7 +136,7 @@ newRandomPulse = pulse <$> randomM' <*> randomM' <*> ((*) <$> uniformRM' 1 10 <*
 newRandomCircle ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Behaviour
-newRandomCircle = circle <$> ((*) <$> randomM' <*> uniformRM' 1 10)
+newRandomCircle = circle <$> ((*) <$> randomM' <*> randomRM' 1 3)
 
 shuffle :: [a] -> IO [a]
 shuffle xs = do
