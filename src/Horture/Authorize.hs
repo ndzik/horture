@@ -45,7 +45,10 @@ authorize pathToConfig = do
       (AccessTokenScopes ["channel:redemptions:manage"])
   case res of
     Nothing -> print @String "Unable to authorize user"
-    Just _ -> print @String "Success authorizing user, have fun horturing"
+    Just creds -> do
+      print @String "Add the following token to your `$CONFIG/horture/config.json` with the key: \"twitch_auth_token\"."
+      print creds
+      print @String "Success authorizing user, have fun horturing"
 
 -- | retrieveUserAccessToken follows the implicit client-credentials flow,
 -- where the user is directed to `https://id.twitch.tv/oauth2/authorize` and
