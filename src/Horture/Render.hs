@@ -119,25 +119,12 @@ captureApplicationFrame dp pm dim =
 applySceneShaders :: (HortureLogger (Horture l)) => Double -> Scene -> Horture l ()
 applySceneShaders t scene = do
   fb <- asks (^. screenProg . framebuffer)
-  (ww, wh) <- gets (^. dim)
   -- Set custom framebuffer as target for read&writes.
   bindFramebuffer Framebuffer $= fb
   frontTexture <- asks (^. screenProg . textureObject)
-  -- Create tmp texture with correct dimensions to enable ping-ponging.
-  -- NOTE: This can be made more efficient by initialising this texture once,
-  -- like the sourcetexture, and updating only its dimensions when requried.
-  backTexture <- genObjectName
+  backTexture <- asks (^. screenProg . backTextureObject)
+  -- Use tmp texture with correct dimensions to enable ping-ponging.
   textureBinding Texture2D $= Just backTexture
-  let anyPixelData = PixelData BGRA UnsignedByte nullPtr
-  liftIO $
-    texImage2D
-      Texture2D
-      NoProxy
-      0
-      RGBA'
-      (TextureSize2D (fromIntegral ww) (fromIntegral wh))
-      0
-      anyPixelData
   let effs = scene ^. shaders
   (finishedTex, _) <- foldrM (applyShaderEffect t) (frontTexture, backTexture) effs
   -- Unbind post-processing framebuffer and bind default framebuffer for

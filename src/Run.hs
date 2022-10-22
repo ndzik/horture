@@ -113,8 +113,18 @@ run gifs logChan evChan w = do
   GLFW.setFramebufferSizeCallback glW (Just resizeWindow')
 
   -- Initialize source texture holding captured window image.
-  renderedTexture <- genObjectName
+  backTexture <- genObjectName
   let !anyPixelData = PixelData BGRA UnsignedByte nullPtr
+  textureBinding Texture2D $= Just backTexture
+  texImage2D
+    Texture2D
+    NoProxy
+    0
+    RGBA'
+    (TextureSize2D (fromIntegral ww) (fromIntegral wh))
+    0
+    anyPixelData
+  renderedTexture <- genObjectName
   textureBinding Texture2D $= Just renderedTexture
   texImage2D
     Texture2D
@@ -184,6 +194,7 @@ run gifs logChan evChan w = do
                   _hortureScreenProgramTimeUniform = timeUniform,
                   _hortureScreenProgramFramebuffer = fb,
                   _hortureScreenProgramTextureObject = renderedTexture,
+                  _hortureScreenProgramBackTextureObject = backTexture,
                   _hortureScreenProgramTextureUnit = screenTextureUnit
                 },
             _gifProg =

@@ -28,6 +28,7 @@ data HortureScreenProgram = HortureScreenProgram
     _hortureScreenProgramViewUniform :: !UniformLocation,
     _hortureScreenProgramTimeUniform :: !UniformLocation,
     _hortureScreenProgramTextureObject :: !TextureObject,
+    _hortureScreenProgramBackTextureObject :: !TextureObject,
     _hortureScreenProgramFramebuffer :: !FramebufferObject,
     _hortureScreenProgramTextureUnit :: !TextureUnit
   }

@@ -45,10 +45,10 @@ import Graphics.X11.Xlib.Types
 import Horture.Effect
 import Horture.Error
 import Horture.Events
+import Horture.Gif
 import Horture.Horture
 import Horture.Logging
 import Horture.Program
-import Horture.Gif
 import Horture.Render
 import Horture.Scene
 import Horture.Shader.Shader
@@ -95,6 +95,7 @@ pollXEvents = do
   glWin <- asks _glWin
   modelUniform <- asks (^. screenProg . modelUniform)
   projectionUniform <- asks (^. screenProg . projectionUniform)
+  backTexObj <- asks (^. screenProg . backTextureObject)
   screenTexObj <- asks (^. screenProg . textureObject)
   screenTexUnit <- asks (^. screenProg . textureUnit)
   xWin <- gets _xWin
@@ -123,6 +124,16 @@ pollXEvents = do
               -- Update texture bindings!
               activeTexture $= screenTexUnit
               textureBinding Texture2D $= Just screenTexObj
+              texImage2D
+                Texture2D
+                NoProxy
+                0
+                RGBA'
+                (TextureSize2D (fromIntegral ev_width) (fromIntegral ev_height))
+                0
+                anyPixelData
+              generateMipmap' Texture2D
+              textureBinding Texture2D $= Just backTexObj
               texImage2D
                 Texture2D
                 NoProxy
