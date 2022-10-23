@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Horture.CommandCenter.CommandCenter
@@ -12,12 +13,13 @@ import Brick.Widgets.Border
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center
 import Brick.Widgets.List
-import Control.Concurrent (forkIO, forkOS, killThread)
+import Control.Concurrent (ThreadId, forkIO, forkOS, killThread)
 import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Except
 import Data.Default
 import Data.List (intercalate)
-import Data.Text (Text)
+import qualified Data.Map.Strict as Map
+import Data.Text (Text, pack)
 import Graphics.Vty hiding (Config, Event)
 import Graphics.X11 (Window)
 import Horture
@@ -25,21 +27,33 @@ import Horture.Command
 import Horture.CommandCenter.Event
 import Horture.CommandCenter.State
 import Horture.Config
+import Horture.Effect
 import Horture.Event
+import Horture.EventSource.Controller
 import Horture.EventSource.Local
+import Horture.EventSource.WebSocketClient
 import Horture.Loader
+import Horture.Object
+import Linear.V3
+import Network.HTTP.Client (defaultManagerSettings, newManager)
+import Network.HTTP.Client.TLS
+import Network.WebSockets (runClient)
 import Numeric (showHex)
 import Run
+import Servant.Client (mkClientEnv, runClientM)
+import Servant.Client.Core.BaseUrl
 import System.Directory
 import System.Exit (exitFailure)
+import Text.Wrap
+import Twitch.Rest
+import Twitch.Rest.DataResponse
+import Twitch.Rest.Types
+import Wuss (runSecureClient)
 
 data Name
   = Main
   | AssetList
   deriving (Ord, Show, Eq)
-
--- UI should be:
---
 
 -- | |----------------------------------------|
 --   | Captured Window Title + ID             |
@@ -94,7 +108,7 @@ availableAssetsUI fs = renderList (\_selected el -> str el) False $ list AssetLi
 
 runningLogUI :: [Text] -> Widget Name
 runningLogUI [] = center (str "No logs available")
-runningLogUI log = padBottom Max . vBox . map txtWrap $ log
+runningLogUI log = padBottom Max . vBox . map (txtWrapWith (defaultWrapSettings {breakLongWords = True})) $ log
 
 metainfoUI :: Widget Name
 metainfoUI = center (str "No metainformation available")
@@ -107,6 +121,7 @@ hotkeyUI =
           " | "
           [ "<g>: Select window to capture",
             "<q>: Stop window capture",
+            "<r>: Refresh EventSource events",
             "<esc>: Exit horture"
           ]
     )
@@ -117,6 +132,7 @@ appEvent (VtyEvent (EvKey (KChar 'k') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'l') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'i') [])) = return ()
+appEvent (VtyEvent (EvKey (KChar 'r') [])) = gets _ccControllerChans >>= refreshEventSource
 appEvent (VtyEvent (EvKey (KChar 'g') [])) = grabHorture
 appEvent (VtyEvent (EvKey (KChar 'q') [])) = stopHorture
 appEvent (VtyEvent (EvKey KEsc [])) = stopApplication
@@ -128,9 +144,18 @@ handleCCEvent (CCLog msg) = modify (\cs -> cs {_ccLog = msg : _ccLog cs})
 
 stopApplication :: EventM Name CommandCenterState ()
 stopApplication = do
+  gets _ccControllerChans >>= terminateEventSource
   gets _ccEventChan >>= \case
     Nothing -> halt
     Just chan -> writeExit chan >> halt
+
+terminateEventSource ::
+  Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
+  EventM Name CommandCenterState ()
+terminateEventSource Nothing = return ()
+terminateEventSource (Just (ic, rc)) =
+  liftIO (writeChan ic InputTerminate)
+    >> liftIO (readChan rc) >>= handleEventControllerResponse
 
 stopHorture :: EventM Name CommandCenterState ()
 stopHorture = do
@@ -148,20 +173,50 @@ stopHorture = do
 writeExit :: Chan Event -> EventM Name CommandCenterState ()
 writeExit chan = liftIO $ writeChan chan (EventCommand Exit)
 
+-- | Refresh the registered events on the connected eventsource, if any is
+-- connected.
+refreshEventSource ::
+  Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
+  EventM Name CommandCenterState ()
+refreshEventSource Nothing = logInfo' "No EventSource controller available"
+refreshEventSource (Just (ic, rc)) = do
+  liftIO (writeChan ic InputPurgeAll) >> liftIO (readChan rc) >>= handleEventControllerResponse
+  gifs <- gets _ccPreloadedGifs
+  let gifEffs = map (\(fp, _) -> AddGif fp Forever (V3 0 0 0) []) gifs
+      shaderEffs = map (AddShaderEffect Forever) [Barrel, Blur, Stitch, Flashbang]
+      allEffs = gifEffs ++ [AddScreenBehaviour Forever []] ++ shaderEffs
+  mapM_
+    ( \eff ->
+        do
+          liftIO (writeChan ic (InputEnable (toTitle eff, eff)))
+          >> liftIO (readChan rc) >>= handleEventControllerResponse
+    )
+    allEffs
+  liftIO (writeChan ic InputListEvents) >> liftIO (readChan rc) >>= handleEventControllerResponse
+
+handleEventControllerResponse :: EventControllerResponse -> EventM Name CommandCenterState ()
+handleEventControllerResponse (ListEvents effs) = do
+  logInfo' $ "ListingEventSource: " <> (pack . show $ effs)
+  modify (\cs -> cs {_ccRegisteredEffects = Map.fromList effs})
+handleEventControllerResponse (Enable _itWorked) = return ()
+handleEventControllerResponse (PurgeAll _itWorked) = return ()
+
+logInfo' :: Text -> EventM Name CommandCenterState ()
+logInfo' msg = handleCCEvent (CCLog msg)
+
 grabHorture :: EventM Name CommandCenterState ()
 grabHorture = do
   brickChanM <- gets _brickEventChan
   logChan <- liftIO $ newChan @Text
   evChan <- liftIO $ newChan @Event
-  timeout <- gets _ccTimeout
-  gifs <- gets _ccGifs
   plg <- gets _ccPreloadedGifs
+  hurl <- gets _ccHortureUrl
   liftIO x11UserGrabWindow >>= \case
     Nothing -> return ()
     Just res@(_, w) -> do
       case brickChanM of
         Just brickChan -> do
-          evSourceTID <- liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
+          evSourceTID <- spawnEventSource hurl evChan
           _ <- liftIO . forkOS $ run plg (Just logChan) evChan w
           logSourceTID <- liftIO . forkIO . forever $ do
             readChan logChan >>= writeBChan brickChan . CCLog
@@ -172,6 +227,17 @@ grabHorture = do
           { _ccEventChan = Just evChan,
             _ccCapturedWin = Just res
           }
+
+spawnEventSource :: Maybe BaseUrl -> Chan Event -> EventM Name CommandCenterState ThreadId
+spawnEventSource Nothing evChan = do
+  timeout <- gets _ccTimeout
+  gifs <- gets _ccGifs
+  liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
+spawnEventSource (Just (BaseUrl scheme host port path)) evChan = do
+  registeredEffs <- gets _ccRegisteredEffects
+  case scheme of
+    Https -> liftIO . forkIO $ runSecureClient host (fromIntegral port) path (hortureWSStaticClientApp evChan registeredEffs)
+    Http -> liftIO . forkIO $ runClient host port path (hortureWSStaticClientApp evChan registeredEffs)
 
 app :: App CommandCenterState CommandCenterEvent Name
 app =
@@ -186,14 +252,52 @@ app =
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
-runCommandCenter :: Config -> IO ()
-runCommandCenter (Config _ _ _ dir) = do
+runCommandCenter :: Bool -> Config -> IO ()
+runCommandCenter mockMode (Config cid _ helixApi mauth _ dir) = do
   gifs <- makeAbsolute dir >>= loadDirectory
   preloadedGifs <-
     runPreloader (PLC dir) loadGifsInMemory >>= \case
       Left err -> print err >> exitFailure
       Right plg -> return plg
   appChan <- newBChan 10
+  controllerChans <-
+    if mockMode
+      then return Nothing
+      else do
+        auth <- case mauth of
+          Just auth -> return auth
+          Nothing -> error "No AuthorizationToken available, authorize Horture first"
+
+        mgr <-
+          newManager =<< case baseUrlScheme helixApi of
+            Https -> return tlsManagerSettings
+            Http -> return defaultManagerSettings
+        let TwitchUsersClient {getUsers} = twitchUsersClient cid (AuthorizationToken auth)
+            clientEnv = mkClientEnv mgr helixApi
+        res <- runClientM (getUsers Nothing []) clientEnv
+        uid <- case res of
+          Left err -> do
+            print @String "Unabled to get your twitch-id, aborting:"
+            error . show $ err
+          Right (DataResponse []) -> do
+            error "Unabled to get your twitch-id, twitch send unexpected response."
+          Right (DataResponse (u : _)) -> return . getuserinformationId $ u
+
+        let channelPointsClient = twitchChannelPointsClient cid (AuthorizationToken auth)
+        controllerInputChan <- newChan @EventControllerInput
+        controllerResponseChan <- newChan @EventControllerResponse
+        void . forkIO $ do
+          logChan <- newChan @CommandCenterEvent
+          logSourceTID <- forkIO . forever $ do
+            readChan logChan >>= writeBChan appChan
+          runHortureTwitchEventController
+            (TCS channelPointsClient uid clientEnv Map.empty)
+            logChan
+            controllerInputChan
+            controllerResponseChan
+          -- Clean up glue-thread.
+          killThread logSourceTID
+        return . Just $ (controllerInputChan, controllerResponseChan)
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
   void $
@@ -205,5 +309,6 @@ runCommandCenter (Config _ _ _ dir) = do
       def
         { _ccGifs = gifs,
           _ccPreloadedGifs = preloadedGifs,
+          _ccControllerChans = controllerChans,
           _brickEventChan = Just appChan
         }

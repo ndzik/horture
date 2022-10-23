@@ -3,9 +3,9 @@
 module Main (main) where
 
 import Horture.Authorize
-import Horture.Path
 import Horture.CommandCenter.CommandCenter
 import Horture.Config
+import Horture.Path
 import Options.Applicative
 import System.Exit (exitFailure)
 
@@ -39,6 +39,7 @@ main = execParser opts >>= handleParams
 
 data HortureParams = HortureParams
   { _config :: !FilePath,
+    _debug :: !Bool,
     _authorize :: !Bool
   }
   deriving (Show)
@@ -54,14 +55,23 @@ cmdParser =
           <> value "~/.config/horture/config.json"
       )
     <*> switch
+      ( long "mock"
+          <> short 'm'
+          <> showDefault
+          <> help "Mock mode, will not use the real twitch API."
+      )
+    <*> switch
       ( long "authorize"
           <> short 'a'
-          <> help "Authorize horture with for your twitch account"
+          <> showDefault
+          <> help "Authorize horture with for your twitch account."
       )
 
 handleParams :: HortureParams -> IO ()
-handleParams (HortureParams fp False) =
+handleParams (HortureParams fp mockMode wantAuth) =
   resolvePath fp >>= parseHortureClientConfig >>= \case
-    Just cfg -> runCommandCenter cfg
-    Nothing -> print "invalid client config" >> exitFailure
-handleParams (HortureParams fp True) = authorize fp
+    Nothing -> print "invalid horture client config" >> exitFailure
+    Just cfg ->
+      if wantAuth
+        then authorize cfg
+        else runCommandCenter mockMode cfg

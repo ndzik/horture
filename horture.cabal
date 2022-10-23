@@ -53,26 +53,32 @@ library horture-lib
                             , Twitch
                             , Twitch.EventSub
                             , Twitch.Rest
-                            , Run
-
-    -- Modules included in this library but not exported.
-    other-modules:            Horture.Server.Server
                             , Horture.Server.Config
                             , Horture.Server.Message
                             , Horture.Server.Websocket
-                            , Horture.EventSource.EventSource
+                            , Horture.Server.Server
+                            , Run
+
+    -- Modules included in this library but not exported.
+    other-modules:          Horture.EventSource.EventSource
                             , Horture.EventSource.Random
+                            , Horture.EventSource.Logger
                             , Horture.EventSource.Local
+                            , Horture.EventSource.Controller
+                            , Horture.EventSource.Controller.Controller
+                            , Horture.EventSource.Controller.TwitchController
                             , Horture.EventSource.WebSocketClient
-                            , Twitch.Rest.Authentication
-                            , Twitch.Rest.Authorization
-                            , Twitch.Rest.Token
                             , Horture.Loader.Error
                             , Horture.Loader.Asset
                             , Horture.Loader.State
                             , Horture.Loader.Config
                             , Horture.Loader.TextureLoader
                             , Horture.Loader.FilePreloader
+                            , Twitch.Rest.Authentication
+                            , Twitch.Rest.Authorization
+                            , Twitch.Rest.Token
+                            , Twitch.Rest.Types
+                            , Twitch.Rest.DataResponse
                             , Twitch.EventSub.Condition
                             , Twitch.EventSub.Notification
                             , Twitch.EventSub.Event
@@ -96,6 +102,7 @@ library horture-lib
     build-depends:          base ^>=4.14.3.0
                             , X11
                             , text
+                            , word-wrap
                             , raw-strings-qq
                             , aeson
                             , freer-simple
@@ -110,6 +117,7 @@ library horture-lib
                             , servant-client
                             , servant-client-core
                             , http-client
+                            , http-client-tls
                             , async
                             , memory
                             , bytestring
@@ -135,6 +143,7 @@ library horture-lib
                             , wai-logger
                             , wai-websockets
                             , websockets
+                            , wuss
                             , http-types
                             , http-api-data
     ghc-options:
@@ -183,6 +192,7 @@ executable horture-server
                             , aeson
                             , text
                             , http-client-tls
+                            , warp
                             , servant-client
                             , http-client
                             , bytestring

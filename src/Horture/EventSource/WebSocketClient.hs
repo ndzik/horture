@@ -9,10 +9,12 @@ module Horture.EventSource.WebSocketClient
   )
 where
 
-import Control.Concurrent.Chan
+import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Freer
-import Control.Monad.Freer.Reader (runReader)
-import Control.Monad.IO.Class (MonadIO (liftIO))
+import Control.Monad.Freer.Reader
+import Control.Monad.State
+import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Horture.Effect
 import Horture.Event
 import Horture.EventSource.EventSource
@@ -21,22 +23,41 @@ import Horture.Server.Message
 import Network.WebSockets
 import qualified Twitch.EventSub.Event as TEvent
 
-runWSEventSource :: (Members '[RandomizeEffect] effs, LastMember IO effs) => Connection -> Chan Event -> Eff (EventSource : effs) x -> Eff effs x
+runWSEventSource ::
+  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs, LastMember IO effs) =>
+  Connection ->
+  Chan Event ->
+  Eff (EventSource : effs) x ->
+  Eff effs x
 runWSEventSource conn evChan = interpret $ do
   \case
     SourceEvent -> liftIO (receiveData @HortureServerMessage conn) >>= resolveServerMessageToEvent
     SinkEvent ev -> liftIO (writeChan evChan ev)
 
-resolveServerMessageToEvent :: (Members '[RandomizeEffect] effs) => HortureServerMessage -> Eff effs Event
+resolveServerMessageToEvent ::
+  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs) =>
+  HortureServerMessage ->
+  Eff effs Event
 resolveServerMessageToEvent HortureServerGarbage = return $ EventEffect Noop
 resolveServerMessageToEvent (HortureEventSub ev) = resolveToEvent ev
   where
     resolveToEvent TEvent.ChannelPointsCustomRewardRedemptionAdd {..} = do
       let TEvent.Reward {..} = eventReward
-      EventEffect <$> (randomizeEffect . fromText $ rrewardTitle)
+      EventEffect <$> (effectFromTitle rrewardTitle >>= randomizeEffect)
     resolveToEvent _ = return $ EventEffect Noop
 
-hortureWSStaticClientApp :: Chan Event -> [FilePath] -> ClientApp ()
+effectFromTitle ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs) =>
+  Text ->
+  Eff effs Effect
+effectFromTitle title =
+  asks @StaticEffectRandomizerEnv
+    ( \m -> case Map.lookup title m of
+        Nothing -> Noop
+        Just (_, eff) -> eff
+    )
+
+hortureWSStaticClientApp :: Chan Event -> Map.Map Text (Text, Effect) -> ClientApp ()
 hortureWSStaticClientApp evChan env conn =
   runM
     . runReader env

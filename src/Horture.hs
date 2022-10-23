@@ -249,7 +249,8 @@ initResources = do
       stitchProg <- loadShaderBS "stitch.shader" FragmentShader stitchShader >>= linkShaderProgram . (: [vsp])
       blurVProg <- loadShaderBS "blurv.shader" FragmentShader blurVShader >>= linkShaderProgram . (: [vsp])
       blurHProg <- loadShaderBS "blurv.shader" FragmentShader blurHShader >>= linkShaderProgram . (: [vsp])
-      return $ Map.fromList [(Barrel, [barrelProg]), (Stitch, [stitchProg]), (Blur, [blurVProg, blurHProg])]
+      flashbangProg <- loadShaderBS "flashbang.shader" FragmentShader flashbangShader >>= linkShaderProgram . (: [vsp])
+      return $ Map.fromList [(Barrel, [barrelProg]), (Stitch, [stitchProg]), (Blur, [blurVProg, blurHProg]), (Flashbang, [flashbangProg])]
 
 data SizeUpdate = GLFWUpdate !(Int, Int) | XUpdate !(CInt, CInt) deriving (Show, Eq)
 

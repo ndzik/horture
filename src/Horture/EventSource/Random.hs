@@ -6,6 +6,7 @@
 module Horture.EventSource.Random
   ( runStaticEffectRandomizer,
     runAnyEffectRandomizer,
+    StaticEffectRandomizerEnv,
   )
 where
 
@@ -15,6 +16,8 @@ import Control.Monad.Freer.Reader
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Array.IO
 import Data.Functor ((<&>))
+import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import Horture.Behaviour
 import Horture.Effect
 import Horture.EventSource.EventSource
@@ -28,7 +31,9 @@ import System.Random.Stateful
     randomRM,
   )
 
-type StaticEffectRandomizerEnv = [FilePath]
+type StaticEffectRandomizerEnv = Map.Map Text (Text, Effect)
+
+type StaticEffectRandomizerListEnv = [FilePath]
 
 -- | Static effect randomizer. It is static because the randomization of some
 -- effects depend on external configuration. This configuration is fixed here.
@@ -39,9 +44,53 @@ runStaticEffectRandomizer ::
   Eff (RandomizeEffect : effs) x ->
   Eff effs x
 runStaticEffectRandomizer = interpret $ \case
-  RandomizeEffect AddGif {} -> newRandomGif
-  -- We will not touch other effects for now.
-  RandomizeEffect eff -> return eff
+  RandomizeEffect (AddGif fp _ _ _) -> newRandomGifWith fp
+  RandomizeEffect AddScreenBehaviour {} -> newRandomScreenEffect
+  RandomizeEffect (AddShaderEffect _ se) -> randomizeShaderEffect se
+  RandomizeEffect Noop -> return Noop
+
+newRandomGifWith ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  FilePath ->
+  Eff effs Effect
+newRandomGifWith fp =
+  AddGif fp
+    <$> (Limited <$> uniformRM' 8 18)
+    <*> ( V3
+            <$> (randomM' <&> (sin . (* 20)))
+            <*> (randomM' <&> (cos . (* 33)))
+            <*> return 0
+        )
+    <*> (uniformRM' 0 3 >>= newRandomBehaviours)
+
+randomizeShaderEffect ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  ShaderEffect ->
+  Eff effs Effect
+randomizeShaderEffect Barrel = newRandomBarrelShader
+randomizeShaderEffect Blur = newRandomBlurShader
+randomizeShaderEffect Stitch = newRandomStitchShader
+randomizeShaderEffect Flashbang = newRandomFlashbangShader
+
+newRandomBarrelShader ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Effect
+newRandomBarrelShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Barrel
+
+newRandomBlurShader ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Effect
+newRandomBlurShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Blur
+
+newRandomStitchShader ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Effect
+newRandomStitchShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Stitch
+
+newRandomFlashbangShader ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Effect
+newRandomFlashbangShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 1) <*> return Flashbang
 
 -- | Generate a random value uniformly distributed over the given range.
 uniformRM' :: (UniformRange a, LastMember IO effs) => a -> a -> Eff effs a
@@ -57,15 +106,14 @@ randomM' = liftIO (randomM globalStdGen)
 -- | Completely ignores which effect is inputted and randomizes from every
 -- possible effect.
 runAnyEffectRandomizer ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
   Eff (RandomizeEffect : effs) x ->
   Eff effs x
 runAnyEffectRandomizer = interpret $ \case
-  -- TODO: Expand the pool of randomized effects.
   RandomizeEffect _ -> newRandomEffect
 
 newRandomEffect ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRandomEffect =
   randomM' @_ @Float >>= \r ->
@@ -76,29 +124,23 @@ newRandomEffect =
           then newRandomScreenEffect
           else newRandomShaderEffect
 
-newRandomShaderEffect ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomShaderEffect :: (LastMember IO effs) => Eff effs Effect
 newRandomShaderEffect = AddShaderEffect <$> (Limited <$> uniformRM' 2 6) <*> newRandomShader
 
-newRandomShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs ShaderEffect
+newRandomShader :: (LastMember IO effs) => Eff effs ShaderEffect
 newRandomShader = uniformRM' 0 (length effs - 1) <&> (effs !!)
   where
-    effs = [Barrel, Blur, Stitch]
+    effs = [Barrel, Blur, Stitch, Flashbang]
 
-newRandomScreenEffect ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomScreenEffect :: (LastMember IO effs) => Eff effs Effect
 newRandomScreenEffect = AddScreenBehaviour <$> (Limited <$> uniformRM' 6 10) <*> newRandomBehaviours 1
 
 newRandomGif ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRandomGif =
   AddGif
-    <$> (ask @StaticEffectRandomizerEnv >>= \gifs -> uniformRM' 0 (length gifs - 1) <&> (gifs !!))
+    <$> (ask @StaticEffectRandomizerListEnv >>= \gifs -> uniformRM' 0 (length gifs - 1) <&> (gifs !!))
     <*> (Limited <$> uniformRM' 8 18)
     <*> ( V3
             <$> (randomM' <&> (sin . (* 20)))
@@ -107,10 +149,7 @@ newRandomGif =
         )
     <*> (uniformRM' 0 3 >>= newRandomBehaviours)
 
-newRandomBehaviours ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Int ->
-  Eff effs [Behaviour]
+newRandomBehaviours :: (LastMember IO effs) => Int -> Eff effs [Behaviour]
 newRandomBehaviours n = do
   shake' <- newRandomShake
   moveTo' <- newRandomMoveTo
@@ -118,24 +157,16 @@ newRandomBehaviours n = do
   circle' <- newRandomCircle
   take n . cycle <$> liftIO (shuffle [shake', moveTo', pulse', circle', convolute])
 
-newRandomShake ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Behaviour
+newRandomShake :: (LastMember IO effs) => Eff effs Behaviour
 newRandomShake = shake <$> randomM' <*> uniformRM' 80 160 <*> randomM'
 
-newRandomMoveTo ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Behaviour
+newRandomMoveTo :: (LastMember IO effs) => Eff effs Behaviour
 newRandomMoveTo = moveTo <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM'))
 
-newRandomPulse ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Behaviour
+newRandomPulse :: (LastMember IO effs) => Eff effs Behaviour
 newRandomPulse = pulse <$> randomM' <*> randomM' <*> ((*) <$> uniformRM' 1 10 <*> randomM')
 
-newRandomCircle ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Behaviour
+newRandomCircle :: (LastMember IO effs) => Eff effs Behaviour
 newRandomCircle = circle <$> ((*) <$> randomM' <*> randomRM' 1 3)
 
 shuffle :: [a] -> IO [a]
