@@ -61,7 +61,6 @@ runAnyEffectRandomizer ::
   Eff (RandomizeEffect : effs) x ->
   Eff effs x
 runAnyEffectRandomizer = interpret $ \case
-  -- TODO: Expand the pool of randomized effects.
   RandomizeEffect _ -> newRandomEffect
 
 newRandomEffect ::
