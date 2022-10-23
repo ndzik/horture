@@ -20,7 +20,8 @@ import Colog (Severity (..), cmap, fmtMessage, log, logTextStdout, usingLoggerT)
 import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Freer
 import Control.Monad.Freer.TH
-import Data.Text (Text)
+import Data.Text (Text, pack)
+import Horture.CommandCenter.Event
 import Prelude hiding (log)
 
 data Logger l where
@@ -39,8 +40,8 @@ runColog = interpretM $ \case
 withColog :: Severity -> Text -> IO ()
 withColog s = usingLoggerT (cmap fmtMessage logTextStdout) . log s
 
-runHortureChannelLogger :: (LastMember IO effs) => Chan (Severity, Text) -> Eff (Logger : effs) a -> Eff effs a
+runHortureChannelLogger :: (LastMember IO effs) => Chan CommandCenterEvent -> Eff (Logger : effs) a -> Eff effs a
 runHortureChannelLogger chan = interpretM $ \case
-  LogInfo msg -> writeChan chan (Info, msg)
-  LogError msg -> writeChan chan (Error, msg)
-  LogWarn msg -> writeChan chan (Warning, msg)
+  LogInfo msg -> writeChan chan . CCLog . pack . show $ (Info, msg)
+  LogError msg -> writeChan chan . CCLog . pack . show $ (Error, msg)
+  LogWarn msg -> writeChan chan . CCLog . pack . show $ (Warning, msg)

@@ -9,10 +9,14 @@
 module Horture.EventSource.Controller.TwitchController
   ( handleTwitchEventController,
     runHortureTwitchEventController,
+    TwitchControllerState (..),
+    client,
+    broadcasterId,
+    clientEnv,
+    events,
   )
 where
 
-import Colog (Severity (..))
 import Control.Concurrent.Chan.Synchronous
 import Control.Lens
 import Control.Monad (void)
@@ -22,6 +26,7 @@ import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text, pack)
+import Horture.CommandCenter.Event
 import Horture.Effect
 import Horture.EventSource.Controller.Controller
 import Horture.EventSource.Logger
@@ -42,7 +47,7 @@ makeFields ''TwitchControllerState
 
 runHortureTwitchEventController ::
   TwitchControllerState ->
-  Chan (Severity, Text) ->
+  Chan CommandCenterEvent ->
   Chan EventControllerInput ->
   Chan EventControllerResponse ->
   IO ()
@@ -125,6 +130,6 @@ getAllRewards = do
   TwitchChannelPointsClient {getCustomRewards} <- gets @TwitchControllerState (^. client)
   id <- gets @TwitchControllerState (^. broadcasterId)
   env <- gets @TwitchControllerState (^. clientEnv)
-  liftIO (runClientM (getCustomRewards id Nothing Nothing) env) >>= \case
+  liftIO (runClientM (getCustomRewards id Nothing (Just True)) env) >>= \case
     Left err -> (logError . pack . show $ err) >> return []
     Right (DataResponse res) -> return $ map getcustomrewardsdataId res
