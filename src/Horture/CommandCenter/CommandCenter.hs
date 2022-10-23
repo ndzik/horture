@@ -52,9 +52,6 @@ data Name
   | AssetList
   deriving (Ord, Show, Eq)
 
--- UI should be:
---
-
 -- | |----------------------------------------|
 --   | Captured Window Title + ID             |
 --   |----------------------------------------|
