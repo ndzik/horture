@@ -9,6 +9,7 @@ data HortureServerConfig = HortureServerConfig
     _callback :: !BaseUrl,
     _certFile :: !(Maybe FilePath),
     _keyFile :: !(Maybe FilePath),
+    _appClientId :: !Text,
     _appToken :: !Text
   }
   deriving (Show)

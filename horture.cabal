@@ -132,8 +132,12 @@ library horture-server-lib
                         , twitch-api
                         , text
                         , lens
+                        , servant
+                        , servant-client
                         , servant-client-core
                         , http-types
+                        , http-client
+                        , http-client-tls
                         , data-default
                         , mtl
                         , synchronous-channels

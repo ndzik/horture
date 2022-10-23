@@ -12,6 +12,8 @@ module Twitch.Rest
     twitchChannelPointsClient,
     TwitchUsersClient (..),
     twitchUsersClient,
+    TwitchEventSubClient (..),
+    twitchEventSubClient,
   )
 where
 
@@ -19,6 +21,7 @@ import Data.Proxy
 import Data.Text (Text, words)
 import Servant.API
 import Servant.Client
+import Twitch.EventSub
 import Twitch.Rest.Authentication as Authentication
 import Twitch.Rest.Authorization as Authorization
 import Twitch.Rest.DataResponse
@@ -142,3 +145,49 @@ type GetUsers =
     :> QueryParam "id" Text
     :> QueryParams "login" Text
     :> Get '[JSON] (DataResponse [GetUserInformation])
+
+data TwitchEventSubClient = TwitchEventSubClient
+  { eventsubSubscribe :: WebhookRequest -> ClientM SubscriptionResponse,
+    eventsubGetSubscriptions :: Maybe Text -> ClientM SubscriptionResponse,
+    eventsubDeleteSubscription :: Text -> ClientM NoContent
+  }
+
+twitchEventSubClient :: Text -> AuthorizationToken -> TwitchEventSubClient
+twitchEventSubClient clientid at =
+  let _eventsubSubscribe
+        :<|> _eventsubGetSubscriptions
+        :<|> _eventsubDeleteSubscription = client (Proxy @EventSubApi)
+   in TwitchEventSubClient
+        { eventsubSubscribe = _eventsubSubscribe clientid at,
+          eventsubGetSubscriptions = _eventsubGetSubscriptions clientid at,
+          eventsubDeleteSubscription = _eventsubDeleteSubscription clientid at
+        }
+
+type EventSubApi =
+  EventSubSubscribe
+    :<|> EventSubGetSubscriptions
+    :<|> EventSubDeleteSubscriptions
+
+type EventSubSubscribe =
+  "eventsub"
+    :> "subscriptions"
+    :> Header' [Required, Strict] "Client-Id" Text
+    :> Header' [Required, Strict] "Authorization" AuthorizationToken
+    :> ReqBody '[JSON] WebhookRequest
+    :> Post '[JSON] SubscriptionResponse
+
+type EventSubGetSubscriptions =
+  "eventsub"
+    :> "subscriptions"
+    :> Header' [Required, Strict] "Client-Id" Text
+    :> Header' [Required, Strict] "Authorization" AuthorizationToken
+    :> QueryParam "status" Text
+    :> Get '[JSON] SubscriptionResponse
+
+type EventSubDeleteSubscriptions =
+  "eventsub"
+    :> "subscriptions"
+    :> Header' [Required, Strict] "Client-Id" Text
+    :> Header' [Required, Strict] "Authorization" AuthorizationToken
+    :> QueryParam' [Required, Strict] "id" Text
+    :> DeleteNoContent
