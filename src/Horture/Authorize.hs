@@ -19,7 +19,6 @@ import Network.HTTP.Types (status200, status400)
 import Network.Wai
 import Network.Wai.Handler.Warp
 import Servant.Client (BaseUrl (..), showBaseUrl)
-import System.Exit (exitFailure)
 import System.Random.Stateful (globalStdGen, uniformListM)
 import Text.RawString.QQ
 import Twitch.Rest.Authorization
@@ -32,17 +31,13 @@ import Twitch.Rest.Authorization
 import Web.FormUrlEncoded (urlDecodeAsForm, urlEncodeAsForm)
 import Prelude hiding (drop)
 
-authorize :: FilePath -> IO ()
-authorize pathToConfig = do
-  cfg <-
-    parseHortureClientConfig pathToConfig >>= \case
-      Nothing -> print @String "invalid horture client config" >> exitFailure
-      Just cfg -> return cfg
+authorize :: Config -> IO ()
+authorize cfg@(Config cid _ _ _ _) = do
   res <-
     retrieveUserAccessToken
-      ""
+      cid
       (twitchAuthorizationEndpoint cfg)
-      (AccessTokenScopes ["channel:redemptions:manage"])
+      (AccessTokenScopes ["channel:manage:redemptions"])
   case res of
     Nothing -> print @String "Unable to authorize user"
     Just creds -> do
