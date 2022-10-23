@@ -19,6 +19,7 @@ import System.Random.Stateful
 import qualified Twitch.EventSub.Event as Twitch
 import qualified Twitch.EventSub.Notification as Twitch
 import Prelude hiding (concat)
+import Network.Wai.Handler.WarpTLS 
 
 -- | runHortureServer runs the horture server which is exposing the
 -- <your-domain>/eventsub endpoint. This can only be used with the production
@@ -28,7 +29,9 @@ runHortureServer :: HortureServerConfig -> IO ()
 runHortureServer conf = do
   secret <- uniformByteStringM 64 globalStdGen
   tevChan <- newChan @Twitch.Event
-  run (_port conf) . hortureApp conf tevChan $ secret
+  case (_keyFile conf, _certFile conf) of
+    (Just kf, Just cf) -> runTLS (tlsSettings cf kf) defaultSettings . hortureApp conf tevChan $ secret
+    _otherwise -> run (_port conf) . hortureApp conf tevChan $ secret
 
 hortureApp :: HortureServerConfig -> Chan Twitch.Event -> ByteString -> Application
 hortureApp _conf tevChan secret req respondWith = do

@@ -7,6 +7,8 @@ import Data.Text (Text)
 data HortureServerConfig = HortureServerConfig
   { _port :: !Port,
     _callback :: !BaseUrl,
+    _certFile :: !(Maybe FilePath),
+    _keyFile :: !(Maybe FilePath),
     _appToken :: !Text
   }
   deriving (Show)

@@ -61,7 +61,7 @@ main' (ServerParams cf _db) = do
   ClientCredentialResponse aat _ _ <- case res of
     Left err -> print err >> exitFailure
     Right r -> return r
-  runHortureServer (HortureServerConfig serverPort twitchResponseCallback aat)
+  runHortureServer (HortureServerConfig serverPort twitchResponseCallback certFile keyFile aat)
 
 data ServerParams = ServerParams
   { _config :: !FilePath,
