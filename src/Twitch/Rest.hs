@@ -117,7 +117,7 @@ type CreateCustomReward =
     :> Header' [Required, Strict] "Authorization" AuthorizationToken
     :> QueryParam' [Required, Strict] "broadcaster_id" Text
     :> ReqBody '[JSON] CreateCustomRewardBody
-    :> PostAccepted '[JSON] (DataResponse [GetCustomRewardsData])
+    :> Post '[JSON] (DataResponse [GetCustomRewardsData])
 
 newtype TwitchUsersClient = TwitchUsersClient
   { getUsers ::

@@ -8,9 +8,7 @@ where
 import Data.Aeson
 import Data.Aeson.TH
 import Data.Text (Text)
-import Twitch.EventSub.GlobalCooldown
 import Twitch.EventSub.Image
-import Twitch.EventSub.Reward
 
 data GetCustomRewardsData = GetCustomRewardsData
   { getcustomrewardsdataBroadcasterId :: !Text,
@@ -20,18 +18,37 @@ data GetCustomRewardsData = GetCustomRewardsData
     getcustomrewardsdataTitle :: !Text,
     getcustomrewardsdataPrompt :: !Text,
     getcustomrewardsdataCost :: !Int,
+    getcustomrewardsdataBackgroundColor :: !Text,
     getcustomrewardsdataImage :: !(Maybe Image),
     getcustomrewardsdataDefaultImage :: !Image,
     getcustomrewardsdataIsEnabled :: !Bool,
-    getcustomrewardsdataIsUserInputRequired :: !Text,
-    getcustomrewardsdataMaxPerStreamSetting :: !MaxPerStream,
-    getcustomrewardsdataMaxPerUserPerStreamSetting :: !MaxPerUserPerStream,
-    getcustomrewardsdataGlobalCooldownSetting :: !GlobalCooldown,
+    getcustomrewardsdataIsUserInputRequired :: !Bool,
+    getcustomrewardsdataMaxPerStreamSetting :: !MaxPerStreamSetting,
+    getcustomrewardsdataMaxPerUserPerStreamSetting :: !MaxPerUserPerStreamSetting,
+    getcustomrewardsdataGlobalCooldownSetting :: !GlobalCooldownSetting,
     getcustomrewardsdataIsPaused :: !Bool,
     getcustomrewardsdataIsInStock :: !Bool,
     getcustomrewardsdataShouldRedemptionsSkipRequestQueue :: !Bool,
-    getcustomrewardsdataRedemptionsRedeemedCurrentStream :: !Int,
-    getcustomrewardsdataCooldownExpiresAt :: !Text
+    getcustomrewardsdataRedemptionsRedeemedCurrentStream :: !(Maybe Int),
+    getcustomrewardsdataCooldownExpiresAt :: !(Maybe Text)
+  }
+  deriving (Show)
+
+data MaxPerStreamSetting = MaxPerStreamSetting
+  { maxperstreamsettingIsEnabled :: !Bool,
+    maxperstreamsettingMaxPerStream :: !Int
+  }
+  deriving (Show)
+
+data MaxPerUserPerStreamSetting = MaxPerUserPerStreamSetting
+  { maxperuserperstreamsettingIsEnabled :: !Bool,
+    maxperuserperstreamsettingMaxPerUserPerStream :: !Int
+  }
+  deriving (Show)
+
+data GlobalCooldownSetting = GlobalCooldownSetting
+  { globalcooldownsettingIsEnabled :: !Bool,
+    globalcooldownsettingGlobalCooldownSeconds :: !Int
   }
   deriving (Show)
 
@@ -53,21 +70,24 @@ data CreateCustomRewardBody = CreateCustomRewardBody
   deriving (Show)
 
 data GetUserInformation = GetUserInformation
-  { getuserinformationBroadcasterType :: !Text
-  , getuserinformationDescription :: !Text
-  , getuserinformationDisplayName :: !Text
-  , getuserinformationId :: !Text
-  , getuserinformationLogin :: !Text
-  , getuserinformationOfflineImageUrl :: !Text
-  , getuserinformationProfileImageUrl :: !Text
-  , getuserinformationType :: !Text
-  , getuserinformationViewCount :: !Int
-  , getuserinformationEmail :: !(Maybe Text)
-  , getuserinformationCreatedAt :: !Text
+  { getuserinformationBroadcasterType :: !Text,
+    getuserinformationDescription :: !Text,
+    getuserinformationDisplayName :: !Text,
+    getuserinformationId :: !Text,
+    getuserinformationLogin :: !Text,
+    getuserinformationOfflineImageUrl :: !Text,
+    getuserinformationProfileImageUrl :: !Text,
+    getuserinformationType :: !Text,
+    getuserinformationViewCount :: !Int,
+    getuserinformationEmail :: !(Maybe Text),
+    getuserinformationCreatedAt :: !Text
   }
   deriving (Show)
 
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("getcustomrewardsdata_" :: String)) . camelTo2 '_'} ''GetCustomRewardsData)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("maxperstreamsetting_" :: String)) . camelTo2 '_'} ''MaxPerStreamSetting)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("maxperuserperstreamsetting_" :: String)) . camelTo2 '_'} ''MaxPerUserPerStreamSetting)
+$(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("globalcooldownsetting_" :: String)) . camelTo2 '_'} ''GlobalCooldownSetting)
 $(deriveJSON defaultOptions {fieldLabelModifier = drop (length ("getuserinformation_" :: String)) . camelTo2 '_'} ''GetUserInformation)
 $( deriveJSON
      defaultOptions
