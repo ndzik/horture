@@ -19,7 +19,7 @@ import System.Random.Stateful
 import qualified Twitch.EventSub.Event as Twitch
 import qualified Twitch.EventSub.Notification as Twitch
 import Prelude hiding (concat)
-import Network.Wai.Handler.WarpTLS 
+import Network.Wai.Handler.WarpTLS
 
 -- | runHortureServer runs the horture server which is exposing the
 -- <your-domain>/eventsub endpoint. This can only be used with the production

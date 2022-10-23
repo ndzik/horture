@@ -5,7 +5,6 @@
 module Main (main) where
 
 import Config
-import Horture.Path
 import Horture.Server.Config
 import Horture.Server.Server
 import Network.HTTP.Client (defaultManagerSettings, newManager)
@@ -14,6 +13,8 @@ import Options.Applicative
 import Servant.Client
 import System.Exit (exitFailure)
 import Twitch.Rest
+import System.Directory (getHomeDirectory)
+import Data.Functor ((<&>))
 
 -- | Handling twitch:
 --   We let the front-end handle `authorization` for user & app tokens. When a
@@ -84,3 +85,7 @@ cmdParser =
           <> short 'd'
           <> help "Server debug mode"
       )
+
+resolvePath :: FilePath -> IO FilePath
+resolvePath ('~':rs) = getHomeDirectory <&> (++ rs)
+resolvePath rs = return rs
