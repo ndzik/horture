@@ -240,7 +240,7 @@ prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
 runCommandCenter :: Bool -> Config -> IO ()
-runCommandCenter mockMode (Config cid _ helixApi mauth dir) = do
+runCommandCenter mockMode (Config cid _ helixApi mauth _ dir) = do
   gifs <- makeAbsolute dir >>= loadDirectory
   preloadedGifs <-
     runPreloader (PLC dir) loadGifsInMemory >>= \case

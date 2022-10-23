@@ -19,6 +19,7 @@ data Config = Config
     twitchAuthorizationEndpoint :: !BaseUrl,
     twitchApiEndpoint :: !BaseUrl,
     twitchAuthToken :: !(Maybe Text),
+    hortureWsEndpoint :: !(Maybe BaseUrl),
     gifDirectory :: !FilePath
   }
   deriving (Show)
@@ -30,6 +31,7 @@ instance Default Config where
         twitchAuthorizationEndpoint = BaseUrl Https "id.twitch.tv" 443 "oauth2/authorize",
         twitchApiEndpoint = BaseUrl Https "api.twitch.tv" 443 "",
         twitchAuthToken = Nothing,
+        hortureWsEndpoint = Nothing,
         gifDirectory = "./gifs"
       }
 
@@ -47,6 +49,7 @@ instance FromJSON Config where
               Just "" -> return Nothing
               v -> return v
           )
+      <*> (o .:? "horture_ws_endpoint")
       <*> o .: "gif_directory"
 
 $(deriveToJSON defaultOptions {fieldLabelModifier = camelTo2 '_', omitNothingFields = True} ''Config)
