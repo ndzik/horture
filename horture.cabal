@@ -53,14 +53,14 @@ library horture-lib
                             , Twitch
                             , Twitch.EventSub
                             , Twitch.Rest
-                            , Run
-
-    -- Modules included in this library but not exported.
-    other-modules:            Horture.Server.Server
                             , Horture.Server.Config
                             , Horture.Server.Message
                             , Horture.Server.Websocket
-                            , Horture.EventSource.EventSource
+                            , Horture.Server.Server
+                            , Run
+
+    -- Modules included in this library but not exported.
+    other-modules:          Horture.EventSource.EventSource
                             , Horture.EventSource.Random
                             , Horture.EventSource.Logger
                             , Horture.EventSource.Local
@@ -192,6 +192,7 @@ executable horture-server
                             , aeson
                             , text
                             , http-client-tls
+                            , warp
                             , servant-client
                             , http-client
                             , bytestring

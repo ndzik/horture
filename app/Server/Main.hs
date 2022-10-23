@@ -1,10 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Main (main) where
 
 import Config
 import Horture.Path
+import Horture.Server.Config
+import Horture.Server.Server
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Options.Applicative
@@ -44,7 +47,7 @@ main = execParser opts >>= main'
 
 main' :: ServerParams -> IO ()
 main' (ServerParams cf _db) = do
-  Config {twitchClientId, twitchClientSecret, twitchAuthorizationEndpoint} <-
+  Config {..} <-
     resolvePath cf >>= parseConfig >>= \case
       Nothing -> print "Config file ill-formatted or not available" >> exitFailure
       Just cfg -> return cfg
@@ -55,10 +58,10 @@ main' (ServerParams cf _db) = do
   let TwitchTokenClient {getAppAccessToken} = twitchTokenClient
       clientEnv = mkClientEnv mgr twitchAuthorizationEndpoint
   res <- runClientM (getAppAccessToken (ClientCredentialRequest twitchClientId twitchClientSecret)) clientEnv
-  creds <- case res of
+  ClientCredentialResponse aat _ _ <- case res of
     Left err -> print err >> exitFailure
     Right r -> return r
-  print creds
+  runHortureServer (HortureServerConfig serverPort twitchResponseCallback aat)
 
 data ServerParams = ServerParams
   { _config :: !FilePath,

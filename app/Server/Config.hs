@@ -12,12 +12,15 @@ import Data.Aeson
 import Data.Aeson.TH
 import qualified Data.ByteString.Lazy as BSL
 import Data.Text (Text)
+import Network.Wai.Handler.Warp
 import Servant.Client (BaseUrl)
 
 data Config = Config
   { twitchClientId :: !Text,
     twitchClientSecret :: !Text,
-    twitchAuthorizationEndpoint :: !BaseUrl
+    twitchAuthorizationEndpoint :: !BaseUrl,
+    serverPort :: !Port,
+    twitchResponseCallback :: !BaseUrl
   }
   deriving (Show)
 
