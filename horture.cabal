@@ -102,6 +102,7 @@ library horture-lib
     build-depends:          base ^>=4.14.3.0
                             , X11
                             , text
+                            , word-wrap
                             , raw-strings-qq
                             , aeson
                             , freer-simple
@@ -116,6 +117,7 @@ library horture-lib
                             , servant-client
                             , servant-client-core
                             , http-client
+                            , http-client-tls
                             , async
                             , memory
                             , bytestring
