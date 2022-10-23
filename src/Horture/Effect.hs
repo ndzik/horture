@@ -4,10 +4,11 @@ module Horture.Effect
     GifIndex,
     Position,
     FromText (..),
+    Entitled (..),
   )
 where
 
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Horture.Object
 import Linear.V3
 import System.FilePath.Posix
@@ -34,6 +35,21 @@ instance Show Effect where
   show (AddScreenBehaviour _ _) = "AddScreenBehaviour"
   show (AddShaderEffect lt eff) = unwords ["AddShaderEffect", show lt, show eff]
   show Noop = "Noop"
+
+class Entitled d where
+  toTitle :: d -> Text
+
+instance Entitled Effect where
+  toTitle (AddGif n _ _ _) = pack . takeFileName $ n
+  toTitle (AddScreenBehaviour _ _) = "RandomScreenEffect"
+  toTitle (AddShaderEffect _ eff) = toTitle eff
+  toTitle Noop = "Nothing"
+
+instance Entitled ShaderEffect where
+  toTitle Barrel = "ThiccIt"
+  toTitle Blur = "WhereAreMyGlasses?"
+  toTitle Stitch = "GrandmaSaysHi"
+  toTitle Flashbang = "FLASHBANG"
 
 class FromText d where
   fromText :: Text -> d
