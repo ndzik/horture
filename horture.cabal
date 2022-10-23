@@ -143,6 +143,7 @@ library horture-lib
                             , wai-logger
                             , wai-websockets
                             , websockets
+                            , wuss
                             , http-types
                             , http-api-data
     ghc-options:

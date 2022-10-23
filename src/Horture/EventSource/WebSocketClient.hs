@@ -9,7 +9,7 @@ module Horture.EventSource.WebSocketClient
   )
 where
 
-import Control.Concurrent.Chan
+import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Freer
 import Control.Monad.Freer.Reader
 import Control.Monad.State
@@ -34,8 +34,10 @@ runWSEventSource conn evChan = interpret $ do
     SourceEvent -> liftIO (receiveData @HortureServerMessage conn) >>= resolveServerMessageToEvent
     SinkEvent ev -> liftIO (writeChan evChan ev)
 
-resolveServerMessageToEvent :: (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs)
-                            => HortureServerMessage -> Eff effs Event
+resolveServerMessageToEvent ::
+  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs) =>
+  HortureServerMessage ->
+  Eff effs Event
 resolveServerMessageToEvent HortureServerGarbage = return $ EventEffect Noop
 resolveServerMessageToEvent (HortureEventSub ev) = resolveToEvent ev
   where

@@ -13,7 +13,7 @@ import Brick.Widgets.Border
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center
 import Brick.Widgets.List
-import Control.Concurrent (forkIO, forkOS, killThread)
+import Control.Concurrent (ThreadId, forkIO, forkOS, killThread)
 import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Except
 import Data.Default
@@ -31,11 +31,13 @@ import Horture.Effect
 import Horture.Event
 import Horture.EventSource.Controller
 import Horture.EventSource.Local
+import Horture.EventSource.WebSocketClient
 import Horture.Loader
 import Horture.Object
 import Linear.V3
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client.TLS
+import Network.WebSockets (runClient)
 import Numeric (showHex)
 import Run
 import Servant.Client (mkClientEnv, runClientM)
@@ -46,6 +48,7 @@ import Text.Wrap
 import Twitch.Rest
 import Twitch.Rest.DataResponse
 import Twitch.Rest.Types
+import Wuss (runSecureClient)
 
 data Name
   = Main
@@ -206,15 +209,14 @@ grabHorture = do
   brickChanM <- gets _brickEventChan
   logChan <- liftIO $ newChan @Text
   evChan <- liftIO $ newChan @Event
-  timeout <- gets _ccTimeout
-  gifs <- gets _ccGifs
   plg <- gets _ccPreloadedGifs
+  hurl <- gets _ccHortureUrl
   liftIO x11UserGrabWindow >>= \case
     Nothing -> return ()
     Just res@(_, w) -> do
       case brickChanM of
         Just brickChan -> do
-          evSourceTID <- liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
+          evSourceTID <- spawnEventSource hurl evChan
           _ <- liftIO . forkOS $ run plg (Just logChan) evChan w
           logSourceTID <- liftIO . forkIO . forever $ do
             readChan logChan >>= writeBChan brickChan . CCLog
@@ -225,6 +227,17 @@ grabHorture = do
           { _ccEventChan = Just evChan,
             _ccCapturedWin = Just res
           }
+
+spawnEventSource :: Maybe BaseUrl -> Chan Event -> EventM Name CommandCenterState ThreadId
+spawnEventSource Nothing evChan = do
+  timeout <- gets _ccTimeout
+  gifs <- gets _ccGifs
+  liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
+spawnEventSource (Just (BaseUrl scheme host port path)) evChan = do
+  registeredEffs <- gets _ccRegisteredEffects
+  case scheme of
+    Https -> liftIO . forkIO $ runSecureClient host (fromIntegral port) path (hortureWSStaticClientApp evChan registeredEffs)
+    Http -> liftIO . forkIO $ runClient host port path (hortureWSStaticClientApp evChan registeredEffs)
 
 app :: App CommandCenterState CommandCenterEvent Name
 app =

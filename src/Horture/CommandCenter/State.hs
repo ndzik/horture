@@ -14,6 +14,7 @@ import Horture.Effect
 import Horture.Event
 import Horture.EventSource.Controller
 import Horture.Loader.Asset
+import Servant.Client (BaseUrl)
 
 data CommandCenterState = CCState
   { _ccEventChan :: !(Maybe (Chan Event)),
@@ -22,6 +23,7 @@ data CommandCenterState = CCState
     _ccControllerChans :: !(Maybe (Chan EventControllerInput, Chan EventControllerResponse)),
     _ccLog :: ![Text],
     _ccGifs :: ![FilePath],
+    _ccHortureUrl :: !(Maybe BaseUrl),
     _ccPreloadedGifs :: ![(FilePath, Asset)],
     _ccRegisteredEffects :: !(Map.Map Text (Text, Effect)),
     _ccTIDsToClean :: ![ThreadId],
@@ -37,6 +39,7 @@ instance Default CommandCenterState where
         _brickEventChan = Nothing,
         _ccCapturedWin = Nothing,
         _ccControllerChans = Nothing,
+        _ccHortureUrl = Nothing,
         _ccRegisteredEffects = Map.empty,
         _ccLog = [],
         _ccGifs = [],
