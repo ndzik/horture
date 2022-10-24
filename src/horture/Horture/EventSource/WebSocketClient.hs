@@ -21,6 +21,7 @@ import Horture.EventSource.EventSource
 import Horture.EventSource.Random
 import Horture.Server.Message
 import Network.WebSockets
+import qualified Twitch.EventSub.Notification as TEvent
 import qualified Twitch.EventSub.Event as TEvent
 
 runWSEventSource ::
@@ -29,10 +30,11 @@ runWSEventSource ::
   Chan Event ->
   Eff (EventSource : effs) x ->
   Eff effs x
-runWSEventSource conn evChan = interpret $ do
-  \case
-    SourceEvent -> liftIO (receiveData @HortureServerMessage conn) >>= resolveServerMessageToEvent
-    SinkEvent ev -> liftIO (writeChan evChan ev)
+runWSEventSource conn evChan = do
+  interpret $ do
+    \case
+      SourceEvent -> liftIO (receiveData @HortureServerMessage conn) >>= resolveServerMessageToEvent
+      SinkEvent ev -> liftIO (writeChan evChan ev)
 
 resolveServerMessageToEvent ::
   (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs) =>
@@ -41,7 +43,7 @@ resolveServerMessageToEvent ::
 resolveServerMessageToEvent HortureServerGarbage = return $ EventEffect Noop
 resolveServerMessageToEvent (HortureEventSub ev) = resolveToEvent ev
   where
-    resolveToEvent TEvent.ChannelPointsCustomRewardRedemptionAdd {..} = do
+    resolveToEvent (TEvent.EventNotification _ TEvent.ChannelPointsCustomRewardRedemptionAdd {..}) = do
       let TEvent.Reward {..} = eventReward
       EventEffect <$> (effectFromTitle rrewardTitle >>= randomizeEffect)
     resolveToEvent _ = return $ EventEffect Noop
@@ -57,8 +59,9 @@ effectFromTitle title =
         Just (_, eff) -> eff
     )
 
-hortureWSStaticClientApp :: Chan Event -> Map.Map Text (Text, Effect) -> ClientApp ()
-hortureWSStaticClientApp evChan env conn =
+hortureWSStaticClientApp :: Text -> Chan Event -> Map.Map Text (Text, Effect) -> ClientApp ()
+hortureWSStaticClientApp bid evChan env conn = do
+  liftIO $ sendTextData conn (HortureAuthorization bid)
   runM
     . runReader env
     . runStaticEffectRandomizer

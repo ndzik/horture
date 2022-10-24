@@ -20,6 +20,8 @@ data Config = Config
     twitchClientSecret :: !Text,
     twitchAuthorizationEndpoint :: !BaseUrl,
     serverPort :: !Port,
+    certFile :: !(Maybe FilePath),
+    keyFile :: !(Maybe FilePath),
     twitchResponseCallback :: !BaseUrl
   }
   deriving (Show)

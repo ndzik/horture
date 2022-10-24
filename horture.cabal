@@ -50,13 +50,6 @@ library horture-lib
                             , Horture.Loader
                             , Horture.Effect
                             , Horture.Gif
-                            , Twitch
-                            , Twitch.EventSub
-                            , Twitch.Rest
-                            , Horture.Server.Config
-                            , Horture.Server.Message
-                            , Horture.Server.Websocket
-                            , Horture.Server.Server
                             , Run
 
     -- Modules included in this library but not exported.
@@ -74,85 +67,146 @@ library horture-lib
                             , Horture.Loader.Config
                             , Horture.Loader.TextureLoader
                             , Horture.Loader.FilePreloader
-                            , Twitch.Rest.Authentication
-                            , Twitch.Rest.Authorization
-                            , Twitch.Rest.Token
-                            , Twitch.Rest.Types
-                            , Twitch.Rest.DataResponse
-                            , Twitch.EventSub.Condition
-                            , Twitch.EventSub.Notification
-                            , Twitch.EventSub.Event
-                            , Twitch.EventSub.Request
-                            , Twitch.EventSub.Response
-                            , Twitch.EventSub.Transport
-                            , Twitch.EventSub.BitsVoting
-                            , Twitch.EventSub.ChannelPointsVoting
-                            , Twitch.EventSub.Choices
-                            , Twitch.EventSub.EntitlementObject
-                            , Twitch.EventSub.GlobalCooldown
-                            , Twitch.EventSub.Image
-                            , Twitch.EventSub.Contribution
-                            , Twitch.EventSub.Message
-                            , Twitch.EventSub.Outcomes
-                            , Twitch.EventSub.Poll
-                            , Twitch.EventSub.Product
-                            , Twitch.EventSub.Reward
 
     -- LANGUAGE extensions used by modules in this package.
     build-depends:          base ^>=4.14.3.0
+                            , twitch-api
+                            , horture-server-lib
                             , X11
                             , text
                             , word-wrap
                             , raw-strings-qq
-                            , aeson
-                            , freer-simple
-                            , array
-                            , OpenGL
-                            , mtl
-                            , GLFW-b
-                            , GLUtil
-                            , raw-strings-qq
-                            , cryptonite
-                            , servant
                             , servant-client
                             , servant-client-core
+                            , data-default
+                            , bytestring
+                            , aeson
+                            , http-api-data
                             , http-client
                             , http-client-tls
+                            , random
+                            , warp
+                            , wai
+                            , http-types
                             , async
-                            , memory
-                            , bytestring
-                            , clock
-                            , deepseq
+                            , freer-simple
                             , synchronous-channels
+                            , co-log
+                            , OpenGL
+                            , lens
                             , JuicyPixels
+                            , filepath
+                            , directory
+                            , mtl
                             , containers
                             , linear
-                            , vector
-                            , random
-                            , co-log
-                            , lens
-                            , directory
-                            , data-default
-                            , filepath
                             , vty
                             , brick
-                            , wai
-                            , warp
-                            , warp-tls
-                            , wai-extra
-                            , wai-logger
-                            , wai-websockets
+                            , array
                             , websockets
                             , wuss
-                            , http-types
-                            , http-api-data
+                            , GLFW-b
+                            , GLUtil
     ghc-options:
                             -Wall
                             -fno-warn-name-shadowing
                             -fno-warn-unticked-promoted-constructors
                             -fno-warn-orphans
-    hs-source-dirs:         src
+    hs-source-dirs:         src/horture
     default-language:       Haskell2010
+
+library horture-server-lib
+    default-extensions:     TemplateHaskell
+                            , TypeApplications
+                            , TypeOperators
+                            , OverloadedStrings
+    hs-source-dirs:     src/server
+    default-language:   Haskell2010
+    ghc-options:
+                        -Wall
+                        -fno-warn-name-shadowing
+                        -fno-warn-unticked-promoted-constructors
+                        -fno-warn-orphans
+
+    build-depends:      base ^>=4.14.3.0
+                        , twitch-api
+                        , text
+                        , lens
+                        , servant
+                        , servant-client
+                        , servant-client-core
+                        , http-types
+                        , http-client
+                        , http-client-tls
+                        , data-default
+                        , mtl
+                        , synchronous-channels
+                        , wai
+                        , warp
+                        , warp-tls
+                        , websockets
+                        , wai-websockets
+                        , aeson
+                        , random
+                        , bytestring
+                        , cryptonite
+                        , memory
+
+    exposed-modules:    Horture.Server.Config
+                        , Horture.Server.Message
+                        , Horture.Server.Websocket
+                        , Horture.Server.Server
+
+    -- other-modules:
+
+library twitch-api
+    default-extensions:     TemplateHaskell
+                            , TypeApplications
+                            , TypeOperators
+                            , OverloadedStrings
+    hs-source-dirs:     src/twitch
+    default-language:   Haskell2010
+    ghc-options:
+                            -Wall
+                            -fno-warn-name-shadowing
+                            -fno-warn-unticked-promoted-constructors
+                            -fno-warn-orphans
+
+    build-depends:      base ^>=4.14.3.0
+                        , aeson
+                        , text
+                        , http-api-data
+                        , http-types
+                        , servant
+                        , servant-client
+
+    exposed-modules:    Twitch
+                        , Twitch.EventSub
+                        , Twitch.EventSub.Event
+                        , Twitch.EventSub.Notification
+                        , Twitch.Rest
+                        , Twitch.Rest.Authorization
+                        , Twitch.Rest.DataResponse
+                        , Twitch.Rest.Types
+
+    other-modules:      Twitch.Rest.Authentication
+                        , Twitch.Rest.Token
+                        , Twitch.EventSub.Condition
+                        , Twitch.EventSub.Request
+                        , Twitch.EventSub.Response
+                        , Twitch.EventSub.Transport
+                        , Twitch.EventSub.BitsVoting
+                        , Twitch.EventSub.ChannelPointsVoting
+                        , Twitch.EventSub.Choices
+                        , Twitch.EventSub.EntitlementObject
+                        , Twitch.EventSub.GlobalCooldown
+                        , Twitch.EventSub.Image
+                        , Twitch.EventSub.Contribution
+                        , Twitch.EventSub.Message
+                        , Twitch.EventSub.Outcomes
+                        , Twitch.EventSub.Poll
+                        , Twitch.EventSub.Product
+                        , Twitch.EventSub.Reward
 
 test-suite horture-test
   type:                     exitcode-stdio-1.0
@@ -187,7 +241,9 @@ executable horture-server
                             -O2
   other-modules:            Config
   build-depends:            base ^>=4.14.3.0
-                            , horture-lib
+                            , horture-server-lib
+                            , twitch-api
+                            , directory
                             , optparse-applicative
                             , aeson
                             , text

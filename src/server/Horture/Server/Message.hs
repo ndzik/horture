@@ -1,12 +1,15 @@
-module Horture.Server.Message (HortureClientMessage (..),
-  HortureServerMessage(..)) where
+module Horture.Server.Message
+  ( HortureClientMessage (..),
+    HortureServerMessage (..),
+  )
+where
 
 import Data.Aeson
 import Data.Aeson.TH
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Network.WebSockets
-import qualified Twitch.EventSub.Event as Twitch
+import qualified Twitch.EventSub.Notification as Twitch
 
 -- | HortureClientMessage are all messages pushed to the server by client.
 data HortureClientMessage
@@ -26,8 +29,9 @@ instance WebSocketsData HortureClientMessage where
 
 -- | HortureServerMessage are all messages pushed by the server to clients.
 data HortureServerMessage
-  = HortureEventSub !Twitch.Event
+  = HortureEventSub !Twitch.EventNotification
   | HortureServerGarbage
+  deriving (Show)
 
 instance WebSocketsData HortureServerMessage where
   fromDataMessage (Network.WebSockets.Text bs _) = fromMaybe HortureServerGarbage (decode bs)

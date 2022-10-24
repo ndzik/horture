@@ -5,13 +5,14 @@
 module Main (main) where
 
 import Config
-import Horture.Path
+import Data.Functor ((<&>))
 import Horture.Server.Config
 import Horture.Server.Server
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Options.Applicative
 import Servant.Client
+import System.Directory (getHomeDirectory)
 import System.Exit (exitFailure)
 import Twitch.Rest
 
@@ -61,7 +62,8 @@ main' (ServerParams cf _db) = do
   ClientCredentialResponse aat _ _ <- case res of
     Left err -> print err >> exitFailure
     Right r -> return r
-  runHortureServer (HortureServerConfig serverPort twitchResponseCallback aat)
+  print "Successfully retrieved AppAccessToken from Twitch"
+  runHortureServer (HortureServerConfig serverPort twitchResponseCallback certFile keyFile twitchClientId aat)
 
 data ServerParams = ServerParams
   { _config :: !FilePath,
@@ -84,3 +86,7 @@ cmdParser =
           <> short 'd'
           <> help "Server debug mode"
       )
+
+resolvePath :: FilePath -> IO FilePath
+resolvePath ('~' : rs) = getHomeDirectory <&> (++ rs)
+resolvePath rs = return rs
