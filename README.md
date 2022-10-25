@@ -45,6 +45,23 @@ to backstab you again and again and again?
   * WhereAreMyGlasses -> Apply a blur filter
   * TakeTheWhitePill -> Lots of colours
   * ... any Shader is possible, so this list is extensible with ease
+* Youtube stream backend, currently only Twitch is supported
+
+## Screenshots
+
+Example screenshots. Since horture is heavily relying on movement and the
+described effects, screenshots do it no real justice, but just imagine
+everything moving (;.
+
+![Screenshot_2022-10-25-10_1600x900](https://user-images.githubusercontent.com/33512740/197868429-43db91b2-5efb-4c72-bbd6-32072e5a9b14.png)
+![Screenshot_2022-10-25-45_1600x900](https://user-images.githubusercontent.com/33512740/197868472-7f7064e2-c2db-4673-a61d-a1822ccba369.png)
+
+As can be seen, horture is currently applied to my browser window. The browser
+itself is moved around in 3d-space and can still be used "as usual", or as good
+as you are still capable of. Further GIFs are scattered and moving all around.
+All effects are, as mentioned, composable and triggerable by your viewers via
+some redemption mechanism. The second screenshot shows your screen transformed
+and having a `WhereAreMyGlasses`, `ThiccIt` and `StitchIt` applied.
 
 ## What is to come?
 
@@ -52,9 +69,9 @@ If my tests work out and I can see that horture is as fun in practice as I
 imagine it to be, then I will continously work on the points mentioned in the
 list below:
 
-[ ] - Windows support
-[ ] - Dynamic shader effect loading: Instead of hardcode shaders into the
+- [ ] Windows support
+- [ ] Dynamic shader effect loading: Instead of hardcode shaders into the
       application itself, make them readable from a config file/directory.
-[ ] - Shader DSL: Allowing Viewers to describe GLSL shaders in simple terms
-[ ] - Support basic stream events:
-  [ ] - Allow displaying events for follows, subs and more
+- [ ] Shader DSL: Allowing Viewers to describe GLSL shaders in simple terms
+- [ ] Support basic stream events:
+   - [ ] Allow displaying events for follows, subs and more
