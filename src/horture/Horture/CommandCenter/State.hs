@@ -1,10 +1,26 @@
 {-# LANGUAGE NumericUnderscores #-}
 
-module Horture.CommandCenter.State (CommandCenterState (..)) where
+module Horture.CommandCenter.State
+  ( CommandCenterState (..),
+    ccEventChan,
+    ccBrickEventChan,
+    ccCapturedWin,
+    ccControllerChans,
+    ccLog,
+    ccGifs,
+    ccHortureUrl,
+    ccUserId,
+    ccPreloadedGifs,
+    ccRegisteredEffects,
+    ccTIDsToClean,
+    ccTimeout,
+  )
+where
 
 import Brick.BChan
 import Control.Concurrent (ThreadId)
 import Control.Concurrent.Chan.Synchronous
+import Control.Lens
 import Data.Default
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -18,7 +34,7 @@ import Servant.Client (BaseUrl)
 
 data CommandCenterState = CCState
   { _ccEventChan :: !(Maybe (Chan Event)),
-    _brickEventChan :: !(Maybe (BChan CommandCenterEvent)),
+    _ccBrickEventChan :: !(Maybe (BChan CommandCenterEvent)),
     _ccCapturedWin :: !(Maybe (String, Window)),
     _ccControllerChans :: !(Maybe (Chan EventControllerInput, Chan EventControllerResponse)),
     _ccLog :: ![Text],
@@ -37,7 +53,7 @@ instance Default CommandCenterState where
   def =
     CCState
       { _ccEventChan = Nothing,
-        _brickEventChan = Nothing,
+        _ccBrickEventChan = Nothing,
         _ccCapturedWin = Nothing,
         _ccControllerChans = Nothing,
         _ccHortureUrl = Nothing,
@@ -49,3 +65,5 @@ instance Default CommandCenterState where
         _ccTIDsToClean = [],
         _ccTimeout = 1_000_000
       }
+
+makeLenses ''CommandCenterState

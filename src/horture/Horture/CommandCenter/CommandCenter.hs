@@ -15,6 +15,7 @@ import Brick.Widgets.Center
 import Brick.Widgets.List
 import Control.Concurrent (ThreadId, forkIO, forkOS, killThread)
 import Control.Concurrent.Chan.Synchronous
+import Control.Lens
 import Control.Monad.Except
 import Data.Default
 import Data.List (intercalate)
@@ -206,7 +207,7 @@ logInfo' msg = handleCCEvent (CCLog msg)
 
 grabHorture :: EventM Name CommandCenterState ()
 grabHorture = do
-  brickChanM <- gets _brickEventChan
+  brickChanM <- gets (^. ccBrickEventChan)
   logChan <- liftIO $ newChan @Text
   evChan <- liftIO $ newChan @Event
   plg <- gets _ccPreloadedGifs
@@ -220,7 +221,7 @@ grabHorture = do
           _ <- liftIO . forkOS $ run plg (Just logChan) evChan w
           logSourceTID <- liftIO . forkIO . forever $ do
             readChan logChan >>= writeBChan brickChan . CCLog
-          modify (\cs -> cs {_ccTIDsToClean = [evSourceTID, logSourceTID]})
+          ccTIDsToClean .= [evSourceTID, logSourceTID]
         _otherwise -> return ()
       modify $ \ccs ->
         ccs
@@ -230,15 +231,19 @@ grabHorture = do
 
 spawnEventSource :: Maybe BaseUrl -> Chan Event -> EventM Name CommandCenterState ThreadId
 spawnEventSource Nothing evChan = do
-  timeout <- gets _ccTimeout
-  gifs <- gets _ccGifs
+  timeout <- gets (^. ccTimeout)
+  gifs <- gets (^. ccGifs)
   liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
 spawnEventSource (Just (BaseUrl scheme host port path)) evChan = do
-  registeredEffs <- gets _ccRegisteredEffects
-  uid <- gets _ccUserId
+  registeredEffs <- gets (^. ccRegisteredEffects)
+  uid <- gets (^. ccUserId)
   case scheme of
-    Https -> liftIO . forkOS $ runSecureClient host (fromIntegral port) path (hortureWSStaticClientApp uid evChan registeredEffs)
-    Http -> liftIO . forkOS $ runClient host port path (hortureWSStaticClientApp uid evChan registeredEffs)
+    Https ->
+      liftIO . forkIO $
+        runSecureClient host (fromIntegral port) path (hortureWSStaticClientApp uid evChan registeredEffs)
+    Http ->
+      liftIO . forkIO $
+        runClient host port path (hortureWSStaticClientApp uid evChan registeredEffs)
 
 app :: App CommandCenterState CommandCenterEvent Name
 app =
@@ -268,38 +273,9 @@ runCommandCenter mockMode (Config cid _ helixApi mauth wsEndpoint dir delay) = d
         auth <- case mauth of
           Just auth -> return auth
           Nothing -> error "No AuthorizationToken available, authorize Horture first"
-
-        mgr <-
-          newManager =<< case baseUrlScheme helixApi of
-            Https -> return tlsManagerSettings
-            Http -> return defaultManagerSettings
-        let TwitchUsersClient {getUsers} = twitchUsersClient cid (AuthorizationToken auth)
-            clientEnv = mkClientEnv mgr helixApi
-        res <- runClientM (getUsers Nothing []) clientEnv
-        uid <- case res of
-          Left err -> do
-            print @String "Unabled to get your twitch-id, aborting:"
-            error . show $ err
-          Right (DataResponse []) -> do
-            error "Unabled to get your twitch-id, twitch send unexpected response."
-          Right (DataResponse (u : _)) -> return . getuserinformationId $ u
-
-        let channelPointsClient = twitchChannelPointsClient cid (AuthorizationToken auth)
-        controllerInputChan <- newChan @EventControllerInput
-        controllerResponseChan <- newChan @EventControllerResponse
-        void . forkIO $ do
-          logChan <- newChan @CommandCenterEvent
-          logSourceTID <- forkIO . forever $ do
-            readChan logChan >>= writeBChan appChan
-          runHortureTwitchEventController
-            (TCS channelPointsClient uid clientEnv Map.empty)
-            logChan
-            controllerInputChan
-            controllerResponseChan
-          -- Clean up glue-thread.
-          killThread logSourceTID
-        let cs = Just (controllerInputChan, controllerResponseChan)
-        return (cs, uid)
+        uid <- fetchUserId helixApi cid auth
+        cs <- spawnTwitchEventController helixApi uid cid auth appChan
+        return (Just cs, uid)
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
   void $
@@ -314,6 +290,52 @@ runCommandCenter mockMode (Config cid _ helixApi mauth wsEndpoint dir delay) = d
           _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
           _ccUserId = uid,
           _ccControllerChans = controllerChans,
-          _brickEventChan = Just appChan
+          _ccBrickEventChan = Just appChan
         , _ccTimeout = delay
         }
+
+fetchUserId :: BaseUrl -> Text -> Text -> IO Text
+fetchUserId helixApi cid auth = do
+  mgr <-
+    newManager =<< case baseUrlScheme helixApi of
+      Https -> return tlsManagerSettings
+      Http -> return defaultManagerSettings
+  let TwitchUsersClient {getUsers} = twitchUsersClient cid (AuthorizationToken auth)
+      clientEnv = mkClientEnv mgr helixApi
+  res <- runClientM (getUsers Nothing []) clientEnv
+  case res of
+    Left err -> do
+      print @String "Unabled to get your twitch-id, aborting:"
+      error . show $ err
+    Right (DataResponse []) -> do
+      error "Unabled to get your twitch-id, twitch send unexpected response."
+    Right (DataResponse (u : _)) -> return . getuserinformationId $ u
+
+spawnTwitchEventController ::
+  BaseUrl ->
+  Text ->
+  Text ->
+  Text ->
+  BChan CommandCenterEvent ->
+  IO (Chan EventControllerInput, Chan EventControllerResponse)
+spawnTwitchEventController helixApi uid cid auth appChan = do
+  mgr <-
+    newManager =<< case baseUrlScheme helixApi of
+      Https -> return tlsManagerSettings
+      Http -> return defaultManagerSettings
+  let channelPointsClient = twitchChannelPointsClient cid (AuthorizationToken auth)
+      clientEnv = mkClientEnv mgr helixApi
+  controllerInputChan <- newChan @EventControllerInput
+  controllerResponseChan <- newChan @EventControllerResponse
+  void . forkIO $ do
+    logChan <- newChan @CommandCenterEvent
+    logSourceTID <- forkIO . forever $ do
+      readChan logChan >>= writeBChan appChan
+    runHortureTwitchEventController
+      (TCS channelPointsClient uid clientEnv Map.empty)
+      logChan
+      controllerInputChan
+      controllerResponseChan
+    -- Clean up glue-thread.
+    killThread logSourceTID
+  return (controllerInputChan, controllerResponseChan)
