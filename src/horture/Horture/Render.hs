@@ -140,7 +140,7 @@ applyShaderEffect ::
   (ShaderEffect, Double, Lifetime) ->
   (TextureObject, TextureObject) ->
   Horture l (TextureObject, TextureObject)
-applyShaderEffect _t (eff, _birth, _lt) buffers = do
+applyShaderEffect t (eff, birth, lt) buffers = do
   shaderProgs <-
     asks (Map.lookup eff . (^. screenProg . shaderEffects)) >>= \case
       Nothing -> throwError $ HE "unhandled shadereffect encountered"
@@ -153,13 +153,17 @@ applyShaderEffect _t (eff, _birth, _lt) buffers = do
       genMipMap -- Mipmap generation has to happen for everyframe.
       -- Write to texture w.
       liftIO $ framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D w 0
-      currentProgram $= Just prog
+      currentProgram $= Just (prog ^. shader)
+      setLifetimeUniform lt (prog ^. lifetimeUniform)
+      uniform (prog ^. dtUniform) $= t - birth
       drawBaseQuad
       genMipMap
       currentProgram $= Nothing
       -- Flip textures for next effect. Read from written texture `w` and write to
       -- read from texture `r`.
       return (w, r)
+    setLifetimeUniform (Limited s) uni = uniform uni $= (s * 10 ** 6)
+    setLifetimeUniform Forever uni = uniform uni $= (0 :: Double)
 
 applyScreenBehaviours :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
 applyScreenBehaviours t screen = do

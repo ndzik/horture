@@ -117,10 +117,12 @@ in vec2 texCoord;
 
 uniform sampler2D texture1;
 uniform float barrelPower = 1.5;
+uniform double lifetime = 0;
+uniform double dt = 0;
 
 layout(location = 0) out vec4 frag_colour;
 
-vec4 distort(sampler2D tex, vec2 uv) {
+vec4 distort(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec2 xy = 2.0 * uv - 1.0;
   if (length(xy)>=1.0) return texture(tex, uv);
 
@@ -136,8 +138,8 @@ vec4 distort(sampler2D tex, vec2 uv) {
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = distort(texture1, uv);
-  // frag_colour = texture2D(texture1, uv);
+  frag_colour = distort(texture1, uv, lifetime, dt);
+  // frag_colour = texture2D(texture1, uv, lifetime, dt);
 }
     |]
 
@@ -149,9 +151,11 @@ stitchShader =
 in vec2 texCoord;
 uniform sampler2D texture1;
 uniform float stitchSize = 6.0;
+uniform double lifetime = 0;
+uniform double dt = 0;
 layout(location = 0) out vec4 frag_colour;
 
-vec4 stitchIt(sampler2D tex, vec2 uv) {
+vec4 stitchIt(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec2 texSize = textureSize(tex, 0);
   float rtW = float(texSize.x);
   float rtH = float(texSize.y);
@@ -176,7 +180,7 @@ vec4 stitchIt(sampler2D tex, vec2 uv) {
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = stitchIt(texture1, uv);
+  frag_colour = stitchIt(texture1, uv, lifetime, dt);
 }
     |]
 
@@ -194,12 +198,14 @@ blurVShader =
 
 in vec2 texCoord;
 uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
 layout(location = 0) out vec4 frag_colour;
 
 float offset[3] = float[](0.0, 1.3846153846, 3.2307602308);
 float weight[3] = float[](0.2270270270, 0.3162162162, 0.0702702703);
 
-vec4 blurVertical(sampler2D tex, vec2 uv) {
+vec4 blurVertical(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec2 texSize = textureSize(tex, 0);
   float rtH = float(texSize.y);
 
@@ -214,7 +220,7 @@ vec4 blurVertical(sampler2D tex, vec2 uv) {
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = blurVertical(texture1, uv);
+  frag_colour = blurVertical(texture1, uv, lifetime, dt);
 }
     |]
 
@@ -227,12 +233,14 @@ blurHShader =
 
 in vec2 texCoord;
 uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
 layout(location = 0) out vec4 frag_colour;
 
 float offset[3] = float[](0.0, 1.3846153846, 3.2307602308);
 float weight[3] = float[](0.2270270270, 0.3162162162, 0.0702702703);
 
-vec4 blurHorizontal(sampler2D tex, vec2 uv) {
+vec4 blurHorizontal(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec2 texSize = textureSize(tex, 0);
   float rtW = float(texSize.x);
 
@@ -247,7 +255,7 @@ vec4 blurHorizontal(sampler2D tex, vec2 uv) {
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = blurHorizontal(texture1, uv);
+  frag_colour = blurHorizontal(texture1, uv, lifetime, dt);
 }
     |]
 
@@ -259,9 +267,16 @@ flashbangShader =
 
 in vec2 texCoord;
 uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
 layout(location = 0) out vec4 frag_colour;
 
+vec4 flashbang(sampler2D tex, vec2 uv, double lifetime, double dt) {
+  return vec4(1, 1, 1, 1);
+}
+
 void main() {
-  frag_colour = vec4(1, 1, 1, 1);
+  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
+  frag_colour = flashbang(texture1, uv, lifetime, dt);
 }
     |]

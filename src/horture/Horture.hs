@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Horture
@@ -27,6 +28,7 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Bifunctor
 import Data.Bits
 import qualified Data.Map.Strict as Map
 import Data.Text (pack)
@@ -72,9 +74,11 @@ playScene s = do
       renderGifs dt . _gifs $ s
       updateView
       s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
-      go startTime s' `catchError` (\err -> do
-                          handleHortureError err
-                          go startTime (Just s))
+      go startTime s'
+        `catchError` ( \err -> do
+                         handleHortureError err
+                         go startTime (Just s)
+                     )
     handleHortureError (HE err) = logError . pack $ err
 
 clearView :: Horture l ()
@@ -228,7 +232,7 @@ shutdown win = do
 -- TODO: Move HortureScreenProgram & HortureGifProgram initialisation code into
 -- this function and return the compound structs instead of this ugly big
 -- tuple.
-initResources :: IO (VertexArrayObject, BufferObject, BufferObject, Program, Program, Map.Map ShaderEffect [Program])
+initResources :: IO (VertexArrayObject, BufferObject, BufferObject, Program, Program, Map.Map ShaderEffect [HortureShaderProgram])
 initResources = do
   vao <- genObjectName
   bindVertexArrayObject $= Just vao
@@ -247,12 +251,20 @@ initResources = do
   return (vao, vbo, veo, prog, gifProg, effs)
   where
     compileAndLinkShaderEffects vsp = do
-      barrelProg <- loadShaderBS "barrel.shader" FragmentShader barrelShader >>= linkShaderProgram . (: [vsp])
-      stitchProg <- loadShaderBS "stitch.shader" FragmentShader stitchShader >>= linkShaderProgram . (: [vsp])
-      blurVProg <- loadShaderBS "blurv.shader" FragmentShader blurVShader >>= linkShaderProgram . (: [vsp])
-      blurHProg <- loadShaderBS "blurh.shader" FragmentShader blurHShader >>= linkShaderProgram . (: [vsp])
-      flashbangProg <- loadShaderBS "flashbang.shader" FragmentShader flashbangShader >>= linkShaderProgram . (: [vsp])
-      return $ Map.fromList [(Barrel, [barrelProg]), (Stitch, [stitchProg]), (Blur, [blurVProg, blurHProg]), (Flashbang, [flashbangProg])]
+      let shaderProgs = [(Barrel, [barrelShader]), (Stitch, [stitchShader]), (Blur, [blurVShader, blurHShader]), (Flashbang, [flashbangShader])]
+          buildLinkAndUniform p = do
+            hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])
+            lifetimeUniform <- uniformLocation hsp "lifetime"
+            dtUniform <- uniformLocation hsp "dt"
+            return
+              HortureShaderProgram
+                { _hortureShaderProgramShader = hsp,
+                  _hortureShaderProgramLifetimeUniform = lifetimeUniform,
+                  _hortureShaderProgramDtUniform = dtUniform
+                }
+      Map.fromList <$> mapM (sequenceRight . second (sequence . (buildLinkAndUniform <$>))) shaderProgs
+    sequenceRight :: (ShaderEffect, IO [HortureShaderProgram]) -> IO (ShaderEffect, [HortureShaderProgram])
+    sequenceRight (st, action) = (st,) <$> action
 
 data SizeUpdate = GLFWUpdate !(Int, Int) | XUpdate !(CInt, CInt) deriving (Show, Eq)
 
