@@ -139,7 +139,6 @@ vec4 distort(sampler2D tex, vec2 uv, double lifetime, double dt) {
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
   frag_colour = distort(texture1, uv, lifetime, dt);
-  // frag_colour = texture2D(texture1, uv, lifetime, dt);
 }
     |]
 
@@ -173,7 +172,6 @@ vec4 stitchIt(sampler2D tex, vec2 uv, double lifetime, double dt) {
     c = vec4(0.2, 0.15, 0.05, 1.0);
   } else {
     c = texture2D(tex, tlpos * vec2(1.0/rtW, 1.0/rtH)) * 1.4;
-    // c = vec4(0.0, 0.0, 0.0, 1.0);
   }
   return c;
 }
@@ -272,7 +270,9 @@ uniform double dt = 0;
 layout(location = 0) out vec4 frag_colour;
 
 vec4 flashbang(sampler2D tex, vec2 uv, double lifetime, double dt) {
-  return vec4(1, 1, 1, 1);
+  vec4 c = texture2D(tex, uv);
+  double pp = 1 - (dt / lifetime);
+  return vec4(pp * (1 - c.x) + c.x, pp * (1 - c.y) + c.y, pp * (1 - c.z) + c.z, 1);
 }
 
 void main() {

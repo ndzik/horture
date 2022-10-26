@@ -162,7 +162,7 @@ applyShaderEffect t (eff, birth, lt) buffers = do
       -- Flip textures for next effect. Read from written texture `w` and write to
       -- read from texture `r`.
       return (w, r)
-    setLifetimeUniform (Limited s) uni = uniform uni $= (s * 10 ** 6)
+    setLifetimeUniform (Limited s) uni = uniform uni $= s
     setLifetimeUniform Forever uni = uniform uni $= (0 :: Double)
 
 applyScreenBehaviours :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
