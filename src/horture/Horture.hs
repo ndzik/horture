@@ -258,37 +258,37 @@ data SizeUpdate = GLFWUpdate !(Int, Int) | XUpdate !(CInt, CInt) deriving (Show,
 
 x11UserGrabWindow :: IO (Maybe (String, Window))
 x11UserGrabWindow = do
- dp <- openDisplay ""
- let ds = defaultScreen dp
- root <- rootWindow dp ds
- cursor <- createFontCursor dp xC_crosshair
- _ <-
-   grabPointer
-     dp
-     root
-     False
-     ( buttonMotionMask
-         .|. buttonPressMask
-         .|. buttonReleaseMask
-     )
-     grabModeAsync
-     grabModeAsync
-     root
-     cursor
-     currentTime
+  dp <- openDisplay ""
+  let ds = defaultScreen dp
+  root <- rootWindow dp ds
+  cursor <- createFontCursor dp xC_crosshair
+  _ <-
+    grabPointer
+      dp
+      root
+      False
+      ( buttonMotionMask
+          .|. buttonPressMask
+          .|. buttonReleaseMask
+      )
+      grabModeAsync
+      grabModeAsync
+      root
+      cursor
+      currentTime
 
- userDecision <- allocaXEvent $ \evptr -> do
-   nextEvent dp evptr
-   getEvent evptr >>= \case
-     ButtonEvent {..} -> do
-       alloca $ \cptr -> do
-         s <- xFetchName dp ev_subwindow cptr
-         if s == 0
-           then return . Just $ ("unknown", ev_subwindow)
-           else peek cptr >>= peekCString >>= \n -> return . Just $ (n, ev_subwindow)
-     _otherwise -> return Nothing
+  userDecision <- allocaXEvent $ \evptr -> do
+    nextEvent dp evptr
+    getEvent evptr >>= \case
+      ButtonEvent {..} -> do
+        alloca $ \cptr -> do
+          s <- xFetchName dp ev_subwindow cptr
+          if s == 0
+            then return . Just $ ("unknown", ev_subwindow)
+            else peek cptr >>= peekCString >>= \n -> return . Just $ (n, ev_subwindow)
+      _otherwise -> return Nothing
 
- ungrabPointer dp currentTime
- freeCursor dp cursor
- closeDisplay dp
- return userDecision
+  ungrabPointer dp currentTime
+  freeCursor dp cursor
+  closeDisplay dp
+  return userDecision
