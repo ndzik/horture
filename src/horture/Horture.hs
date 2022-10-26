@@ -64,7 +64,7 @@ playScene s = do
   setTime 0
   go 0 (Just s)
   where
-    go _ Nothing = return ()
+    go _ Nothing = logInfo "horture stopped"
     go startTime (Just s) = do
       dt <- deltaTime startTime
       clearView
@@ -72,7 +72,9 @@ playScene s = do
       renderGifs dt . _gifs $ s
       updateView
       s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
-      go startTime s' `catchError` handleHortureError >> go startTime (Just s)
+      go startTime s' `catchError` (\err -> do
+                          handleHortureError err
+                          go startTime (Just s))
     handleHortureError (HE err) = logError . pack $ err
 
 clearView :: Horture l ()
