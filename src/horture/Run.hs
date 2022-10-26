@@ -15,7 +15,7 @@ import Data.Default
 import Data.List (find)
 import qualified Data.Map.Strict as Map
 import Data.Maybe
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
 import Foreign.Ptr
@@ -212,9 +212,12 @@ run gifs logChan evChan w = do
             _glWin = glW,
             _backgroundColor = Color4 0.1 0.1 0.1 1
           }
-  _ <- case logChan of
-    Just _ -> runHorture hs hc (playScene @'Channel scene)
-    Nothing -> runHorture hs hc (playScene @'NoLog scene)
+  case logChan of
+    Just chan ->
+      runHorture hs hc (playScene @'Channel scene) >>= \case
+        Left err -> writeChan chan . pack . show $ err
+        _otherwise -> return ()
+    Nothing -> void $ runHorture hs hc (playScene @'NoLog scene)
   GLFW.destroyWindow glW
   GLFW.terminate
   closeDisplay dp

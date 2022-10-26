@@ -13,9 +13,11 @@ import Brick.Widgets.Border
 import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center
 import Brick.Widgets.List
+import qualified Colog
 import Control.Concurrent (ThreadId, forkIO, forkOS, killThread)
 import Control.Concurrent.Chan.Synchronous
 import Control.Lens
+import Control.Monad.Catch
 import Control.Monad.Except
 import Data.Default
 import Data.List (intercalate)
@@ -30,10 +32,11 @@ import Horture.CommandCenter.State
 import Horture.Config
 import Horture.Effect
 import Horture.Event
-import Horture.EventSource.Controller
+import Horture.EventSource.Controller hiding (logError, logInfo, logWarn)
 import Horture.EventSource.Local
 import Horture.EventSource.WebSocketClient
 import Horture.Loader
+import qualified Horture.Logging as HL
 import Horture.Object
 import Linear.V3
 import Network.HTTP.Client (defaultManagerSettings, newManager)
@@ -160,8 +163,8 @@ terminateEventSource (Just (ic, rc)) =
 
 stopHorture :: EventM Name CommandCenterState ()
 stopHorture = do
-  gets _ccEventChan >>= mapM_ writeExit
-  gets _ccTIDsToClean >>= liftIO . mapM_ killThread
+  gets (^. ccEventChan) >>= mapM_ writeExit
+  gets (^. ccTIDsToClean) >>= liftIO . mapM_ killThread
   modify
     ( \ccs ->
         ccs
@@ -179,7 +182,7 @@ writeExit chan = liftIO $ writeChan chan (EventCommand Exit)
 refreshEventSource ::
   Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
   EventM Name CommandCenterState ()
-refreshEventSource Nothing = logInfo' "No EventSource controller available"
+refreshEventSource Nothing = logInfo "No EventSource controller available"
 refreshEventSource (Just (ic, rc)) = do
   liftIO (writeChan ic InputPurgeAll) >> liftIO (readChan rc) >>= handleEventControllerResponse
   gifs <- gets _ccPreloadedGifs
@@ -197,37 +200,60 @@ refreshEventSource (Just (ic, rc)) = do
 
 handleEventControllerResponse :: EventControllerResponse -> EventM Name CommandCenterState ()
 handleEventControllerResponse (ListEvents effs) = do
-  logInfo' $ "ListingEventSource: " <> (pack . show $ effs)
+  logInfo $ "ListingEventSource: " <> (pack . show $ effs)
   modify (\cs -> cs {_ccRegisteredEffects = Map.fromList effs})
 handleEventControllerResponse (Enable _itWorked) = return ()
 handleEventControllerResponse (PurgeAll _itWorked) = return ()
 
-logInfo' :: Text -> EventM Name CommandCenterState ()
-logInfo' msg = handleCCEvent (CCLog msg)
+logInfo :: Text -> EventM Name CommandCenterState ()
+logInfo = HL.withColog Colog.Info logActionCC
+
+logWarn :: Text -> EventM Name CommandCenterState ()
+logWarn = HL.withColog Colog.Warning logActionCC
+
+logError :: Text -> EventM Name CommandCenterState ()
+logError = HL.withColog Colog.Error logActionCC
+
+logActionCC :: Colog.LogAction (EventM Name CommandCenterState) Text
+logActionCC = Colog.LogAction $ \msg -> ccLog %= (msg :)
+
+data CCException
+  = InvalidBrickConfiguration
+  | UserAvoidedWindowSelection
+  deriving (Show)
+
+instance Exception CCException
 
 grabHorture :: EventM Name CommandCenterState ()
 grabHorture = do
-  brickChanM <- gets (^. ccBrickEventChan)
-  logChan <- liftIO $ newChan @Text
-  evChan <- liftIO $ newChan @Event
   plg <- gets _ccPreloadedGifs
   hurl <- gets _ccHortureUrl
-  liftIO x11UserGrabWindow >>= \case
-    Nothing -> return ()
-    Just res@(_, w) -> do
-      case brickChanM of
-        Just brickChan -> do
-          evSourceTID <- spawnEventSource hurl evChan
-          _ <- liftIO . forkOS $ run plg (Just logChan) evChan w
-          logSourceTID <- liftIO . forkIO . forever $ do
-            readChan logChan >>= writeBChan brickChan . CCLog
-          ccTIDsToClean .= [evSourceTID, logSourceTID]
-        _otherwise -> return ()
-      modify $ \ccs ->
-        ccs
-          { _ccEventChan = Just evChan,
-            _ccCapturedWin = Just res
-          }
+  brickChan <-
+    gets (^. ccBrickEventChan) >>= \case
+      Nothing -> throwM InvalidBrickConfiguration
+      Just brickChan -> pure brickChan
+
+  logChan <- liftIO $ newChan @Text
+  evChan <- liftIO $ newChan @Event
+  res@(_, w) <-
+    liftIO x11UserGrabWindow >>= \case
+      Nothing -> throwM UserAvoidedWindowSelection
+      Just res -> pure res
+
+  -- Event source thread.
+  evSourceTID <- spawnEventSource hurl evChan
+  -- Horture rendering thread.
+  _ <- liftIO . forkOS $ run plg (Just logChan) evChan w
+  -- Logging relay thread `Renderer` -> `Frontend`.
+  logSourceTID <- liftIO . forkIO . forever $ do
+    readChan logChan >>= writeBChan brickChan . CCLog
+  -- Cache ThreadIDs which can to be killed externally.
+  ccTIDsToClean .= [evSourceTID, logSourceTID]
+  modify $ \ccs ->
+    ccs
+      { _ccEventChan = Just evChan,
+        _ccCapturedWin = Just res
+      }
 
 spawnEventSource :: Maybe BaseUrl -> Chan Event -> EventM Name CommandCenterState ThreadId
 spawnEventSource Nothing evChan = do
@@ -250,10 +276,14 @@ app =
   App
     { appDraw = drawUI,
       appStartEvent = prepareEnvironment,
-      appHandleEvent = appEvent,
+      appHandleEvent = (`catch` handleCCExceptions) . appEvent,
       appAttrMap = const $ attrMap defAttr [],
       appChooseCursor = neverShowCursor
     }
+
+handleCCExceptions :: CCException -> EventM Name CommandCenterState ()
+handleCCExceptions InvalidBrickConfiguration = logError "InvalidBrickConfiguration"
+handleCCExceptions UserAvoidedWindowSelection = logWarn "User avoided window selection"
 
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
@@ -290,8 +320,8 @@ runCommandCenter mockMode (Config cid _ helixApi mauth wsEndpoint dir delay) = d
           _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
           _ccUserId = uid,
           _ccControllerChans = controllerChans,
-          _ccBrickEventChan = Just appChan
-        , _ccTimeout = delay
+          _ccBrickEventChan = Just appChan,
+          _ccTimeout = delay
         }
 
 fetchUserId :: BaseUrl -> Text -> Text -> IO Text

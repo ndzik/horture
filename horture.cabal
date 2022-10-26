@@ -80,6 +80,8 @@ library horture-lib
                             , servant-client-core
                             , data-default
                             , bytestring
+                            , exceptions
+                            , co-log
                             , aeson
                             , http-api-data
                             , http-client
@@ -91,7 +93,6 @@ library horture-lib
                             , async
                             , freer-simple
                             , synchronous-channels
-                            , co-log
                             , OpenGL
                             , lens
                             , JuicyPixels
