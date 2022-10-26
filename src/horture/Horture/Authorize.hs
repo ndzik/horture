@@ -32,7 +32,7 @@ import Web.FormUrlEncoded (urlDecodeAsForm, urlEncodeAsForm)
 import Prelude hiding (drop)
 
 authorize :: Config -> IO ()
-authorize cfg@(Config cid _ _ _ _ _) = do
+authorize cfg@(Config cid _ _ _ _ _ _) = do
   res <-
     retrieveUserAccessToken
       cid

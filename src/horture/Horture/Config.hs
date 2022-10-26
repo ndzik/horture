@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NumericUnderscores #-}
 
 -- | Horture client configuration.
 module Horture.Config
@@ -20,9 +21,13 @@ data Config = Config
     twitchApiEndpoint :: !BaseUrl,
     twitchAuthToken :: !(Maybe Text),
     hortureWsEndpoint :: !(Maybe BaseUrl),
-    gifDirectory :: !FilePath
+    gifDirectory :: !FilePath,
+    debugDelayMs :: !Int
   }
   deriving (Show)
+
+defaultDebugDelay :: Int
+defaultDebugDelay = 1_000_000
 
 instance Default Config where
   def =
@@ -32,7 +37,8 @@ instance Default Config where
         twitchApiEndpoint = BaseUrl Https "api.twitch.tv" 443 "",
         twitchAuthToken = Nothing,
         hortureWsEndpoint = Nothing,
-        gifDirectory = "./gifs"
+        gifDirectory = "./gifs",
+        debugDelayMs = defaultDebugDelay
       }
 
 parseHortureClientConfig :: FilePath -> IO (Maybe Config)
@@ -51,5 +57,8 @@ instance FromJSON Config where
           )
       <*> (o .:? "horture_ws_endpoint")
       <*> o .: "gif_directory"
+      <*> (o .:? "debug_delay_ms" >>= \case
+              Just v -> return v
+              _otherwise -> return defaultDebugDelay)
 
 $(deriveToJSON defaultOptions {fieldLabelModifier = camelTo2 '_', omitNothingFields = True} ''Config)

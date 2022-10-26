@@ -254,7 +254,7 @@ prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
 runCommandCenter :: Bool -> Config -> IO ()
-runCommandCenter mockMode (Config cid _ helixApi mauth wsEndpoint dir) = do
+runCommandCenter mockMode (Config cid _ helixApi mauth wsEndpoint dir delay) = do
   gifs <- makeAbsolute dir >>= loadDirectory
   preloadedGifs <-
     runPreloader (PLC dir) loadGifsInMemory >>= \case
@@ -315,4 +315,5 @@ runCommandCenter mockMode (Config cid _ helixApi mauth wsEndpoint dir) = do
           _ccUserId = uid,
           _ccControllerChans = controllerChans,
           _brickEventChan = Just appChan
+        , _ccTimeout = delay
         }
