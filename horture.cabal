@@ -152,8 +152,10 @@ library horture-server-lib
                         , bytestring
                         , cryptonite
                         , memory
+                        , katip
 
     exposed-modules:    Horture.Server.Config
+                        , Horture.Server.Reader
                         , Horture.Server.Message
                         , Horture.Server.Websocket
                         , Horture.Server.Server

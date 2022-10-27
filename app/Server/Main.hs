@@ -63,7 +63,7 @@ main' (ServerParams cf _db) = do
     Left err -> print err >> exitFailure
     Right r -> return r
   print "Successfully retrieved AppAccessToken from Twitch"
-  runHortureServer (HortureServerConfig serverPort twitchResponseCallback certFile keyFile twitchClientId aat)
+  runHorture (HortureServerConfig serverPort twitchResponseCallback certFile keyFile twitchClientId aat)
 
 data ServerParams = ServerParams
   { _config :: !FilePath,
