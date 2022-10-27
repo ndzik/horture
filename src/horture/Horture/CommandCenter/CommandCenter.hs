@@ -157,9 +157,7 @@ terminateEventSource ::
   Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
   EventM Name CommandCenterState ()
 terminateEventSource Nothing = return ()
-terminateEventSource (Just (ic, rc)) =
-  liftIO (writeChan ic InputTerminate)
-    >> liftIO (readChan rc) >>= handleEventControllerResponse
+terminateEventSource (Just pipe) = writeAndHandleResponse pipe InputTerminate
 
 stopHorture :: EventM Name CommandCenterState ()
 stopHorture = do
@@ -183,27 +181,38 @@ refreshEventSource ::
   Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
   EventM Name CommandCenterState ()
 refreshEventSource Nothing = logInfo "No EventSource controller available"
-refreshEventSource (Just (ic, rc)) = do
-  liftIO (writeChan ic InputPurgeAll) >> liftIO (readChan rc) >>= handleEventControllerResponse
+refreshEventSource (Just pipe) = do
+  writeAndHandleResponse pipe InputPurgeAll
+
   gifs <- gets _ccPreloadedGifs
   let gifEffs = map (\(fp, _) -> AddGif fp Forever (V3 0 0 0) []) gifs
       shaderEffs = map (AddShaderEffect Forever) [Barrel, Blur, Stitch, Flashbang]
       allEffs = gifEffs ++ [AddScreenBehaviour Forever []] ++ shaderEffs
   mapM_
-    ( \eff ->
-        do
-          liftIO (writeChan ic (InputEnable (toTitle eff, eff)))
-          >> liftIO (readChan rc) >>= handleEventControllerResponse
-    )
+    (\eff -> writeAndHandleResponse pipe (InputEnable (toTitle eff, eff)))
     allEffs
-  liftIO (writeChan ic InputListEvents) >> liftIO (readChan rc) >>= handleEventControllerResponse
+
+  writeAndHandleResponse pipe InputListEvents
+
+writeAndHandleResponse ::
+  (Chan EventControllerInput, Chan EventControllerResponse) ->
+  EventControllerInput ->
+  EventM Name CommandCenterState ()
+writeAndHandleResponse (ic, rc) i = do
+  liftIO (writeChan ic i)
+  liftIO (readChan rc) >>= handleEventControllerResponse
 
 handleEventControllerResponse :: EventControllerResponse -> EventM Name CommandCenterState ()
 handleEventControllerResponse (ListEvents effs) = do
-  logInfo $ "ListingEventSource: " <> (pack . show $ effs)
+  logInfo "Listing event source:"
+  mapM_ (logInfo . pack . show) effs
   modify (\cs -> cs {_ccRegisteredEffects = Map.fromList effs})
-handleEventControllerResponse (Enable _itWorked) = return ()
-handleEventControllerResponse (PurgeAll _itWorked) = return ()
+handleEventControllerResponse (Enable itWorked)
+  | itWorked = logInfo "Enabling events on EventSource successful"
+  | otherwise = logWarn "Enabling events on EventSource failed"
+handleEventControllerResponse (PurgeAll itWorked)
+  | itWorked = logInfo "Purging events on EventSource successful"
+  | otherwise = logWarn "Purging events on EventSource failed"
 
 logInfo :: Text -> EventM Name CommandCenterState ()
 logInfo = HL.withColog Colog.Info logActionCC
@@ -242,11 +251,11 @@ grabHorture = do
 
   -- Event source thread.
   evSourceTID <- spawnEventSource hurl evChan
-  -- Horture rendering thread.
-  _ <- liftIO . forkOS $ run plg (Just logChan) evChan w
+  -- Horture rendering thread. Does not have to be externally killed, because
+  -- we will try to end it cooperatively by issuing an external exit command.
+  void . liftIO . forkOS $ run plg (Just logChan) evChan w
   -- Logging relay thread `Renderer` -> `Frontend`.
-  logSourceTID <- liftIO . forkIO . forever $ do
-    readChan logChan >>= writeBChan brickChan . CCLog
+  logSourceTID <- liftIO . forkIO . forever $ pipeToBrickChan logChan brickChan CCLog
   -- Cache ThreadIDs which can to be killed externally.
   ccTIDsToClean .= [evSourceTID, logSourceTID]
   modify $ \ccs ->
@@ -336,9 +345,11 @@ fetchUserId helixApi cid auth = do
   case res of
     Left err -> do
       print @String "Unabled to get your twitch-id, aborting:"
-      error . show $ err
+      print err
+      exitFailure
     Right (DataResponse []) -> do
-      error "Unabled to get your twitch-id, twitch send unexpected response."
+      print @String "Unabled to get your twitch-id, twitch send unexpected response."
+      exitFailure
     Right (DataResponse (u : _)) -> return . getuserinformationId $ u
 
 spawnTwitchEventController ::
@@ -359,13 +370,17 @@ spawnTwitchEventController helixApi uid cid auth appChan = do
   controllerResponseChan <- newChan @EventControllerResponse
   void . forkIO $ do
     logChan <- newChan @CommandCenterEvent
-    logSourceTID <- forkIO . forever $ do
-      readChan logChan >>= writeBChan appChan
-    runHortureTwitchEventController
-      (TCS channelPointsClient uid clientEnv Map.empty)
-      logChan
-      controllerInputChan
-      controllerResponseChan
-    -- Clean up glue-thread.
-    killThread logSourceTID
+    bracket
+      (forkIO . forever $ pipeToBrickChan logChan appChan id)
+      killThread
+      ( const $
+          runHortureTwitchEventController
+            (TCS channelPointsClient uid clientEnv Map.empty)
+            logChan
+            controllerInputChan
+            controllerResponseChan
+      )
   return (controllerInputChan, controllerResponseChan)
+
+pipeToBrickChan :: Chan a -> BChan b -> (a -> b) -> IO ()
+pipeToBrickChan chan bchan toBchan = readChan chan >>= writeBChan bchan . toBchan
