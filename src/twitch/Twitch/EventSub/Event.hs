@@ -9,6 +9,7 @@ where
 
 import Data.Aeson
 import Data.Aeson.TH
+import Data.Aeson.Types
 import Data.List (isPrefixOf)
 import Data.Text (Text)
 import Twitch.EventSub.BitsVoting
@@ -476,47 +477,425 @@ data Reward = Reward
   }
   deriving (Show)
 
+parseEventUsingCondition :: Object -> Condition -> Parser Event
+parseEventUsingCondition o ChannelUpdateCondition {} =
+  ChannelUpdate
+    <$> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "title"
+    <*> o .: "language"
+    <*> o .: "category_id"
+    <*> o .: "category_name"
+    <*> o .: "is_mature"
+parseEventUsingCondition o ChannelFollowCondition {} =
+  ChannelFollow
+    <$> o .: "user_id"
+      <*> o .: "user_login"
+      <*> o .: "user_name"
+      <*> o .: "broadcaster_user_id"
+      <*> o .: "broadcaster_user_login"
+      <*> o .: "broadcaster_user_name"
+      <*> o .: "followed_at"
+parseEventUsingCondition o ChannelSubscribeCondition {} =
+  ChannelSubscribe
+    <$> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "tier"
+    <*> o .: "is_gift"
+parseEventUsingCondition o ChannelSubscriptionEndCondition {} =
+  ChannelSubscriptionEnd
+    <$> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "tier"
+    <*> o .: "is_gift"
+parseEventUsingCondition o ChannelSubscriptionGiftCondition {} =
+  ChannelSubscriptionGift
+    <$> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "total"
+    <*> o .: "tier"
+    <*> o .: "cumulative_total"
+    <*> o .: "is_anonymous"
+parseEventUsingCondition o ChannelCheerCondition {} =
+  ChannelCheer
+    <$> o .: "is_anonymous"
+    <*> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "message"
+    <*> o .: "bits"
+parseEventUsingCondition o ChannelRaidCondition {} =
+  ChannelRaid
+    <$> o .: "from_broadcaster_user_id"
+    <*> o .: "from_broadcaster_user_login"
+    <*> o .: "from_broadcaster_user_name"
+    <*> o .: "to_broadcaster_user_id"
+    <*> o .: "to_broadcaster_user_login"
+    <*> o .: "to_broadcaster_user_name"
+    <*> o .: "viewer"
+parseEventUsingCondition o ChannelBanCondition {} =
+  ChannelBan
+    <$> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "moderator_user_id"
+    <*> o .: "moderator_user_login"
+    <*> o .: "moderator_user_name"
+    <*> o .: "reason"
+    <*> o .: "banned_at"
+    <*> o .: "ends_at"
+    <*> o .: "is_permanent"
+parseEventUsingCondition o ChannelUnbanCondition {} =
+  ChannelUnban
+    <$> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "moderator_user_id"
+    <*> o .: "moderator_user_login"
+    <*> o .: "moderator_user_name"
+parseEventUsingCondition o ChannelModeratorAddCondition {} =
+  ChannelModeratorAdd
+    <$> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+parseEventUsingCondition o ChannelModeratorRemoveCondition {} =
+  ChannelModeratorRemove
+    <$> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+parseEventUsingCondition o ChannelPointsCustomRewardAddCondition {} =
+  ChannelPointsCustomRewardAdd
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "is_enabled"
+    <*> o .: "is_paused"
+    <*> o .: "is_in_stock"
+    <*> o .: "title"
+    <*> o .: "cost"
+    <*> o .: "prompt"
+    <*> o .: "is_user_input_required"
+    <*> o .: "should_redemptions_skip_request_queue"
+    <*> o .: "max_per_stream"
+    <*> o .: "max_per_user_per_stream"
+    <*> o .: "background_color"
+    <*> o .: "image"
+    <*> o .: "default_image"
+    <*> o .: "global_cooldown"
+    <*> o .: "cooldown_expires_at"
+    <*> o .: "redemptions_redeemed_current_stream"
+    <*> o .: "reward"
+    <*> o .: "redeemed_at"
+parseEventUsingCondition o ChannelPointsCustomRewardUpdateCondition {} =
+  ChannelPointsCustomRewardUpdate
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "is_enabled"
+    <*> o .: "is_paused"
+    <*> o .: "is_in_stock"
+    <*> o .: "title"
+    <*> o .: "cost"
+    <*> o .: "prompt"
+    <*> o .: "is_user_input_required"
+    <*> o .: "should_redemptions_skip_request_queue"
+    <*> o .: "max_per_stream"
+    <*> o .: "max_per_user_per_stream"
+    <*> o .: "background_color"
+    <*> o .: "image"
+    <*> o .: "default_image"
+    <*> o .: "global_cooldown"
+    <*> o .: "cooldown_expires_at"
+    <*> o .: "redemptions_redeemed_current_stream"
+parseEventUsingCondition o ChannelPointsCustomRewardRemoveCondition {} =
+  ChannelPointsCustomRewardRemove
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "is_enabled"
+    <*> o .: "is_paused"
+    <*> o .: "is_in_stock"
+    <*> o .: "title"
+    <*> o .: "cost"
+    <*> o .: "prompt"
+    <*> o .: "is_user_input_required"
+    <*> o .: "should_redemptions_skip_request_queue"
+    <*> o .: "max_per_stream"
+    <*> o .: "max_per_user_per_stream"
+    <*> o .: "background_color"
+    <*> o .: "image"
+    <*> o .: "default_image"
+    <*> o .: "global_cooldown"
+    <*> o .: "cooldown_expires_at"
+    <*> o .: "redemptions_redeemed_current_stream"
+parseEventUsingCondition o ChannelPointsCustomRewardRedemptionAddCondition {} =
+  ChannelPointsCustomRewardRedemptionAdd
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+    <*> o .: "user_input"
+    <*> o .: "status"
+    <*> o .: "reward"
+    <*> o .: "redeemed_at"
+parseEventUsingCondition o ChannelPointsCustomRewardRedemptionUpdateCondition {} =
+  ChannelPointsCustomRewardRedemptionUpdate
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+    <*> o .: "user_input"
+    <*> o .: "status"
+    <*> o .: "reward"
+    <*> o .: "redeemed_at"
+parseEventUsingCondition o ChannelPollBeginCondition {} =
+  ChannelPollBegin
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "title"
+    <*> o .: "choices"
+    <*> o .:? "bits_voting"
+    <*> o .: "channel_points_voting"
+    <*> o .: "started_at"
+    <*> o .: "ends_at"
+parseEventUsingCondition o ChannelPollProgressCondition {} =
+  ChannelPollProgress
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "title"
+    <*> o .: "choices"
+    <*> o .:? "bits_voting"
+    <*> o .: "channel_points_voting"
+    <*> o .: "started_at"
+    <*> o .: "ends_at"
+parseEventUsingCondition o ChannelPollEndCondition {} =
+  ChannelPollEnd
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "title"
+    <*> o .: "choices"
+    <*> o .:? "bits_voting"
+    <*> o .: "channel_points_voting"
+    <*> o .: "status"
+    <*> o .: "started_at"
+    <*> o .: "ends_at"
+parseEventUsingCondition o ChannelPredictionBeginCondition {} =
+  ChannelPredictionBegin
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "title"
+    <*> o .: "outcomes"
+    <*> o .: "started_at"
+    <*> o .: "locks_at"
+parseEventUsingCondition o ChannelPredictionProgressCondition {} =
+  ChannelPredictionProgress
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "title"
+    <*> o .: "outcomes"
+    <*> o .: "started_at"
+    <*> o .: "locks_at"
+parseEventUsingCondition o ChannelPredictionLockCondition {} =
+  ChannelPredictionLock
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "title"
+    <*> o .: "outcomes"
+    <*> o .: "started_at"
+    <*> o .: "locks_at"
+parseEventUsingCondition o ChannelPredictionEndCondition {} =
+  ChannelPredictionEnd
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "title"
+    <*> o .: "outcomes"
+    <*> o .: "started_at"
+    <*> o .: "locks_at"
+parseEventUsingCondition o DropEntitlementGrantCondition {} =
+  DropEntitlementGrant
+    <$> o .: "id"
+    <*> o .: "data"
+parseEventUsingCondition o ExtensionBitsTransactionCreateCondition {} =
+  ExtensionBitsTransactionCreate
+    <$> o .: "extension_client_id"
+    <*> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+    <*> o .: "user_input"
+    <*> o .: "product"
+parseEventUsingCondition o GoalBeginCondition {} =
+  Goals
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "type"
+    <*> o .: "description"
+    <*> o .: "is_achieved"
+    <*> o .: "current_amount"
+    <*> o .: "target_amount"
+    <*> o .: "started_at"
+    <*> o .: "ended_at"
+parseEventUsingCondition o GoalProgressCondition {} =
+  Goals
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "type"
+    <*> o .: "description"
+    <*> o .: "is_achieved"
+    <*> o .: "current_amount"
+    <*> o .: "target_amount"
+    <*> o .: "started_at"
+    <*> o .: "ended_at"
+parseEventUsingCondition o GoalEndCondition {} =
+  Goals
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "type"
+    <*> o .: "description"
+    <*> o .: "is_achieved"
+    <*> o .: "current_amount"
+    <*> o .: "target_amount"
+    <*> o .: "started_at"
+    <*> o .: "ended_at"
+parseEventUsingCondition o HypeTrainBeginCondition {} =
+  HypeTrainBegin
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "total"
+    <*> o .: "progress"
+    <*> o .: "goal"
+    <*> o .: "top_contributions"
+    <*> o .: "last_contribution"
+    <*> o .: "level"
+    <*> o .: "started_at"
+    <*> o .: "expires_at"
+parseEventUsingCondition o HypeTrainProgressCondition {} =
+  HypeTrainProgress
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "level"
+    <*> o .: "total"
+    <*> o .: "progress"
+    <*> o .: "goal"
+    <*> o .: "top_contributions"
+    <*> o .: "last_contribution"
+    <*> o .: "started_at"
+    <*> o .: "expires_at"
+parseEventUsingCondition o HypeTrainEndCondition {} =
+  HypeTrainEnd
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "level"
+    <*> o .: "total"
+    <*> o .: "top_contributions"
+    <*> o .: "started_at"
+    <*> o .: "ended_at"
+    <*> o .: "cooldown_ends_at"
+parseEventUsingCondition o StreamOnlineCondition {} =
+  StreamOnline
+    <$> o .: "id"
+    <*> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+    <*> o .: "type"
+    <*> o .: "started_at"
+parseEventUsingCondition o StreamOfflineCondition {} =
+  StreamOffline
+    <$> o .: "broadcaster_user_id"
+    <*> o .: "broadcaster_user_login"
+    <*> o .: "broadcaster_user_name"
+parseEventUsingCondition o AuthorizationGrantCondition {} =
+  AuthorizationGrant
+    <$> o .: "client_id"
+    <*> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+parseEventUsingCondition o AuthorizationRevokeCondition {} =
+  AuthorizationRevoke
+    <$> o .: "client_id"
+    <*> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+parseEventUsingCondition o UserUpdateCondition {} =
+  UserUpdate
+    <$> o .: "user_id"
+    <*> o .: "user_login"
+    <*> o .: "user_name"
+    <*> o .: "email"
+    <*> o .: "email_verified"
+    <*> o .: "description"
+
 instance FromJSON Event where
   parseJSON = withObject "Event" $ \o ->
     (.:) @Object o "event" >>= \evo ->
-    (.:) @ResponseObject o "subscription" >>= (\case
-      ChannelUpdateCondition {} -> ChannelUpdate <$> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "title" <*> evo .: "language" <*> evo .: "category_id" <*> evo .: "category_name" <*> evo .: "is_mature"
-      ChannelFollowCondition {} -> ChannelFollow <$> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "followed_at"
-      ChannelSubscribeCondition {} -> ChannelSubscribe <$> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "tier" <*> evo .: "is_gift"
-      ChannelSubscriptionEndCondition {} -> ChannelSubscriptionEnd <$> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "tier" <*> evo .: "is_gift"
-      ChannelSubscriptionGiftCondition {} -> ChannelSubscriptionGift <$> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "total" <*> evo .: "tier" <*> evo .: "cumulative_total" <*> evo .: "is_anonymous"
-      ChannelCheerCondition {} -> ChannelCheer <$> evo .: "is_anonymous" <*> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "message" <*> evo .: "bits"
-      ChannelRaidCondition {} -> ChannelRaid <$> evo .: "from_broadcaster_user_id" <*> evo .: "from_broadcaster_user_login" <*> evo .: "from_broadcaster_user_name" <*> evo .: "to_broadcaster_user_id" <*> evo .: "to_broadcaster_user_login" <*> evo .: "to_broadcaster_user_name" <*> evo .: "viewer"
-      ChannelBanCondition {} -> ChannelBan <$> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "moderator_user_id" <*> evo .: "moderator_user_login" <*> evo .: "moderator_user_name" <*> evo .: "reason" <*> evo .: "banned_at" <*> evo .: "ends_at" <*> evo .: "is_permanent"
-      ChannelUnbanCondition {} -> ChannelUnban <$> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "moderator_user_id" <*> evo .: "moderator_user_login" <*> evo .: "moderator_user_name"
-      ChannelModeratorAddCondition {} -> ChannelModeratorAdd <$> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name"
-      ChannelModeratorRemoveCondition {} -> ChannelModeratorRemove <$> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name"
-      ChannelPointsCustomRewardAddCondition {} -> ChannelPointsCustomRewardAdd <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "is_enabled" <*> evo .: "is_paused" <*> evo .: "is_in_stock" <*> evo .: "title" <*> evo .: "cost" <*> evo .: "prompt" <*> evo .: "is_user_input_required" <*> evo .: "should_redemptions_skip_request_queue" <*> evo .: "max_per_stream" <*> evo .: "max_per_user_per_stream" <*> evo .: "background_color" <*> evo .: "image" <*> evo .: "default_image" <*> evo .: "global_cooldown" <*> evo .: "cooldown_expires_at" <*> evo .: "redemptions_redeemed_current_stream" <*> evo .: "reward" <*> evo .: "redeemed_at"
-      ChannelPointsCustomRewardUpdateCondition {} -> ChannelPointsCustomRewardUpdate <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "is_enabled" <*> evo .: "is_paused" <*> evo .: "is_in_stock" <*> evo .: "title" <*> evo .: "cost" <*> evo .: "prompt" <*> evo .: "is_user_input_required" <*> evo .: "should_redemptions_skip_request_queue" <*> evo .: "max_per_stream" <*> evo .: "max_per_user_per_stream" <*> evo .: "background_color" <*> evo .: "image" <*> evo .: "default_image" <*> evo .: "global_cooldown" <*> evo .: "cooldown_expires_at" <*> evo .: "redemptions_redeemed_current_stream"
-      ChannelPointsCustomRewardRemoveCondition {} -> ChannelPointsCustomRewardRemove <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "is_enabled" <*> evo .: "is_paused" <*> evo .: "is_in_stock" <*> evo .: "title" <*> evo .: "cost" <*> evo .: "prompt" <*> evo .: "is_user_input_required" <*> evo .: "should_redemptions_skip_request_queue" <*> evo .: "max_per_stream" <*> evo .: "max_per_user_per_stream" <*> evo .: "background_color" <*> evo .: "image" <*> evo .: "default_image" <*> evo .: "global_cooldown" <*> evo .: "cooldown_expires_at" <*> evo .: "redemptions_redeemed_current_stream"
-      ChannelPointsCustomRewardRedemptionAddCondition {} -> ChannelPointsCustomRewardRedemptionAdd <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name" <*> evo .: "user_input" <*> evo .: "status" <*> evo .: "reward" <*> evo .: "redeemed_at"
-      ChannelPointsCustomRewardRedemptionUpdateCondition {} -> ChannelPointsCustomRewardRedemptionUpdate <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name" <*> evo .: "user_input" <*> evo .: "status" <*> evo .: "reward" <*> evo .: "redeemed_at"
-      ChannelPollBeginCondition {} -> ChannelPollBegin <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "title" <*> evo .: "choices" <*> evo .:? "bits_voting" <*> evo .: "channel_points_voting" <*> evo .: "started_at" <*> evo .: "ends_at"
-      ChannelPollProgressCondition {} -> ChannelPollProgress <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "title" <*> evo .: "choices" <*> evo .:? "bits_voting" <*> evo .: "channel_points_voting" <*> evo .: "started_at" <*> evo .: "ends_at"
-      ChannelPollEndCondition {} -> ChannelPollEnd <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "title" <*> evo .: "choices" <*> evo .:? "bits_voting" <*> evo .: "channel_points_voting" <*> evo .: "status" <*> evo .: "started_at" <*> evo .: "ends_at"
-      ChannelPredictionBeginCondition {} -> ChannelPredictionBegin <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "title" <*> evo .: "outcomes" <*> evo .: "started_at" <*> evo .: "locks_at"
-      ChannelPredictionProgressCondition {} -> ChannelPredictionProgress <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "title" <*> evo .: "outcomes" <*> evo .: "started_at" <*> evo .: "locks_at"
-      ChannelPredictionLockCondition {} -> ChannelPredictionLock <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "title" <*> evo .: "outcomes" <*> evo .: "started_at" <*> evo .: "locks_at"
-      ChannelPredictionEndCondition {} -> ChannelPredictionEnd <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "title" <*> evo .: "outcomes" <*> evo .: "started_at" <*> evo .: "locks_at"
-      DropEntitlementGrantCondition {} -> DropEntitlementGrant <$> evo .: "id" <*> evo .: "data"
-      ExtensionBitsTransactionCreateCondition {} -> ExtensionBitsTransactionCreate <$> evo .: "extension_client_id" <*> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name" <*> evo .: "user_input" <*> evo .: "product"
-      GoalBeginCondition {} -> Goals <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "type" <*> evo .: "description" <*> evo .: "is_achieved" <*> evo .: "current_amount" <*> evo .: "target_amount" <*> evo .: "started_at" <*> evo .: "ended_at"
-      GoalProgressCondition {} -> Goals <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "type" <*> evo .: "description" <*> evo .: "is_achieved" <*> evo .: "current_amount" <*> evo .: "target_amount" <*> evo .: "started_at" <*> evo .: "ended_at"
-      GoalEndCondition {} -> Goals <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "type" <*> evo .: "description" <*> evo .: "is_achieved" <*> evo .: "current_amount" <*> evo .: "target_amount" <*> evo .: "started_at" <*> evo .: "ended_at"
-      HypeTrainBeginCondition {} -> HypeTrainBegin <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "total" <*> evo .: "progress" <*> evo .: "goal" <*> evo .: "top_contributions" <*> evo .: "last_contribution" <*> evo .: "level" <*> evo .: "started_at" <*> evo .: "expires_at"
-      HypeTrainProgressCondition {} -> HypeTrainProgress <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "level" <*> evo .: "total" <*> evo .: "progress" <*> evo .: "goal" <*> evo .: "top_contributions" <*> evo .: "last_contribution" <*> evo .: "started_at" <*> evo .: "expires_at"
-      HypeTrainEndCondition {} -> HypeTrainEnd <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "level" <*> evo .: "total" <*> evo .: "top_contributions" <*> evo .: "started_at" <*> evo .: "ended_at" <*> evo .: "cooldown_ends_at"
-      StreamOnlineCondition {} -> StreamOnline <$> evo .: "id" <*> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name" <*> evo .: "type" <*> evo .: "started_at"
-      StreamOfflineCondition {} -> StreamOffline <$> evo .: "broadcaster_user_id" <*> evo .: "broadcaster_user_login" <*> evo .: "broadcaster_user_name"
-      AuthorizationGrantCondition {} -> AuthorizationGrant <$> evo .: "client_id" <*> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name"
-      AuthorizationRevokeCondition {} -> AuthorizationRevoke <$> evo .: "client_id" <*> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name"
-      UserUpdateCondition {} -> UserUpdate <$> evo .: "user_id" <*> evo .: "user_login" <*> evo .: "user_name" <*> evo .: "email" <*> evo .: "email_verified" <*> evo .: "description"
-                                                                          ) . responseobjectCondition
+      (.:) @ResponseObject o "subscription"
+        >>= parseEventUsingCondition evo . responseobjectCondition
 
 $(deriveJSON defaultOptions {constructorTagModifier = camelTo2 '_'} ''StreamType)
 $(deriveJSON defaultOptions {constructorTagModifier = camelTo2 '_'} ''EventStatus)
