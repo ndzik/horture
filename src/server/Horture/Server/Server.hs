@@ -1,7 +1,6 @@
 module Horture.Server.Server (runHorture) where
 
 import Control.Concurrent.Chan.Synchronous
-import Control.Exception (bracket)
 import Control.Lens
 import Control.Monad.Reader
 import Crypto.Hash.Algorithms (SHA256)
@@ -12,6 +11,7 @@ import Data.ByteString (ByteString, concat)
 import Data.Maybe
 import Data.Text (pack)
 import Data.Text.Encoding
+import Horture.Server.Application
 import Horture.Server.Config
 import Horture.Server.Reader
 import Horture.Server.Websocket
@@ -21,7 +21,6 @@ import Network.Wai
 import Network.Wai.Handler.Warp
 import Network.Wai.Handler.WarpTLS
 import Servant.Client (showBaseUrl)
-import System.IO (stdout)
 import System.Random.Stateful
 import qualified Twitch.EventSub.Notification as Twitch
 import Twitch.Rest (AuthorizationToken (..))
@@ -36,30 +35,8 @@ runHorture conf = do
   secret <- encodeUtf8 . pack . show <$> uniformByteStringM 16 globalStdGen
   tevChan <- newChan @Twitch.EventNotification
   case (_keyFile conf, _certFile conf) of
-    (Just kf, Just cf) -> runTLS (tlsSettings cf kf) defaultSettings . runHortureServer conf tevChan $ secret
-    _otherwise -> run (_port conf) . runHortureServer conf tevChan $ secret
-
-type HortureServer a = ReaderT HortureServerEnv IO a
-
-type HortureHandler' = Request -> (Response -> IO ResponseReceived) -> HortureServer ResponseReceived
-
-type HortureHandler = Request -> (Response -> HortureServer ResponseReceived) -> HortureServer ResponseReceived
-
-runHortureServer :: HortureServerConfig -> Chan Twitch.EventNotification -> ByteString -> Application
-runHortureServer cfg chan s req respondWith = do
-  handleScribe <- mkHandleScribe ColorIfTerminal stdout (permitItem InfoS) V2
-  let mkLogEnv = registerScribe "stdout" handleScribe defaultScribeSettings =<< initLogEnv "horture-server" "production"
-  bracket mkLogEnv closeScribes $ \le -> do
-    let env =
-          HortureServerEnv
-            { _conf = cfg,
-              _notificationChan = chan,
-              _secret = s,
-              _logEnv = le,
-              _logContext = mempty,
-              _logNamespace = mempty
-            }
-    runReaderT (hortureApp req (liftIO . respondWith)) env
+    (Just kf, Just cf) -> runTLS (tlsSettings cf kf) defaultSettings . runHortureServer hortureApp conf tevChan $ secret
+    _otherwise -> run (_port conf) . runHortureServer hortureApp conf tevChan $ secret
 
 hortureApp :: HortureHandler'
 hortureApp req respondWith = do
@@ -70,7 +47,7 @@ hortureApp req respondWith = do
     -- connection. We will use the singleton for now, since this is a MVP.
     ["eventsub"] -> handleTwitchNotification req (liftIO . respondWith)
     ["ws"] -> do
-      -- print @String "Received request on WS endpoint"
+      logFM InfoS "Received request on WS endpoint"
       s <- asks (^. secret)
       clientId <- asks (^. conf . appClientId)
       cb <- asks (^. conf . callback)
@@ -89,15 +66,15 @@ hortureApp req respondWith = do
 
 handleTwitchNotification :: HortureHandler
 handleTwitchNotification req respondWith = do
-  -- print @String "TwitchNotification called."
+  logFM DebugS "TwitchNotification called."
   if not . isPOST . requestMethod $ req
     then do
-      -- print @String "Notification is not POST"
+      logFM DebugS "Notification is not POST"
       respondWith methodNotAllowed
     else do
       body <- liftIO $ getRequestBodyChunk req
       s <- asks (^. secret)
-      -- print @String "Notification is POST"
+      logFM DebugS "Notification is POST"
       let headers = requestHeaders req
       res <- case lookup "Twitch-Eventsub-Message-Signature" headers of
         Just sig -> verifyFromTwitch req body s sig
@@ -105,16 +82,14 @@ handleTwitchNotification req respondWith = do
           return False
       if not res
         then do
-          -- print @String "Invalid Twitch-Signature in message: "
-          -- print body
+          logFM DebugS . logStr $ "Invalid Twitch-Signature in message: " <> body
           respondWith badRequest
         else case lookup "Twitch-Eventsub-Message-Type" $ requestHeaders req of
           Just messageType -> do
             chan <- asks (^. notificationChan)
             handleMessageType body chan messageType req >>= respondWith
           _otherwise -> do
-            -- print @String "Received Non-Eventsub message:"
-            -- print _otherwise
+            logFM DebugS . logStr $ "Received Non-Eventsub message: " <> show _otherwise
             respondWith badRequest
 
 verifyFromTwitch :: Request -> ByteString -> ByteString -> ByteString -> HortureServer Bool
@@ -142,24 +117,24 @@ verifySignature expectedSig actualSig = expectedSig == actualSig
 
 handleMessageType :: ByteString -> Chan Twitch.EventNotification -> ByteString -> Request -> HortureServer Response
 handleMessageType body _ "webhook_callback_verification" _req = do
-  -- print @String "CallbackVerification challenge received"
+  logFM InfoS "CallbackVerification challenge received"
   handleCallbackVerification body
 handleMessageType body tevChan "notification" _req = do
-  -- print @String "NotificationEvent received"
+  logFM InfoS "NotificationEvent received"
   handleNotification tevChan body
 handleMessageType _body _ "revocation" req = do
-  -- print @String "RevocationEvent received"
+  logFM InfoS "RevocationEvent received"
   handleRevocation req
-handleMessageType _body _ _othertype _req = do
-  -- print $ "Received othertype" <> othertype
+handleMessageType _body _ othertype _req = do
+  logFM InfoS . logStr $ "Received othertype" <> othertype
   return okNoContent
 
 handleCallbackVerification :: ByteString -> HortureServer Response
 handleCallbackVerification body = do
   let mChallenge = decodeStrict @Twitch.ChallengeNotification body
-  -- case mChallenge of
-  --   Nothing -> print @String "Unable to decode challenge body"
-  --   Just chall -> print . encode $ chall
+  case mChallenge of
+    Nothing -> logFM DebugS "Unable to decode challenge body"
+    Just chall -> logFM DebugS . logStr $ encode chall
   return $ maybe badRequestBody respondWithChallenge mChallenge
   where
     respondWithChallenge mChallenge =
@@ -170,9 +145,9 @@ handleCallbackVerification body = do
 
 handleNotification :: Chan Twitch.EventNotification -> ByteString -> HortureServer Response
 handleNotification tevChan body = do
-  -- print body
+  logFM DebugS . logStr $ body
   case decodeStrict @Twitch.EventNotification body of
-    Nothing -> return () -- void $ print @String "unable to decode Twitch.EventNotification"
+    Nothing -> logFM WarningS "unable to decode Twitch.EventNotification"
     Just ev -> liftIO $ writeChan tevChan ev
   -- Always returning okNoContent, since we cannot ask twitch to resend this
   -- message if ill-formatted.

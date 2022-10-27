@@ -156,6 +156,7 @@ library horture-server-lib
 
     exposed-modules:    Horture.Server.Config
                         , Horture.Server.Reader
+                        , Horture.Server.Application
                         , Horture.Server.Message
                         , Horture.Server.Websocket
                         , Horture.Server.Server
