@@ -17,8 +17,12 @@ import Servant.Client
 
 data Config = Config
   { twitchClientId :: !Text,
+    twitchClientSecret :: !(Maybe Text),
     twitchAuthorizationEndpoint :: !BaseUrl,
     twitchApiEndpoint :: !BaseUrl,
+    -- | mockUserId is only used when testing against a local twitch-api using
+    -- `twitch-cli`.
+    mockUserId :: !(Maybe Text),
     twitchAuthToken :: !(Maybe Text),
     hortureWsEndpoint :: !(Maybe BaseUrl),
     gifDirectory :: !FilePath,
@@ -33,10 +37,12 @@ instance Default Config where
   def =
     Config
       { twitchClientId = "invalid-client-id",
-        twitchAuthorizationEndpoint = BaseUrl Https "id.twitch.tv" 443 "oauth2/authorize",
-        twitchApiEndpoint = BaseUrl Https "api.twitch.tv" 443 "",
+        twitchClientSecret = Nothing,
+        twitchAuthorizationEndpoint = BaseUrl Https "localhost" 8080 "auth/authorize",
+        twitchApiEndpoint = BaseUrl Http "localhost" 8080 "mock",
         twitchAuthToken = Nothing,
         hortureWsEndpoint = Nothing,
+        mockUserId = Nothing,
         gifDirectory = "./gifs",
         debugDelayMs = defaultDebugDelay
       }
@@ -49,16 +55,25 @@ parseHortureClientConfig fp = do
 instance FromJSON Config where
   parseJSON = withObject "Config" $ \o ->
     Config <$> o .: "twitch_client_id"
+      <*> ( o .:? "twitch_client_secret" >>= \case
+              Just "" -> return Nothing
+              v -> return v
+          )
       <*> o .: "twitch_authorization_endpoint"
       <*> o .: "twitch_api_endpoint"
+      <*> ( o .:? "mock_user_id" >>= \case
+              Just "" -> return Nothing
+              v -> return v
+          )
       <*> ( o .:? "twitch_auth_token" >>= \case
               Just "" -> return Nothing
               v -> return v
           )
       <*> (o .:? "horture_ws_endpoint")
       <*> o .: "gif_directory"
-      <*> (o .:? "debug_delay_ms" >>= \case
+      <*> ( o .:? "debug_delay_ms" >>= \case
               Just v -> return v
-              _otherwise -> return defaultDebugDelay)
+              _otherwise -> return defaultDebugDelay
+          )
 
 $(deriveToJSON defaultOptions {fieldLabelModifier = camelTo2 '_', omitNothingFields = True} ''Config)

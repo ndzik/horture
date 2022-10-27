@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE QuasiQuotes #-}
 
 -- | Follows the credential flows given at:
@@ -15,13 +16,18 @@ import Data.Functor ((<&>))
 import Data.Text (Text, pack)
 import Data.Word (Word8)
 import Horture.Config
+import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Types (status200, status400)
 import Network.Wai
 import Network.Wai.Handler.Warp
-import Servant.Client (BaseUrl (..), showBaseUrl)
+import Servant.Client (BaseUrl (..), mkClientEnv, runClientM, showBaseUrl)
+import System.Exit (exitFailure)
 import System.Random.Stateful (globalStdGen, uniformListM)
 import Text.RawString.QQ
+import Twitch.Mock
+import Twitch.Rest.Authentication
 import Twitch.Rest.Authorization
+
   ( AccessTokenScopes (..),
     AuthorizationErrorResponse (..),
     AuthorizationRequest (..),
@@ -31,10 +37,20 @@ import Twitch.Rest.Authorization
 import Web.FormUrlEncoded (urlDecodeAsForm, urlEncodeAsForm)
 import Prelude hiding (drop)
 
-authorize :: Config -> IO ()
-authorize cfg@(Config cid _ _ _ _ _ _) = do
+authorize :: Bool -> Config -> IO ()
+authorize mockMode cfg@(Config cid msecret _ _ mmuid _ _ _ _) = do
+  retrieveFunc <-
+    if mockMode
+      then do
+        (muid, secret) <- case (mmuid, msecret) of
+          (Just muid, Just secret) -> pure (muid, secret)
+          _else -> do
+            print @String "If mockMode is enabled, a mocked user id \"mock_user_id\" and \"twitch_client_secret\" have to be provided via the config file"
+            exitFailure
+        pure $ retrieveUserAccessTokenMockMode muid secret
+      else pure retrieveUserAccessToken
   res <-
-    retrieveUserAccessToken
+    retrieveFunc
       cid
       (twitchAuthorizationEndpoint cfg)
       (AccessTokenScopes ["channel:manage:redemptions"])
@@ -44,6 +60,20 @@ authorize cfg@(Config cid _ _ _ _ _ _) = do
       print @String "Add the following token to your `$CONFIG/horture/config.json` with the key: \"twitch_auth_token\"."
       print creds
       print @String "Success authorizing user, have fun horturing"
+
+retrieveUserAccessTokenMockMode :: Text -> Text -> Text -> BaseUrl -> AccessTokenScopes -> IO (Maybe Text)
+retrieveUserAccessTokenMockMode _ _ _ _ (AccessTokenScopes []) = do
+  print @String "No scopes given to request from user, aborting..."
+  return Nothing
+retrieveUserAccessTokenMockMode muid secret clientId localEndpoint scopes = do
+  mgr <- newManager defaultManagerSettings
+  let TwitchMockAuthClient {getUserToken} = twitchMockAuthClient clientId secret
+      clientEnv = mkClientEnv mgr localEndpoint
+  res <- runClientM (getUserToken muid (Just scopes)) clientEnv
+  ClientCredentialResponse at _ _ <- case res of
+                                       Left err -> print err >> exitFailure
+                                       Right r -> pure r
+  return $ Just at
 
 -- | retrieveUserAccessToken follows the implicit client-credentials flow,
 -- where the user is directed to `https://id.twitch.tv/oauth2/authorize` and

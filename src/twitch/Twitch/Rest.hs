@@ -47,8 +47,6 @@ twitchTokenClient =
         { getAppAccessToken = _getAppAccessToken
         }
 
--- type ChannelPointsApi =
-
 newtype AuthorizationToken = AuthorizationToken Text
 
 instance ToHttpApiData AuthorizationToken where

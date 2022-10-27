@@ -190,11 +190,12 @@ library twitch-api
                         , Twitch.EventSub.Notification
                         , Twitch.Rest
                         , Twitch.Rest.Authorization
+                        , Twitch.Rest.Authentication
                         , Twitch.Rest.DataResponse
                         , Twitch.Rest.Types
+                        , Twitch.Mock
 
-    other-modules:      Twitch.Rest.Authentication
-                        , Twitch.Rest.Token
+    other-modules:      Twitch.Rest.Token
                         , Twitch.EventSub.Condition
                         , Twitch.EventSub.Request
                         , Twitch.EventSub.Response

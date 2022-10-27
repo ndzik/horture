@@ -47,6 +47,7 @@ hortureWS secret cid cb tevChan aat pendingConn = do
         HortureClientConfig
           { _conn = conn,
             _secret = secret,
+            _twitchApiEndpoint = BaseUrl Http "localhost" 8080 "mock",
             _messageQueue = chan,
             _twitchEventQueue = tevChan,
             _twitchApiCallback = cb,
@@ -59,6 +60,7 @@ hortureWS secret cid cb tevChan aat pendingConn = do
 data HortureClientConfig = HortureClientConfig
   { _conn :: !Connection,
     _secret :: !ByteString,
+    _twitchApiEndpoint :: !BaseUrl,
     _twitchApiCallback :: !Text,
     _messageQueue :: !(Chan HortureClientMessage),
     _twitchEventQueue :: !(Chan Twitch.EventNotification),
@@ -106,11 +108,12 @@ handleClientMessage (HortureAuthorization buid) = do
   liftIO . print $ "Received authorization for userid: " <> show buid
   mgr <- liftIO $ newManager tlsManagerSettings
   at <- asks _appAccess
+  twitchEndpoint <- asks _twitchApiEndpoint
   secret <- asks _secret
   clientId <- asks _appClientId
   apiCallbackUrl <- asks _twitchApiCallback
   let cl@TwitchEventSubClient {eventsubSubscribe} = twitchEventSubClient clientId at
-      clientEnv = mkClientEnv mgr (BaseUrl Https "api.twitch.tv" 443 "helix")
+      clientEnv = mkClientEnv mgr twitchEndpoint
   removeAllOldSubscriptions cl clientEnv
   res <-
     liftIO $

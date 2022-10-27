@@ -71,7 +71,7 @@ handleParams :: HortureParams -> IO ()
 handleParams (HortureParams fp mockMode wantAuth) =
   resolvePath fp >>= parseHortureClientConfig >>= \case
     Nothing -> print "invalid horture client config" >> exitFailure
-    Just cfg ->
+    Just cfg -> do
       if wantAuth
-        then authorize cfg
+        then authorize mockMode cfg
         else runCommandCenter mockMode cfg

@@ -6,7 +6,8 @@ module Twitch.Rest.Authorization
     AuthorizationRequest (..),
     AuthorizationResponse (..),
     AccessTokenScopes (..),
-AuthorizationErrorResponse (..),
+    AuthorizationErrorResponse (..),
+    MockAuthorizationRequest(..),
   )
 where
 
@@ -113,6 +114,31 @@ instance ToForm AuthorizationResponse where
       prependIfJust :: (ToHttpApiData a) => Text -> Maybe a -> [Item Form] -> [Item Form]
       prependIfJust label (Just v) rs = (label, toQueryParam v) : rs
       prependIfJust _ Nothing rs = rs
+
+data MockAuthorizationRequest = MockAuthorizationRequest
+  { mockauthorizationrequestClientID :: !Text,
+    mockauthorizationrequestClientSecret :: !Text,
+    mockauthorizationrequestUserId :: !Text,
+    mockauthorizationrequestScope :: !AccessTokenScopes
+  }
+  deriving (Show)
+
+instance ToForm MockAuthorizationRequest where
+  toForm macr =
+    [ ("client_id", toQueryParam . mockauthorizationrequestClientID $ macr),
+      ("client_secret", toQueryParam . mockauthorizationrequestClientSecret $ macr),
+      ("user_id", toQueryParam . mockauthorizationrequestUserId $ macr),
+      ("scope", toQueryParam . mockauthorizationrequestScope $ macr),
+      ("grant_type", "user_token")
+    ]
+
+instance FromForm MockAuthorizationRequest where
+  fromForm f =
+    MockAuthorizationRequest
+      <$> parseUnique "client_id" f
+      <*> parseUnique "client_secret" f
+      <*> parseUnique "user_id" f
+      <*> parseUnique "scope" f
 
 data AuthorizationRequest = AuthorizationRequest
   { authorizationrequestClientId :: !Text,
