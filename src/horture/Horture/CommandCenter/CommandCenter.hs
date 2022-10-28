@@ -229,12 +229,17 @@ logActionCC = Colog.LogAction $ \msg -> ccLog %= (msg :)
 data CCException
   = InvalidBrickConfiguration
   | UserAvoidedWindowSelection
+  | AlreadyCapturingWindow
   deriving (Show)
 
 instance Exception CCException
 
 grabHorture :: EventM Name CommandCenterState ()
 grabHorture = do
+  gets (^. ccCapturedWin) >>= \case
+    Nothing -> return ()
+    Just _ -> throwM AlreadyCapturingWindow
+
   plg <- gets _ccPreloadedGifs
   hurl <- gets _ccHortureUrl
   brickChan <-
@@ -293,6 +298,7 @@ app =
 handleCCExceptions :: CCException -> EventM Name CommandCenterState ()
 handleCCExceptions InvalidBrickConfiguration = logError "InvalidBrickConfiguration"
 handleCCExceptions UserAvoidedWindowSelection = logWarn "User avoided window selection"
+handleCCExceptions AlreadyCapturingWindow = logWarn "Already capturing application, stop your current capture first"
 
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
