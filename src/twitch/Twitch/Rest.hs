@@ -172,7 +172,7 @@ type EventSubSubscribe =
     :> Header' [Required, Strict] "Client-Id" Text
     :> Header' [Required, Strict] "Authorization" AuthorizationToken
     :> ReqBody '[JSON] WebhookRequest
-    :> Post '[JSON] SubscriptionResponse
+    :> PostAccepted '[JSON] SubscriptionResponse
 
 type EventSubGetSubscriptions =
   "eventsub"
