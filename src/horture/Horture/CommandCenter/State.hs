@@ -14,6 +14,9 @@ module Horture.CommandCenter.State
     ccRegisteredEffects,
     ccTIDsToClean,
     ccTimeout,
+    ccGifsList,
+    ccCursorLocationName,
+    Name (..),
   )
 where
 
@@ -30,7 +33,14 @@ import Horture.Effect
 import Horture.Event
 import Horture.EventSource.Controller
 import Horture.Loader.Asset
+import Brick.Widgets.List (GenericList, list)
 import Servant.Client (BaseUrl)
+
+data Name
+  = MetaPort
+  | AssetPort
+  | LogPort
+  deriving (Ord, Show, Eq)
 
 data CommandCenterState = CCState
   { _ccEventChan :: !(Maybe (Chan Event)),
@@ -39,11 +49,13 @@ data CommandCenterState = CCState
     _ccControllerChans :: !(Maybe (Chan EventControllerInput, Chan EventControllerResponse)),
     _ccLog :: ![Text],
     _ccGifs :: ![FilePath],
+    _ccGifsList :: !(GenericList Name [] FilePath),
     _ccHortureUrl :: !(Maybe BaseUrl),
     _ccUserId :: !Text,
     _ccPreloadedGifs :: ![(FilePath, Asset)],
     _ccRegisteredEffects :: !(Map.Map Text (Text, Effect)),
     _ccTIDsToClean :: ![ThreadId],
+    _ccCursorLocationName :: !Name,
     -- | Timeout in microseconds for events to be generated. Only works in
     -- DEBUG mode.
     _ccTimeout :: !Int
@@ -61,8 +73,10 @@ instance Default CommandCenterState where
         _ccUserId = "",
         _ccLog = [],
         _ccGifs = [],
+        _ccGifsList = list AssetPort [] 1,
         _ccPreloadedGifs = [],
         _ccTIDsToClean = [],
+        _ccCursorLocationName = LogPort,
         _ccTimeout = 1_000_000
       }
 

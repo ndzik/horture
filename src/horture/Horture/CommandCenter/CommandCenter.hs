@@ -8,7 +8,7 @@ module Horture.CommandCenter.CommandCenter
   )
 where
 
-import Brick
+import Brick hiding (cursorLocationName)
 import Brick.BChan
 import Brick.Widgets.Border
 import Brick.Widgets.Border.Style (unicode)
@@ -55,11 +55,6 @@ import Twitch.Rest.DataResponse
 import Twitch.Rest.Types
 import Wuss (runSecureClient)
 
-data Name
-  = Main
-  | AssetList
-  deriving (Ord, Show, Eq)
-
 -- | |----------------------------------------|
 --   | Captured Window Title + ID             |
 --   |----------------------------------------|
@@ -81,12 +76,12 @@ drawUI cs =
           [ withBorderStyle unicode $
               borderWithLabel
                 (str "Assets")
-                (availableAssetsUI . _ccGifs $ cs),
+                (availableAssetsUI . _ccGifsList $ cs),
             vBox
               [ withBorderStyle unicode $
                   borderWithLabel
                     (str "Log")
-                    (runningLogUI . _ccLog $ cs),
+                    (viewport LogPort Vertical . vLimitPercent 100 . runningLogUI . _ccLog $ cs),
                 withBorderStyle unicode $
                   borderWithLabel
                     (str "Metainformation")
@@ -108,8 +103,15 @@ currentCaptureUI (Just (n, w)) = center (str . unlines $ ["Capturing: " <> n, "W
 instance Splittable [] where
   splitAt n ls = (take n ls, drop n ls)
 
-availableAssetsUI :: [FilePath] -> Widget Name
-availableAssetsUI fs = renderList (\_selected el -> str el) False $ list AssetList fs 1
+availableAssetsUI :: GenericList Name [] FilePath -> Widget Name
+availableAssetsUI =
+  renderList
+    ( \selected el ->
+        if selected
+          then withAttr listSelectedAttr (str $ "<" <> el <> ">")
+          else str el
+    )
+    False
 
 runningLogUI :: [Text] -> Widget Name
 runningLogUI [] = center (str "No logs available")
@@ -131,9 +133,25 @@ hotkeyUI =
           ]
     )
 
+scrollLogPort :: ViewportScroll Name
+scrollLogPort = viewportScroll LogPort
+
 appEvent :: BrickEvent Name CommandCenterEvent -> EventM Name CommandCenterState ()
-appEvent (VtyEvent (EvKey (KChar 'j') [])) = return ()
-appEvent (VtyEvent (EvKey (KChar 'k') [])) = return ()
+appEvent (VtyEvent (EvKey (KChar '\t') [])) =
+  ccCursorLocationName %= \case
+    LogPort -> AssetPort
+    AssetPort -> LogPort
+    _otherwise -> LogPort
+appEvent (VtyEvent (EvKey (KChar 'j') [])) = do
+  gets (^. ccCursorLocationName) >>= \case
+    LogPort -> vScrollBy scrollLogPort (-1)
+    AssetPort -> ccGifsList %= listMoveDown
+    _otherwise -> return ()
+appEvent (VtyEvent (EvKey (KChar 'k') [])) = do
+  gets (^. ccCursorLocationName) >>= \case
+    LogPort -> vScrollBy scrollLogPort 1
+    AssetPort -> ccGifsList %= listMoveUp
+    _otherwise -> return ()
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'l') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'i') [])) = return ()
@@ -142,7 +160,7 @@ appEvent (VtyEvent (EvKey (KChar 'g') [])) = grabHorture
 appEvent (VtyEvent (EvKey (KChar 'q') [])) = stopHorture
 appEvent (VtyEvent (EvKey KEsc [])) = stopApplication
 appEvent (AppEvent e) = handleCCEvent e
-appEvent _ = return ()
+appEvent _else = return ()
 
 handleCCEvent :: CommandCenterEvent -> EventM Name CommandCenterState ()
 handleCCEvent (CCLog msg) = modify (\cs -> cs {_ccLog = msg : _ccLog cs})
@@ -309,7 +327,12 @@ app =
     { appDraw = drawUI,
       appStartEvent = prepareEnvironment,
       appHandleEvent = (`catch` handleCCExceptions) . appEvent,
-      appAttrMap = const $ attrMap defAttr [],
+      appAttrMap =
+        const $
+          attrMap
+            defAttr
+            [ (listSelectedAttr, fg blue)
+            ],
       appChooseCursor = neverShowCursor
     }
 
@@ -350,6 +373,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint dir delay)
       app
       def
         { _ccGifs = gifs,
+          _ccGifsList = list AssetPort gifs 1,
           _ccPreloadedGifs = preloadedGifs,
           _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
           _ccUserId = uid,
