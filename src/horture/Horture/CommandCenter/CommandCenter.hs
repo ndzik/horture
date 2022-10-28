@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Horture.CommandCenter.CommandCenter
@@ -230,6 +231,7 @@ data CCException
   = InvalidBrickConfiguration
   | UserAvoidedWindowSelection
   | AlreadyCapturingWindow
+  | EventSourceUnavailable
   deriving (Show)
 
 instance Exception CCException
@@ -255,7 +257,7 @@ grabHorture = do
       Just res -> pure res
 
   -- Event source thread.
-  evSourceTID <- spawnEventSource hurl evChan
+  evSourceTID <- spawnEventSource hurl evChan logChan
   -- Horture rendering thread. Does not have to be externally killed, because
   -- we will try to end it cooperatively by issuing an external exit command.
   void . liftIO . forkOS $ run plg (Just logChan) evChan w
@@ -269,21 +271,37 @@ grabHorture = do
         _ccCapturedWin = Just res
       }
 
-spawnEventSource :: Maybe BaseUrl -> Chan Event -> EventM Name CommandCenterState ThreadId
-spawnEventSource Nothing evChan = do
+spawnEventSource :: Maybe BaseUrl -> Chan Event -> Chan Text -> EventM Name CommandCenterState ThreadId
+spawnEventSource Nothing evChan _ = do
   timeout <- gets (^. ccTimeout)
   gifs <- gets (^. ccGifs)
   liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
-spawnEventSource (Just (BaseUrl scheme host port path)) evChan = do
+spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
   registeredEffs <- gets (^. ccRegisteredEffects)
   uid <- gets (^. ccUserId)
   case scheme of
     Https ->
       liftIO . forkIO $
-        runSecureClient host (fromIntegral port) path (hortureWSStaticClientApp uid evChan registeredEffs)
+        runSecureClient
+          host
+          (fromIntegral port)
+          path
+          (hortureWSStaticClientApp uid evChan registeredEffs)
+          `catch` \(e :: SomeException) -> do
+            logError . pack . show $ e
     Http ->
       liftIO . forkIO $
-        runClient host port path (hortureWSStaticClientApp uid evChan registeredEffs)
+        runClient
+          host
+          port
+          path
+          (hortureWSStaticClientApp uid evChan registeredEffs)
+          `catch` \(e :: SomeException) -> do
+            logError . pack . show $ e
+  where
+    logError = HL.withColog Colog.Error (logActionChan logChan)
+    logActionChan :: Chan Text -> Colog.LogAction IO Text
+    logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
 
 app :: App CommandCenterState CommandCenterEvent Name
 app =
@@ -299,6 +317,7 @@ handleCCExceptions :: CCException -> EventM Name CommandCenterState ()
 handleCCExceptions InvalidBrickConfiguration = logError "InvalidBrickConfiguration"
 handleCCExceptions UserAvoidedWindowSelection = logWarn "User avoided window selection"
 handleCCExceptions AlreadyCapturingWindow = logWarn "Already capturing application, stop your current capture first"
+handleCCExceptions EventSourceUnavailable = logError "Source of horture events not reachable"
 
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
