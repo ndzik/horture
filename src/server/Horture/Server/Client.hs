@@ -2,7 +2,6 @@
 
 module Horture.Server.Client where
 
-import Control.Concurrent (forkIO)
 import Control.Concurrent.Chan.Synchronous
 import Control.Exception (bracket)
 import Control.Lens
@@ -10,7 +9,6 @@ import Control.Monad.RWS
 import Data.ByteString (ByteString)
 import Data.Default
 import Data.Text (Text)
-import Horture.Server.Message
 import Katip
 import Network.WebSockets hiding (Request, Response, requestHeaders)
 import Servant.Client
@@ -30,17 +28,13 @@ runHortureClientWS ::
   ServerApp
 runHortureClientWS cl secret cid cb endpoint tevChan aat pendingConn = do
   conn <- acceptRequest pendingConn
-  chan <- newChan @HortureClientMessage
-  -- TODO: What should I do with the ThreadID? Cache and terminate externally?
-  void . forkIO $ let loop = receiveData @HortureClientMessage conn >>= writeChan chan >> loop in loop
-  handleScribe <- mkHandleScribe ColorIfTerminal stdout (permitItem InfoS) V2
+  handleScribe <- mkHandleScribe ColorIfTerminal stdout (permitItem DebugS) V3
   let mkLogEnv = registerScribe "stdout" handleScribe defaultScribeSettings =<< initLogEnv "horture-server" "production"
   bracket mkLogEnv closeScribes $ \le -> do
     let conf =
           HortureClientConfig
             { _conn = conn,
               _secret = secret,
-              _messageQueue = chan,
               _twitchApiEndpoint = endpoint,
               _twitchEventQueue = tevChan,
               _twitchApiCallback = cb,
@@ -69,7 +63,8 @@ newtype HortureClient a = HortureClient
       MonadIO,
       MonadReader HortureClientConfig,
       MonadState HortureClientState,
-      MonadWriter ()
+      MonadWriter (),
+      MonadFail
     )
 
 data HortureClientConfig = HortureClientConfig
@@ -77,7 +72,6 @@ data HortureClientConfig = HortureClientConfig
     _secret :: !ByteString,
     _twitchApiEndpoint :: !BaseUrl,
     _twitchApiCallback :: !Text,
-    _messageQueue :: !(Chan HortureClientMessage),
     _twitchEventQueue :: !(Chan Twitch.EventNotification),
     _appClientId :: !Text,
     _logEnv :: !LogEnv,
