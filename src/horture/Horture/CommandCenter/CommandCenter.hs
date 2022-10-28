@@ -66,35 +66,46 @@ import Wuss (runSecureClient)
 --   |------------------|---------------------|
 drawUI :: CommandCenterState -> [Widget Name]
 drawUI cs =
-  [ vBox
-      [ vLimit 4 $
-          withBorderStyle unicode $
-            borderWithLabel
-              (str "Horture CommandCenter")
-              (currentCaptureUI . _ccCapturedWin $ cs),
-        hBox
-          [ withBorderStyle unicode $
-              borderWithLabel
-                (str "Assets")
-                (availableAssetsUI . _ccGifsList $ cs),
-            vBox
-              [ withBorderStyle unicode $
-                  borderWithLabel
-                    (str "Log")
-                    (viewport LogPort Vertical . vLimitPercent 100 . runningLogUI . _ccLog $ cs),
-                withBorderStyle unicode $
-                  borderWithLabel
-                    (str "Metainformation")
-                    metainfoUI
-              ]
-          ],
-        vLimit 3 $
-          withBorderStyle unicode $
-            borderWithLabel
-              (str "Hotkeys")
-              hotkeyUI
+  let selectedName = (cs ^. ccCursorLocationName)
+   in [ vBox
+          [ vLimit 4 $
+              withBorderStyle unicode $
+                borderWithLabel
+                  (str "Horture CommandCenter")
+                  (currentCaptureUI . _ccCapturedWin $ cs),
+            hBox
+              [ let mkAttr =
+                      if selectedName == AssetPort
+                        then withAttr focused
+                        else withAttr unfocused
+                 in mkAttr $
+                      withBorderStyle unicode $
+                        borderWithLabel
+                          (str "Assets")
+                          (availableAssetsUI . _ccGifsList $ cs),
+                vBox
+                  [ let mkAttr =
+                          if selectedName == LogPort
+                            then withAttr focused
+                            else withAttr unfocused
+                     in mkAttr $
+                          withBorderStyle unicode $
+                            borderWithLabel
+                              (str "Log")
+                              (viewport LogPort Vertical . vLimitPercent 100 . runningLogUI . _ccLog $ cs),
+                    withBorderStyle unicode $
+                      borderWithLabel
+                        (str "Metainformation")
+                        metainfoUI
+                  ]
+              ],
+            vLimit 3 $
+              withBorderStyle unicode $
+                borderWithLabel
+                  (str "Hotkeys")
+                  hotkeyUI
+          ]
       ]
-  ]
 
 currentCaptureUI :: Maybe (String, Window) -> Widget Name
 currentCaptureUI Nothing = center (str "No window is captured")
@@ -109,7 +120,7 @@ availableAssetsUI =
     ( \selected el ->
         if selected
           then withAttr listSelectedAttr (str $ "<" <> el <> ">")
-          else str el
+          else withAttr unfocused $ str el
     )
     False
 
@@ -321,6 +332,12 @@ spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
     logActionChan :: Chan Text -> Colog.LogAction IO Text
     logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
 
+focused :: AttrName
+focused = attrName "focused"
+
+unfocused :: AttrName
+unfocused = attrName "unfocused"
+
 app :: App CommandCenterState CommandCenterEvent Name
 app =
   App
@@ -331,7 +348,9 @@ app =
         const $
           attrMap
             defAttr
-            [ (listSelectedAttr, fg blue)
+            [ (listSelectedAttr, fg blue),
+              (focused, fg yellow),
+              (unfocused, fg white)
             ],
       appChooseCursor = neverShowCursor
     }
