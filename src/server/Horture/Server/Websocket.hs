@@ -28,6 +28,7 @@ import Network.HTTP.Types
 import Network.Wai
 import Network.Wai.Handler.WebSockets
 import Network.WebSockets hiding (Request, Response, requestHeaders)
+import Network.WebSockets.Connection (pingThread)
 import Servant.Client
 import Twitch.EventSub
 import qualified Twitch.EventSub.Notification as Twitch
@@ -52,7 +53,6 @@ hortureClientConn = do
         liftIO (receiveData @HortureClientMessage conn) >>= handleClientMessage
         readerAction
       writerAction = do
-        logFM DebugS "Waiting for TwitchEvent..."
         -- We cannot use a blocking `readChan` call here. Most likely because of
         -- https://hackage.haskell.org/package/synchronous-channels-0.2/docs/Control-Concurrent-Chan-Synchronous.html
         -- use of `uninterruptableMask` in `readChan`.
@@ -65,6 +65,7 @@ hortureClientConn = do
             -- Forward twitch event to connected client.
             liftIO (sendTextData @HortureServerMessage conn (HortureEventSub msg))
             writerAction
+      pingAction = pingThread conn 30 (return ())
 
   fullIfDone <- liftIO newEmptyMVar
   readerTID <- liftIO . forkIO $ do
@@ -75,8 +76,13 @@ hortureClientConn = do
     void (evalRWST (unHortureClient writerAction) env def)
       `catch` \(_ :: ConnectionException) -> do
         putMVar fullIfDone ()
+  pingTID <- liftIO . forkIO $ do
+    pingAction
+      `catch` \(_ :: ConnectionException) -> do
+        putMVar fullIfDone ()
+
   void . liftIO . takeMVar $ fullIfDone
-  void . liftIO . mapM_ killThread $ [readerTID, writerTID]
+  void . liftIO . mapM_ killThread $ [readerTID, writerTID, pingTID]
   logFM InfoS "WebSocketClient terminated"
 
 handleClientMessage :: HortureClientMessage -> HortureClient ()
