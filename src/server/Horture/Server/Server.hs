@@ -51,6 +51,7 @@ hortureApp req respondWith = do
       s <- asks (^. secret)
       clientId <- asks (^. conf . appClientId)
       cb <- asks (^. conf . callback)
+      endpoint <- asks (^. conf . twitchApiEndpoint)
       chan <- asks (^. notificationChan)
       token <- asks (^. conf . appToken)
       liftIO $
@@ -58,6 +59,7 @@ hortureApp req respondWith = do
           s
           clientId
           (pack . showBaseUrl $ cb)
+          endpoint
           chan
           (AuthorizationToken token)
           req

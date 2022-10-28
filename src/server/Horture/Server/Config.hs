@@ -8,6 +8,7 @@ import Data.Text (Text)
 data HortureServerConfig = HortureServerConfig
   { _port :: !Port,
     _callback :: !BaseUrl,
+    _twitchApiEndpoint :: !BaseUrl,
     _certFile :: !(Maybe FilePath),
     _keyFile :: !(Maybe FilePath),
     _appClientId :: !Text,

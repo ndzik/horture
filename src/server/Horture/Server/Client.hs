@@ -24,10 +24,11 @@ runHortureClientWS ::
   ByteString ->
   Text ->
   Text ->
+  BaseUrl ->
   Chan Twitch.EventNotification ->
   AuthorizationToken ->
   ServerApp
-runHortureClientWS cl secret cid cb tevChan aat pendingConn = do
+runHortureClientWS cl secret cid cb endpoint tevChan aat pendingConn = do
   conn <- acceptRequest pendingConn
   chan <- newChan @HortureClientMessage
   -- TODO: What should I do with the ThreadID? Cache and terminate externally?
@@ -39,8 +40,8 @@ runHortureClientWS cl secret cid cb tevChan aat pendingConn = do
           HortureClientConfig
             { _conn = conn,
               _secret = secret,
-              _twitchApiEndpoint = BaseUrl Http "localhost" 8080 "mock",
               _messageQueue = chan,
+              _twitchApiEndpoint = endpoint,
               _twitchEventQueue = tevChan,
               _twitchApiCallback = cb,
               _logEnv = le,
