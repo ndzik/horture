@@ -16,6 +16,7 @@ module Horture.Shader.Shader
     flashbangShader,
     gifFragmentShader,
     gifVertexShader,
+    mirrorShader,
   )
 where
 
@@ -328,5 +329,28 @@ vec4 blink(sampler2D tex, vec2 uv, double lifetime, double dt) {
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
   frag_colour = blink(texture1, uv, lifetime, dt);
+}
+    |]
+
+-- | mirrorShader goes into black and white.
+mirrorShader :: ByteString
+mirrorShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
+layout(location = 0) out vec4 frag_colour;
+
+vec4 mirror(sampler2D tex, vec2 uv, double lifetime, double dt) {
+  vec2 texSize = textureSize(tex, 0);
+  return texture2D(tex, vec2(texSize.x - uv.x, uv.y));
+}
+
+void main() {
+  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
+  frag_colour = mirror(texture1, uv, lifetime, dt);
 }
     |]

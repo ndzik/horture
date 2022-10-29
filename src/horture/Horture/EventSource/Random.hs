@@ -103,35 +103,27 @@ randomizeShaderEffect Stitch = newRandomStitchShader
 randomizeShaderEffect Flashbang = newRandomFlashbangShader
 randomizeShaderEffect Cycle = newRandomCycleShader
 randomizeShaderEffect Blink = newRandomBlinkShader
+randomizeShaderEffect Mirror = newRandomMirrorShader
 
-newRandomBarrelShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomMirrorShader :: (LastMember IO effs) => Eff effs Effect
+newRandomMirrorShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Mirror
+
+newRandomBarrelShader :: (LastMember IO effs) => Eff effs Effect
 newRandomBarrelShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Barrel
 
-newRandomBlurShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomBlurShader :: (LastMember IO effs) => Eff effs Effect
 newRandomBlurShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Blur
 
-newRandomStitchShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomStitchShader :: (LastMember IO effs) => Eff effs Effect
 newRandomStitchShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Stitch
 
-newRandomFlashbangShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomFlashbangShader :: (LastMember IO effs) => Eff effs Effect
 newRandomFlashbangShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang
 
-newRandomCycleShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomCycleShader :: (LastMember IO effs) => Eff effs Effect
 newRandomCycleShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Cycle
 
-newRandomBlinkShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomBlinkShader :: (LastMember IO effs) => Eff effs Effect
 newRandomBlinkShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 3) <*> return Blink
 
 -- | Generate a random value uniformly distributed over the given range.

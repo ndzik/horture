@@ -31,6 +31,7 @@ data ShaderEffect
   | Flashbang
   | Cycle
   | Blink
+  | Mirror
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 instance Show Effect where
@@ -57,6 +58,7 @@ instance Entitled ShaderEffect where
   toTitle Flashbang = "FLASHBANG"
   toTitle Cycle = "TakeTheWhitePill"
   toTitle Blink = "EyesClosed"
+  toTitle Mirror = "Discombobulated"
 
 class FromText d where
   fromText :: Text -> d
