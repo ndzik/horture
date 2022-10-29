@@ -24,7 +24,6 @@ data Effect
   | AddRapidFire ![Effect]
   | Noop
 
--- TODO: Make this derivable at compile-time.
 data ShaderEffect
   = Barrel
   | Blur
@@ -32,7 +31,7 @@ data ShaderEffect
   | Flashbang
   | Cycle
   | Blink
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Enum, Bounded)
 
 instance Show Effect where
   show (AddGif fp lt pos _) = unwords ["AddGif", takeFileName fp, show lt, show pos]

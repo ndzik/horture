@@ -183,7 +183,7 @@ newRandomShaderEffect = AddShaderEffect <$> (Limited <$> uniformRM' 2 6) <*> new
 newRandomShader :: (LastMember IO effs) => Eff effs ShaderEffect
 newRandomShader = uniformRM' 0 (length effs - 1) <&> (effs !!)
   where
-    effs = [Barrel, Blur, Stitch, Flashbang, Cycle, Blink]
+    effs = enumFrom minBound
 
 newRandomScreenEffect :: (LastMember IO effs) => Eff effs Effect
 newRandomScreenEffect = AddScreenBehaviour <$> (Limited <$> uniformRM' 6 10) <*> newRandomScreenBehaviours 1
