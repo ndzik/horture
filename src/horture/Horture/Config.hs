@@ -25,6 +25,7 @@ data Config = Config
     mockUserId :: !(Maybe Text),
     twitchAuthToken :: !(Maybe Text),
     hortureWsEndpoint :: !(Maybe BaseUrl),
+    hortureCost :: !Int,
     gifDirectory :: !FilePath,
     debugDelayMs :: !Int
   }
@@ -32,6 +33,9 @@ data Config = Config
 
 defaultDebugDelay :: Int
 defaultDebugDelay = 1_000_000
+
+defaultHortureCost :: Int
+defaultHortureCost = 50
 
 instance Default Config where
   def =
@@ -43,6 +47,7 @@ instance Default Config where
         twitchAuthToken = Nothing,
         hortureWsEndpoint = Nothing,
         mockUserId = Nothing,
+        hortureCost = defaultHortureCost,
         gifDirectory = "./gifs",
         debugDelayMs = defaultDebugDelay
       }
@@ -70,6 +75,10 @@ instance FromJSON Config where
               v -> return v
           )
       <*> (o .:? "horture_ws_endpoint")
+      <*> ( o .:? "horture_cost" >>= \case
+              Just v -> return v
+              _otherwise -> return defaultHortureCost
+          )
       <*> o .: "gif_directory"
       <*> ( o .:? "debug_delay_ms" >>= \case
               Just v -> return v
