@@ -35,6 +35,7 @@ import Horture.Effect
 import Horture.Event
 import Horture.EventSource.Controller hiding (logError, logInfo, logWarn)
 import Horture.EventSource.Local
+import Horture.EventSource.Random
 import Horture.EventSource.WebSocketClient
 import Horture.Loader
 import qualified Horture.Logging as HL
@@ -313,7 +314,13 @@ spawnEventSource Nothing evChan _ = do
   liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
 spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
   registeredEffs <- gets (^. ccRegisteredEffects)
+  gifEffs <- gets (^. ccGifs)
   uid <- gets (^. ccUserId)
+  let env =
+        StaticEffectRandomizerEnv
+          { _registeredEffects = registeredEffs,
+            _gifEffects = gifEffs
+          }
   case scheme of
     Https ->
       liftIO . forkIO $
@@ -321,7 +328,7 @@ spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
           host
           (fromIntegral port)
           path
-          (hortureWSStaticClientApp uid evChan registeredEffs)
+          (hortureWSStaticClientApp uid evChan env)
           `catch` \(e :: SomeException) -> do
             logError . pack . show $ e
     Http ->
@@ -330,7 +337,7 @@ spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
           host
           port
           path
-          (hortureWSStaticClientApp uid evChan registeredEffs)
+          (hortureWSStaticClientApp uid evChan env)
           `catch` \(e :: SomeException) -> do
             logError . pack . show $ e
   where
