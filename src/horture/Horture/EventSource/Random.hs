@@ -102,6 +102,7 @@ randomizeShaderEffect Blur = newRandomBlurShader
 randomizeShaderEffect Stitch = newRandomStitchShader
 randomizeShaderEffect Flashbang = newRandomFlashbangShader
 randomizeShaderEffect Cycle = newRandomCycleShader
+randomizeShaderEffect Blink = newRandomBlinkShader
 
 newRandomBarrelShader ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
@@ -127,6 +128,11 @@ newRandomCycleShader ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRandomCycleShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Cycle
+
+newRandomBlinkShader ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Effect
+newRandomBlinkShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 3) <*> return Blink
 
 -- | Generate a random value uniformly distributed over the given range.
 uniformRM' :: (UniformRange a, LastMember IO effs) => a -> a -> Eff effs a
@@ -177,7 +183,7 @@ newRandomShaderEffect = AddShaderEffect <$> (Limited <$> uniformRM' 2 6) <*> new
 newRandomShader :: (LastMember IO effs) => Eff effs ShaderEffect
 newRandomShader = uniformRM' 0 (length effs - 1) <&> (effs !!)
   where
-    effs = [Barrel, Blur, Stitch, Flashbang, Cycle]
+    effs = [Barrel, Blur, Stitch, Flashbang, Cycle, Blink]
 
 newRandomScreenEffect :: (LastMember IO effs) => Eff effs Effect
 newRandomScreenEffect = AddScreenBehaviour <$> (Limited <$> uniformRM' 6 10) <*> newRandomScreenBehaviours 1

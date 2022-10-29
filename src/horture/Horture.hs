@@ -257,6 +257,7 @@ initResources = do
               (Blur, [blurVShader, blurHShader]),
               (Flashbang, [flashbangShader]),
               (Cycle, [cycleColoursShader])
+              (Blink, [blinkShader])
             ]
           buildLinkAndUniform p = do
             hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])

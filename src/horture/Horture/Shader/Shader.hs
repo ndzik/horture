@@ -12,6 +12,7 @@ module Horture.Shader.Shader
     blurVShader,
     blurHShader,
     cycleColoursShader,
+    blinkShader,
     flashbangShader,
     gifFragmentShader,
     gifVertexShader,
@@ -282,7 +283,7 @@ void main() {
 }
     |]
 
--- | flashbangShader simply makes the screen bright and white.
+-- | cycleColourShader simply cycles through colors using the base texture.
 cycleColoursShader :: ByteString
 cycleColoursShader =
   [r|
@@ -303,5 +304,29 @@ vec4 cycleColours(sampler2D tex, vec2 uv, double lifetime, double dt) {
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
   frag_colour = cycleColours(texture1, uv, lifetime, dt);
+}
+    |]
+
+-- | blinkShader goes into black and white.
+blinkShader :: ByteString
+blinkShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
+layout(location = 0) out vec4 frag_colour;
+
+vec4 blink(sampler2D tex, vec2 uv, double lifetime, double dt) {
+  vec4 c = texture2D(tex, uv);
+  float pp = float(1 - (dt / lifetime));
+  return vec4(c.x - (pp * c.x), c.y - (pp * c.y), c.z - (pp * c.z), 1);
+}
+
+void main() {
+  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
+  frag_colour = blink(texture1, uv, lifetime, dt);
 }
     |]
