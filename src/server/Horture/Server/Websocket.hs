@@ -1,85 +1,45 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Horture.Server.Websocket
   ( handleWebsocketConn,
-    hortureWS,
   )
 where
 
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, killThread, newEmptyMVar, putMVar, takeMVar, threadDelay)
 import Control.Concurrent.Chan.Synchronous
+import Control.Exception (catch)
+import Control.Lens
 import Control.Monad.RWS
+import Data.Aeson (encode)
 import Data.ByteString (ByteString)
 import Data.Default
-import Data.Functor ((<&>))
 import Data.Text (Text, unpack)
 import Data.Text.Encoding (decodeUtf8)
+import Horture.Server.Client
 import Horture.Server.Message
+import Katip
 import Network.HTTP.Client (newManager)
 import Network.HTTP.Client.TLS
 import Network.HTTP.Types
 import Network.Wai
 import Network.Wai.Handler.WebSockets
 import Network.WebSockets hiding (Request, Response, requestHeaders)
+import Network.WebSockets.Connection (pingThread)
 import Servant.Client
 import Twitch.EventSub
 import qualified Twitch.EventSub.Notification as Twitch
 import Twitch.Rest
 import Prelude hiding (concat)
 
-handleWebsocketConn :: ByteString -> Text -> Text -> Chan Twitch.EventNotification -> AuthorizationToken -> Application
-handleWebsocketConn secret cid cb tevChan aat = websocketsOr defaultConnectionOptions (hortureWS secret cid cb tevChan aat) invalidWSApplication
+handleWebsocketConn :: ByteString -> Text -> Text -> BaseUrl -> Chan Twitch.EventNotification -> AuthorizationToken -> Application
+handleWebsocketConn secret cid cb endpoint tevChan aat = websocketsOr defaultConnectionOptions (runHortureClientWS hortureClientConn secret cid cb endpoint tevChan aat) invalidWSApplication
   where
     invalidWSApplication :: Application
     invalidWSApplication _ respond = respond $ responseLBS status400 [] "Not a WebSocket request"
-
--- | hortureWSApp will forward and multiplex received webhook messages to a
--- connected client.
-hortureWS :: ByteString -> Text -> Text -> Chan Twitch.EventNotification -> AuthorizationToken -> ServerApp
-hortureWS secret cid cb tevChan aat pendingConn = do
-  conn <- acceptRequest pendingConn
-  chan <- newChan @HortureClientMessage
-  -- TODO: What should I do with the ThreadID? Cache and terminate externally?
-  void . forkIO $ let loop = receiveData @HortureClientMessage conn >>= writeChan chan >> loop in loop
-  let conf =
-        HortureClientConfig
-          { _conn = conn,
-            _secret = secret,
-            _messageQueue = chan,
-            _twitchEventQueue = tevChan,
-            _twitchApiCallback = cb,
-            _appClientId = cid,
-            _appAccess = aat
-          }
-  print @String "Starting client connection handling"
-  evalRWST hortureClientConn conf def <&> fst
-
-data HortureClientConfig = HortureClientConfig
-  { _conn :: !Connection,
-    _secret :: !ByteString,
-    _twitchApiCallback :: !Text,
-    _messageQueue :: !(Chan HortureClientMessage),
-    _twitchEventQueue :: !(Chan Twitch.EventNotification),
-    _appClientId :: !Text,
-    _appAccess :: !AuthorizationToken
-  }
-
-data HortureClientState = HortureClientState
-  { _hcsuserAccessToken :: !(Maybe Text),
-    _hcsappAccessToken :: !(Maybe Text)
-  }
-  deriving (Show)
-
-instance Default HortureClientState where
-  def =
-    HortureClientState
-      { _hcsuserAccessToken = Nothing,
-        _hcsappAccessToken = Nothing
-      }
-
-type HortureClient a = RWST HortureClientConfig () HortureClientState IO a
 
 -- | Client connection from the POV of the horture server. This is NOT the
 -- client, that should be used if one wants to interact with the server from
@@ -87,30 +47,58 @@ type HortureClient a = RWST HortureClientConfig () HortureClientState IO a
 hortureClientConn :: HortureClient ()
 hortureClientConn = do
   conn <- asks _conn
-  clientMessages <- asks _messageQueue
   twitchMessages <- asks _twitchEventQueue
-  liftIO (readChan clientMessages) >>= handleClientMessage
-  forever $ do
-    liftIO (print @String "Waiting for TwitchEvent...")
-    -- Blocking read on twitchMessages.
-    msg <- liftIO (HortureEventSub <$> readChan twitchMessages)
-    liftIO (print @String "TwitchEvent encountered, forwarding...")
-    -- Forward twitch event to connected client.
-    liftIO (sendTextData @HortureServerMessage conn msg)
+  env <- ask
+  let readerAction = do
+        liftIO (receiveData @HortureClientMessage conn) >>= handleClientMessage
+        readerAction
+      writerAction = do
+        -- We cannot use a blocking `readChan` call here. Most likely because of
+        -- https://hackage.haskell.org/package/synchronous-channels-0.2/docs/Control-Concurrent-Chan-Synchronous.html
+        -- use of `uninterruptableMask` in `readChan`.
+        -- TODO: Remove `synchronous-channels` as a dependency and use either
+        -- STM or a different dependency.
+        liftIO (maybeTry (tryReadChan twitchMessages)) >>= \case
+          Nothing -> liftIO (threadDelay 250_000) >> writerAction
+          Just msg -> do
+            logFM DebugS "TwitchEvent encountered, forwarding..."
+            -- Forward twitch event to connected client.
+            liftIO (sendTextData @HortureServerMessage conn (HortureEventSub msg))
+            writerAction
+      pingAction = pingThread conn 30 (return ())
+
+  fullIfDone <- liftIO newEmptyMVar
+  readerTID <- liftIO . forkIO $ do
+    void (evalRWST (unHortureClient readerAction) env def)
+      `catch` \(_ :: ConnectionException) -> do
+        putMVar fullIfDone ()
+  writerTID <- liftIO . forkIO $ do
+    void (evalRWST (unHortureClient writerAction) env def)
+      `catch` \(_ :: ConnectionException) -> do
+        putMVar fullIfDone ()
+  pingTID <- liftIO . forkIO $ do
+    pingAction
+      `catch` \(_ :: ConnectionException) -> do
+        putMVar fullIfDone ()
+
+  void . liftIO . takeMVar $ fullIfDone
+  void . liftIO . mapM_ killThread $ [readerTID, writerTID, pingTID]
+  logFM InfoS "WebSocketClient terminated"
 
 handleClientMessage :: HortureClientMessage -> HortureClient ()
 handleClientMessage HortureGarbage = do
-  liftIO $ print @String "Received garbage over WebSocket"
+  logFM DebugS "Received garbage over WebSocket"
   return ()
 handleClientMessage (HortureAuthorization buid) = do
-  liftIO . print $ "Received authorization for userid: " <> show buid
+  logFM InfoS . logStr $ "Received authorization for userid: " <> show buid
   mgr <- liftIO $ newManager tlsManagerSettings
   at <- asks _appAccess
+  twitchEndpoint <- asks _twitchApiEndpoint
   secret <- asks _secret
   clientId <- asks _appClientId
   apiCallbackUrl <- asks _twitchApiCallback
   let cl@TwitchEventSubClient {eventsubSubscribe} = twitchEventSubClient clientId at
-      clientEnv = mkClientEnv mgr (BaseUrl Https "api.twitch.tv" 443 "helix")
+      clientEnv = mkClientEnv mgr twitchEndpoint
   removeAllOldSubscriptions cl clientEnv
   res <-
     liftIO $
@@ -127,21 +115,28 @@ handleClientMessage (HortureAuthorization buid) = do
             )
         )
         clientEnv
-  liftIO . print @String $ "subscribed for websocketconnection to twitch for clientid: " <> unpack buid
-  liftIO $ print res
+  case res of
+    Left err -> do
+      logFM ErrorS . logStr $ show err
+      closeClientConn
+    Right sr -> do
+      logFM InfoS . logStr $ "subscribed for websocketconnection to twitch for clientid: " <> unpack buid
+      logFM DebugS . logStr $ encode sr
 handleClientMessage (HortureUpdate uat) = updateToken uat
+
+closeClientConn :: HortureClient ()
+closeClientConn = asks (^. conn) >>= liftIO . flip sendClose HortureGarbage
 
 removeAllOldSubscriptions :: TwitchEventSubClient -> ClientEnv -> HortureClient ()
 removeAllOldSubscriptions TwitchEventSubClient {..} env = do
-  liftIO $
-    runClientM (eventsubGetSubscriptions (Just "enabled")) env >>= \case
-      Left err -> print @String "Fetching existing subscriptions failed: " >> print err
-      Right (SubscriptionResponse subs _ _ _) ->
-        mapM_
-          ( \ResponseObject {responseobjectId} ->
-              liftIO $ runClientM (eventsubDeleteSubscription responseobjectId) env
-          )
-          subs
+  liftIO (runClientM (eventsubGetSubscriptions (Just "enabled")) env) >>= \case
+    Left err -> logFM WarningS . logStr $ "Fetching existing subscriptions failed: " <> show err
+    Right (SubscriptionResponse subs _ _ _) ->
+      mapM_
+        ( \ResponseObject {responseobjectId} ->
+            liftIO $ runClientM (eventsubDeleteSubscription responseobjectId) env
+        )
+        subs
 
 -- | Update tokens used by the external server to respond to EventSub
 -- notifications.

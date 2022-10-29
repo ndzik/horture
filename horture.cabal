@@ -80,6 +80,8 @@ library horture-lib
                             , servant-client-core
                             , data-default
                             , bytestring
+                            , exceptions
+                            , co-log
                             , aeson
                             , http-api-data
                             , http-client
@@ -91,7 +93,6 @@ library horture-lib
                             , async
                             , freer-simple
                             , synchronous-channels
-                            , co-log
                             , OpenGL
                             , lens
                             , JuicyPixels
@@ -151,8 +152,12 @@ library horture-server-lib
                         , bytestring
                         , cryptonite
                         , memory
+                        , katip
 
     exposed-modules:    Horture.Server.Config
+                        , Horture.Server.Reader
+                        , Horture.Server.Application
+                        , Horture.Server.Client
                         , Horture.Server.Message
                         , Horture.Server.Websocket
                         , Horture.Server.Server
@@ -186,11 +191,12 @@ library twitch-api
                         , Twitch.EventSub.Notification
                         , Twitch.Rest
                         , Twitch.Rest.Authorization
+                        , Twitch.Rest.Authentication
                         , Twitch.Rest.DataResponse
                         , Twitch.Rest.Types
+                        , Twitch.Mock
 
-    other-modules:      Twitch.Rest.Authentication
-                        , Twitch.Rest.Token
+    other-modules:      Twitch.Rest.Token
                         , Twitch.EventSub.Condition
                         , Twitch.EventSub.Request
                         , Twitch.EventSub.Response

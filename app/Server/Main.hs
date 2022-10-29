@@ -16,25 +16,6 @@ import System.Directory (getHomeDirectory)
 import System.Exit (exitFailure)
 import Twitch.Rest
 
--- | Handling twitch:
---   We let the front-end handle `authorization` for user & app tokens. When a
---   user wants to use this server to receive webhook events over websocket, he
---   will have to transmit his credentials after authorization with twitch to
---   the `/ws` endpoint. This ensures, that only a valid user can query his own
---   events, because only an authorized user can provide the necessary
---   credentials to set up eventhooks for a channel he is allowed to managed in
---   the specified scope.
---
---   Horture-Client calls `/ws` endpoint and builds a WS connection. Either the
---   initial request or the first payload received over the WS connection has
---   to contain necessary credentials.
---
---   Upon receival, Horture-Server exposes an endpoint `/<twitch-name>/webhook`
---   for twitch to push events to.
---
---   As long as the websocket connection is alive, the `/<twitch-name>/webhook`
---   endpoint is served. Upon a disconnect, Horture-Server will cancel its
---   subscriptions for events for good measures.
 main :: IO ()
 main = execParser opts >>= main'
   where
@@ -58,12 +39,13 @@ main' (ServerParams cf _db) = do
       Http -> return defaultManagerSettings
   let TwitchTokenClient {getAppAccessToken} = twitchTokenClient
       clientEnv = mkClientEnv mgr twitchAuthorizationEndpoint
-  res <- runClientM (getAppAccessToken (ClientCredentialRequest twitchClientId twitchClientSecret)) clientEnv
+      ccr = ClientCredentialRequest twitchClientId twitchClientSecret
+  res <- runClientM (getAppAccessToken ccr) clientEnv
   ClientCredentialResponse aat _ _ <- case res of
     Left err -> print err >> exitFailure
     Right r -> return r
   print "Successfully retrieved AppAccessToken from Twitch"
-  runHortureServer (HortureServerConfig serverPort twitchResponseCallback certFile keyFile twitchClientId aat)
+  runHorture (HortureServerConfig serverPort twitchResponseCallback twitchApiEndpoint certFile keyFile twitchClientId aat)
 
 data ServerParams = ServerParams
   { _config :: !FilePath,

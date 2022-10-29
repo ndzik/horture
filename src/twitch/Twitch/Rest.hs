@@ -47,8 +47,6 @@ twitchTokenClient =
         { getAppAccessToken = _getAppAccessToken
         }
 
--- type ChannelPointsApi =
-
 newtype AuthorizationToken = AuthorizationToken Text
 
 instance ToHttpApiData AuthorizationToken where
@@ -174,7 +172,7 @@ type EventSubSubscribe =
     :> Header' [Required, Strict] "Client-Id" Text
     :> Header' [Required, Strict] "Authorization" AuthorizationToken
     :> ReqBody '[JSON] WebhookRequest
-    :> Post '[JSON] SubscriptionResponse
+    :> PostAccepted '[JSON] SubscriptionResponse
 
 type EventSubGetSubscriptions =
   "eventsub"

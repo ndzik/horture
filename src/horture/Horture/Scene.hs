@@ -17,6 +17,7 @@ where
 
 import Control.Lens
 import Data.Default
+import Data.Foldable (Foldable (foldr'))
 import qualified Data.Map.Strict as Map
 import Horture.Effect
 import Horture.Gif
@@ -35,11 +36,13 @@ data Scene = Scene
   }
 
 instance Default Scene where
-  def = Scene { _screen = def
-              , _gifs = Map.empty
-              , _gifCache = Map.empty
-              , _shaders = []
-              }
+  def =
+    Scene
+      { _screen = def,
+        _gifs = Map.empty,
+        _gifCache = Map.empty,
+        _shaders = []
+      }
 
 -- ActiveGif is a GIF which is about or currently acting in a scene.
 data ActiveGif = AGIF
@@ -57,6 +60,7 @@ apply _timeNow _dt Noop s = s
 apply timeNow _dt (AddGif i lt pos bs) s = addGif i timeNow lt (zip3 bs (repeat timeNow) (repeat lt)) pos s
 apply timeNow _dt (AddScreenBehaviour lt bs) s = addScreenBehaviour timeNow lt (zip3 bs (repeat timeNow) (repeat lt)) s
 apply timeNow _dt (AddShaderEffect lt eff) s = addShaderEffect timeNow lt eff s
+apply timeNow dt (AddRapidFire effs) s = foldr' (apply timeNow dt) s effs
 
 -- applyAll composes all given effects at the given time using the time
 -- since the last frame as a progression point.

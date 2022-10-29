@@ -19,6 +19,7 @@ data Config = Config
   { twitchClientId :: !Text,
     twitchClientSecret :: !Text,
     twitchAuthorizationEndpoint :: !BaseUrl,
+    twitchApiEndpoint :: !BaseUrl,
     serverPort :: !Port,
     certFile :: !(Maybe FilePath),
     keyFile :: !(Maybe FilePath),

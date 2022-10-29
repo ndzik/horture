@@ -21,7 +21,7 @@ data HortureScreenProgram = HortureScreenProgram
     -- can be comprised of multiple shaderprograms.
     -- Shaderprograms are applied in reversed list order for efficiency
     -- reasons.
-    _hortureScreenProgramShaderEffects :: !(Map ShaderEffect [Program]),
+    _hortureScreenProgramShaderEffects :: !(Map ShaderEffect [HortureShaderProgram]),
     -- | All shaders receive the same uniforms.
     _hortureScreenProgramModelUniform :: !UniformLocation,
     _hortureScreenProgramProjectionUniform :: !UniformLocation,
@@ -43,5 +43,14 @@ data HortureGifProgram = HortureGifProgram
   }
   deriving (Show)
 
+-- | A shader in horture which can be used as an effect.
+data HortureShaderProgram = HortureShaderProgram
+  { _hortureShaderProgramShader :: !Program,
+    _hortureShaderProgramLifetimeUniform :: !UniformLocation,
+    _hortureShaderProgramDtUniform :: !UniformLocation
+  }
+  deriving (Show)
+
 makeFields ''HortureScreenProgram
 makeFields ''HortureGifProgram
+makeFields ''HortureShaderProgram
