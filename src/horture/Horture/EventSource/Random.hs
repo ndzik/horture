@@ -121,7 +121,7 @@ newRandomStitchShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> re
 newRandomFlashbangShader ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Effect
-newRandomFlashbangShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 1) <*> return Flashbang
+newRandomFlashbangShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang
 
 newRandomCycleShader ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
