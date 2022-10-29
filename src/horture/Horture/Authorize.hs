@@ -38,7 +38,7 @@ import Web.FormUrlEncoded (urlDecodeAsForm, urlEncodeAsForm)
 import Prelude hiding (drop)
 
 authorize :: Bool -> Config -> IO ()
-authorize mockMode cfg@(Config cid msecret _ _ mmuid _ _ _ _) = do
+authorize mockMode cfg@(Config cid msecret _ _ mmuid _ _ _ _ _) = do
   retrieveFunc <-
     if mockMode
       then do

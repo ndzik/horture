@@ -365,7 +365,7 @@ prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
 runCommandCenter :: Bool -> Config -> IO ()
-runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint dir delay) = do
+runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay) = do
   gifs <- makeAbsolute dir >>= loadDirectory
   preloadedGifs <-
     runPreloader (PLC dir) loadGifsInMemory >>= \case
@@ -380,7 +380,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint dir delay)
           Just auth -> return auth
           Nothing -> error "No AuthorizationToken available, authorize Horture first"
         uid <- fetchUserId helixApi cid auth
-        cs <- spawnTwitchEventController helixApi uid cid auth appChan
+        cs <- spawnTwitchEventController helixApi uid cid auth appChan baseC
         return (Just cs, uid)
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
@@ -426,8 +426,9 @@ spawnTwitchEventController ::
   Text ->
   Text ->
   BChan CommandCenterEvent ->
+  Int ->
   IO (Chan EventControllerInput, Chan EventControllerResponse)
-spawnTwitchEventController helixApi uid cid auth appChan = do
+spawnTwitchEventController helixApi uid cid auth appChan baseC = do
   mgr <-
     newManager =<< case baseUrlScheme helixApi of
       Https -> return tlsManagerSettings
@@ -443,7 +444,7 @@ spawnTwitchEventController helixApi uid cid auth appChan = do
       killThread
       ( const $
           runHortureTwitchEventController
-            (TCS channelPointsClient uid clientEnv Map.empty)
+            (TCS channelPointsClient baseC uid clientEnv Map.empty)
             logChan
             controllerInputChan
             controllerResponseChan
