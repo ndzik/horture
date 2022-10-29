@@ -30,6 +30,7 @@ data ShaderEffect
   | Blur
   | Stitch
   | Flashbang
+  | Cycle
   deriving (Eq, Ord, Show)
 
 instance Show Effect where
@@ -54,6 +55,7 @@ instance Entitled ShaderEffect where
   toTitle Blur = "WhereAreMyGlasses?"
   toTitle Stitch = "GrandmaSaysHi"
   toTitle Flashbang = "FLASHBANG"
+  toTitle Cycle = "TakeTheWhitePill"
 
 class FromText d where
   fromText :: Text -> d

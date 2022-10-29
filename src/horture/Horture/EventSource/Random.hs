@@ -101,6 +101,7 @@ randomizeShaderEffect Barrel = newRandomBarrelShader
 randomizeShaderEffect Blur = newRandomBlurShader
 randomizeShaderEffect Stitch = newRandomStitchShader
 randomizeShaderEffect Flashbang = newRandomFlashbangShader
+randomizeShaderEffect Cycle = newRandomCycleShader
 
 newRandomBarrelShader ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
@@ -121,6 +122,11 @@ newRandomFlashbangShader ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRandomFlashbangShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 1) <*> return Flashbang
+
+newRandomCycleShader ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Effect
+newRandomCycleShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Cycle
 
 -- | Generate a random value uniformly distributed over the given range.
 uniformRM' :: (UniformRange a, LastMember IO effs) => a -> a -> Eff effs a

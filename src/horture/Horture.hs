@@ -251,7 +251,13 @@ initResources = do
   return (vao, vbo, veo, prog, gifProg, effs)
   where
     compileAndLinkShaderEffects vsp = do
-      let shaderProgs = [(Barrel, [barrelShader]), (Stitch, [stitchShader]), (Blur, [blurVShader, blurHShader]), (Flashbang, [flashbangShader])]
+      let shaderProgs =
+            [ (Barrel, [barrelShader]),
+              (Stitch, [stitchShader]),
+              (Blur, [blurVShader, blurHShader]),
+              (Flashbang, [flashbangShader]),
+              (Cycle, [cycleColoursShader])
+            ]
           buildLinkAndUniform p = do
             hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])
             lifetimeUniform <- uniformLocation hsp "lifetime"

@@ -216,7 +216,7 @@ refreshEventSource (Just pipe) = do
 
   gifs <- gets _ccPreloadedGifs
   let gifEffs = map (\(fp, _) -> AddGif fp Forever (V3 0 0 0) []) gifs
-      shaderEffs = map (AddShaderEffect Forever) [Barrel, Blur, Stitch, Flashbang]
+      shaderEffs = map (AddShaderEffect Forever) [Barrel, Blur, Stitch, Flashbang, Cycle]
       allEffs = gifEffs ++ [AddScreenBehaviour Forever [], AddRapidFire []] ++ shaderEffs
   mapM_
     (\eff -> writeAndHandleResponse pipe (InputEnable (toTitle eff, eff)))
