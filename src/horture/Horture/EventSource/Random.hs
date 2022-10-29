@@ -152,16 +152,16 @@ newRandomEffect ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRandomEffect =
-  randomM' @_ @Float >>= \r ->
-    if r < 0.3
-      then newRandomGif
-      else
-        if r < 0.5
-          then newRandomScreenEffect
-          else
-            if r < 0.8
-              then newRandomShaderEffect
-              else newRandomRapidFireEffect
+  randomM' @_ @Float >>= \r -> 
+      if r < 0.3
+        then newRandomGif
+        else
+          if r < 0.5
+            then newRandomScreenEffect
+            else
+              if r < 0.8
+                then newRandomShaderEffect
+                else newRandomRapidFireEffect
 
 newRandomRapidFireEffect ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
@@ -195,6 +195,13 @@ newRandomGif =
             <*> return 0
         )
     <*> (uniformRM' 0 3 >>= newRandomBehaviours)
+
+newRandomScreenBehaviours :: (LastMember IO effs) => Int -> Eff effs [Behaviour]
+newRandomScreenBehaviours n = do
+  shake' <- newRandomShake
+  moveTo' <- moveTo . V3 0 0 <$> ((+ (-1)) . (/ 1) . negate <$> randomM')
+  pulse' <- newRandomPulse
+  take n . cycle <$> liftIO (shuffle [moveTo', shake', pulse', convolute])
 
 newRandomBehaviours :: (LastMember IO effs) => Int -> Eff effs [Behaviour]
 newRandomBehaviours n = do

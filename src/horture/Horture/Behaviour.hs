@@ -56,7 +56,12 @@ shake amp scale frequency t o =
 circle :: Float -> Behaviour
 circle frequency t o =
   o & pos
-    %~ (^+^ V3 (sin (frequency * realToFrac t)) (cos (frequency * realToFrac t)) 0)
+    %~ ( ^+^
+           V3
+             (sin (frequency * realToFrac t))
+             (cos (frequency * realToFrac t))
+             0
+       )
 
 moveTo :: V3 Float -> Behaviour
-moveTo target t o = o & pos %~ (\cp -> lerp (realToFrac t) cp target)
+moveTo target t o = o & pos %~ lerp (realToFrac t) target
