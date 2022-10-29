@@ -167,9 +167,11 @@ applyShaderEffect t (eff, birth, lt) buffers = do
 
 applyScreenBehaviours :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
 applyScreenBehaviours t screen = do
+  dim <- gets (^. dim)
   let bs = screen ^. behaviours
-      s = foldr (\(f, bt, _) o -> f (t - bt) o) screen bs
-  return s
+      s = screen & scale .~ scaleForAspectRatio dim
+      s' = foldr (\(f, bt, Limited lt) o -> f ((t - bt) / lt) o) s bs
+  return s'
 
 trackScreen :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
 trackScreen _ screen = do
@@ -185,11 +187,10 @@ projectScreen :: (HortureLogger (Horture l)) => Object -> Horture l ()
 projectScreen s = do
   modelUniform <- asks (^. screenProg . modelUniform)
   projectionUniform <- asks (^. screenProg . projectionUniform)
-  dim@(w, h) <- gets (^. dim)
-  let s' = s & scale .~ scaleForAspectRatio dim
-      proj = projectionForAspectRatio (fromIntegral w, fromIntegral h)
+  (w, h) <- gets (^. dim)
+  let proj = projectionForAspectRatio (fromIntegral w, fromIntegral h)
   liftIO $ m44ToGLmatrix proj >>= (uniform projectionUniform $=)
-  liftIO $ m44ToGLmatrix (model s') >>= (uniform modelUniform $=)
+  liftIO $ m44ToGLmatrix (model s) >>= (uniform modelUniform $=)
 
 drawBaseQuad :: Horture l ()
 drawBaseQuad = liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
