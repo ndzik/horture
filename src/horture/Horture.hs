@@ -256,7 +256,7 @@ initResources = do
               (Stitch, [stitchShader]),
               (Blur, [blurVShader, blurHShader]),
               (Flashbang, [flashbangShader]),
-              (Cycle, [cycleColoursShader])
+              (Cycle, [cycleColoursShader]),
               (Blink, [blinkShader])
             ]
           buildLinkAndUniform p = do

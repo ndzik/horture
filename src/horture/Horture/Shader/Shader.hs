@@ -171,9 +171,9 @@ vec4 stitchIt(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec2 blpos = tlpos;
   blpos.y += (size - 1.0);
   if ((remx == remy) || (((int(cpos.x) - int(blpos.x)) == (int(blpos.y) - int(cpos.y))))) {
-    c = vec4(0.2, 0.15, 0.05, 1.0);
-  } else {
     c = texture2D(tex, tlpos * vec2(1.0/rtW, 1.0/rtH)) * 1.4;
+  } else {
+    c = vec4(0.2, 0.15, 0.05, 1.0);
   }
   return c;
 }
@@ -202,7 +202,7 @@ uniform double lifetime = 0;
 uniform double dt = 0;
 layout(location = 0) out vec4 frag_colour;
 
-float offset[3] = float[](0.0, 1.3846153846, 3.2307602308);
+float offset[3] = float[](0.0, 2.3846153846, 6.2307602308);
 float weight[3] = float[](0.2270270270, 0.3162162162, 0.0702702703);
 
 vec4 blurVertical(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -237,7 +237,7 @@ uniform double lifetime = 0;
 uniform double dt = 0;
 layout(location = 0) out vec4 frag_colour;
 
-float offset[3] = float[](0.0, 1.3846153846, 3.2307602308);
+float offset[3] = float[](0.0, 2.3846153846, 6.2307602308);
 float weight[3] = float[](0.2270270270, 0.3162162162, 0.0702702703);
 
 vec4 blurHorizontal(sampler2D tex, vec2 uv, double lifetime, double dt) {
