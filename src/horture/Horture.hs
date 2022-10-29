@@ -39,7 +39,7 @@ import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Foreign.Storable
 import Graphics.GLUtil as Util hiding (throwError)
-import Graphics.Rendering.OpenGL as GL hiding (Color, flush)
+import Graphics.Rendering.OpenGL as GL hiding (Color, Invert, flush)
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11 hiding (resizeWindow)
 import Graphics.X11.Xlib.Extras
@@ -258,7 +258,8 @@ initResources = do
               (Flashbang, [flashbangShader]),
               (Cycle, [cycleColoursShader]),
               (Blink, [blinkShader]),
-              (Mirror, [mirrorShader])
+              (Mirror, [mirrorShader]),
+              (Invert, [invertShader])
             ]
           buildLinkAndUniform p = do
             hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])

@@ -32,6 +32,7 @@ data ShaderEffect
   | Cycle
   | Blink
   | Mirror
+  | Invert
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 instance Show Effect where
@@ -59,6 +60,7 @@ instance Entitled ShaderEffect where
   toTitle Cycle = "TakeTheWhitePill"
   toTitle Blink = "EyesClosed"
   toTitle Mirror = "Discombobulated"
+  toTitle Invert = "InvertColors"
 
 class FromText d where
   fromText :: Text -> d

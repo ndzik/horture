@@ -104,6 +104,10 @@ randomizeShaderEffect Flashbang = newRandomFlashbangShader
 randomizeShaderEffect Cycle = newRandomCycleShader
 randomizeShaderEffect Blink = newRandomBlinkShader
 randomizeShaderEffect Mirror = newRandomMirrorShader
+randomizeShaderEffect Invert = newRandomInvertShader
+
+newRandomInvertShader :: (LastMember IO effs) => Eff effs Effect
+newRandomInvertShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Invert
 
 newRandomMirrorShader :: (LastMember IO effs) => Eff effs Effect
 newRandomMirrorShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Mirror
@@ -150,16 +154,17 @@ newRandomEffect ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRandomEffect =
-  randomM' @_ @Float >>= \r ->
-    if r < 0.3
-      then newRandomGif
-      else
-        if r < 0.5
-          then newRandomScreenEffect
-          else
-            if r < 0.8
-              then newRandomShaderEffect
-              else newRandomRapidFireEffect
+  randomM' @_ @Float >>= \r -> 
+
+      if r < 0.3
+        then newRandomGif
+        else
+          if r < 0.5
+            then newRandomScreenEffect
+            else
+              if r < 0.8
+                then newRandomShaderEffect
+                else newRandomRapidFireEffect
 
 newRandomRapidFireEffect ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
