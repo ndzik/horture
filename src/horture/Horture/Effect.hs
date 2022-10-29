@@ -21,8 +21,10 @@ data Effect
   = AddGif !GifIndex !Lifetime !Position ![Behaviour]
   | AddScreenBehaviour !Lifetime ![Behaviour]
   | AddShaderEffect !Lifetime !ShaderEffect
+  | AddRapidFire ![Effect]
   | Noop
 
+-- TODO: Make this derivable at compile-time.
 data ShaderEffect
   = Barrel
   | Blur
@@ -34,6 +36,7 @@ instance Show Effect where
   show (AddGif fp lt pos _) = unwords ["AddGif", takeFileName fp, show lt, show pos]
   show (AddScreenBehaviour _ _) = "AddScreenBehaviour"
   show (AddShaderEffect lt eff) = unwords ["AddShaderEffect", show lt, show eff]
+  show (AddRapidFire effs) = unwords ("AddRapidFire" : map show effs)
   show Noop = "Noop"
 
 class Entitled d where
@@ -43,6 +46,7 @@ instance Entitled Effect where
   toTitle (AddGif n _ _ _) = pack . takeFileName $ n
   toTitle (AddScreenBehaviour _ _) = "RandomScreenEffect"
   toTitle (AddShaderEffect _ eff) = toTitle eff
+  toTitle (AddRapidFire _) = "RATATATATA"
   toTitle Noop = "Nothing"
 
 instance Entitled ShaderEffect where
@@ -57,4 +61,5 @@ class FromText d where
 instance FromText Effect where
   fromText "AddGif" = AddGif "" (Limited 8) (V3 0 0 0) []
   fromText "AddScreenBehaviour" = AddScreenBehaviour (Limited 8) []
+  fromText "AddRapidFire" = AddRapidFire []
   fromText _ = Noop
