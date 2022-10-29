@@ -165,7 +165,7 @@ appEvent (VtyEvent (EvKey (KChar 'k') [])) = do
     _otherwise -> return ()
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'l') [])) = return ()
-appEvent (VtyEvent (EvKey (KChar 'i') [])) = return ()
+appEvent (VtyEvent (EvKey (KChar 'p') [])) = gets _ccControllerChans >>= purgeEventSource
 appEvent (VtyEvent (EvKey (KChar 'r') [])) = gets _ccControllerChans >>= refreshEventSource
 appEvent (VtyEvent (EvKey (KChar 'g') [])) = grabHorture
 appEvent (VtyEvent (EvKey (KChar 'q') [])) = stopHorture
@@ -204,6 +204,12 @@ stopHorture = do
 
 writeExit :: Chan Event -> EventM Name CommandCenterState ()
 writeExit chan = liftIO $ writeChan chan (EventCommand Exit)
+
+purgeEventSource ::
+  Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
+  EventM Name CommandCenterState ()
+purgeEventSource Nothing = logInfo "No EventSource controller available"
+purgeEventSource (Just pipe) = writeAndHandleResponse pipe InputPurgeAll
 
 -- | Refresh the registered events on the connected eventsource, if any is
 -- connected.
