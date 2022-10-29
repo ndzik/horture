@@ -152,16 +152,16 @@ newRandomEffect ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRandomEffect =
-  randomM' @_ @Float >>= \r -> 
-      if r < 0.3
-        then newRandomGif
-        else
-          if r < 0.5
-            then newRandomScreenEffect
-            else
-              if r < 0.8
-                then newRandomShaderEffect
-                else newRandomRapidFireEffect
+  randomM' @_ @Float >>= \r ->
+    if r < 0.3
+      then newRandomGif
+      else
+        if r < 0.5
+          then newRandomScreenEffect
+          else
+            if r < 0.8
+              then newRandomShaderEffect
+              else newRandomRapidFireEffect
 
 newRandomRapidFireEffect ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
@@ -201,7 +201,8 @@ newRandomScreenBehaviours n = do
   shake' <- newRandomShake
   moveTo' <- moveTo . V3 0 0 <$> ((+ (-1)) . (/ 1) . negate <$> randomM')
   pulse' <- newRandomPulse
-  take n . cycle <$> liftIO (shuffle [moveTo', shake', pulse', convolute])
+  rotate' <- rotate <$> randomRM' (-50) 50
+  take n . cycle <$> liftIO (shuffle [moveTo', shake', pulse', rotate', convolute])
 
 newRandomBehaviours :: (LastMember IO effs) => Int -> Eff effs [Behaviour]
 newRandomBehaviours n = do
@@ -209,7 +210,8 @@ newRandomBehaviours n = do
   moveTo' <- newRandomMoveTo
   pulse' <- newRandomPulse
   circle' <- newRandomCircle
-  take n . cycle <$> liftIO (shuffle [shake', moveTo', pulse', circle', convolute])
+  rotate' <- rotate <$> randomRM' (-200) 200
+  take n . cycle <$> liftIO (shuffle [shake', moveTo', pulse', rotate', circle', convolute])
 
 newRandomShake :: (LastMember IO effs) => Eff effs Behaviour
 newRandomShake = shake <$> randomM' <*> uniformRM' 80 160 <*> randomM'
