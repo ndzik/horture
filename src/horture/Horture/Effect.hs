@@ -5,6 +5,7 @@ module Horture.Effect
     Position,
     FromText (..),
     Entitled (..),
+    effectToCost,
   )
 where
 
@@ -23,6 +24,13 @@ data Effect
   | AddShaderEffect !Lifetime !ShaderEffect
   | AddRapidFire ![Effect]
   | Noop
+
+effectToCost :: Effect -> Int
+effectToCost AddGif {} = 1
+effectToCost AddScreenBehaviour {} = 2
+effectToCost AddShaderEffect {} = 4
+effectToCost AddRapidFire {} = 6
+effectToCost Noop {} = 0
 
 data ShaderEffect
   = Barrel

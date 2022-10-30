@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Horture.CommandCenter.CommandCenter
@@ -221,12 +222,13 @@ refreshEventSource Nothing = logInfo "No EventSource controller available"
 refreshEventSource (Just pipe) = do
   writeAndHandleResponse pipe InputPurgeAll
 
-  gifs <- gets _ccPreloadedGifs
+  gifs <- gets (^. ccPreloadedGifs)
+  baseCost <- gets (^. ccEventBaseCost)
   let gifEffs = map (\(fp, _) -> AddGif fp Forever (V3 0 0 0) []) gifs
       shaderEffs = map (AddShaderEffect Forever) . enumFrom $ minBound
       allEffs = gifEffs ++ [AddScreenBehaviour Forever [], AddRapidFire []] ++ shaderEffs
   mapM_
-    (\eff -> writeAndHandleResponse pipe (InputEnable (toTitle eff, eff)))
+    (\eff -> writeAndHandleResponse pipe (InputEnable (toTitle eff, eff, baseCost * effectToCost eff)))
     allEffs
 
   writeAndHandleResponse pipe InputListEvents
@@ -393,7 +395,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
           Just auth -> return auth
           Nothing -> error "No AuthorizationToken available, authorize Horture first"
         uid <- fetchUserId helixApi cid auth
-        cs <- spawnTwitchEventController helixApi uid cid auth appChan baseC
+        cs <- spawnTwitchEventController helixApi uid cid auth appChan
         return (Just cs, uid)
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
@@ -411,6 +413,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
           _ccUserId = uid,
           _ccControllerChans = controllerChans,
           _ccBrickEventChan = Just appChan,
+          _ccEventBaseCost = baseC,
           _ccTimeout = delay
         }
 
@@ -439,9 +442,8 @@ spawnTwitchEventController ::
   Text ->
   Text ->
   BChan CommandCenterEvent ->
-  Int ->
   IO (Chan EventControllerInput, Chan EventControllerResponse)
-spawnTwitchEventController helixApi uid cid auth appChan baseC = do
+spawnTwitchEventController helixApi uid cid auth appChan = do
   mgr <-
     newManager =<< case baseUrlScheme helixApi of
       Https -> return tlsManagerSettings
@@ -457,7 +459,7 @@ spawnTwitchEventController helixApi uid cid auth appChan baseC = do
       killThread
       ( const $
           runHortureTwitchEventController
-            (TCS channelPointsClient baseC uid clientEnv Map.empty)
+            (TCS channelPointsClient uid clientEnv Map.empty)
             logChan
             controllerInputChan
             controllerResponseChan

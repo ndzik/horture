@@ -31,9 +31,10 @@ data EventController a where
   -- title of the effect with the effect itself and a EventSource
   -- defined/controlled identifier.
   ListAllEvents :: EventController [(Text, (Text, Effect))]
-  -- | Enables the given (Name, Effect) event pair on the controlled source.
-  -- Bool indicates success.
-  EnableEvent :: (Text, Effect) -> EventController Bool
+  -- | Enables the given (Name, Effect, Int) event pair on the controlled
+  -- source associated with the given cost, if applicable. Bool indicates
+  -- success.
+  EnableEvent :: (Text, Effect, Int) -> EventController Bool
   -- | Purge all enabled events. This disables all events on the controlled
   -- event source.
   PurgeAllEvents :: EventController Bool
@@ -42,7 +43,7 @@ makeEffect ''EventController
 
 data EventControllerInput
   = InputListEvents
-  | InputEnable !(Text, Effect)
+  | InputEnable !(Text, Effect, Int)
   | InputPurgeAll
   | InputTerminate
   deriving (Show)

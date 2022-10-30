@@ -15,6 +15,7 @@ module Horture.CommandCenter.State
     ccTIDsToClean,
     ccTimeout,
     ccGifsList,
+    ccEventBaseCost,
     ccCursorLocationName,
     Name (..),
   )
@@ -56,6 +57,7 @@ data CommandCenterState = CCState
     _ccRegisteredEffects :: !(Map.Map Text (Text, Effect)),
     _ccTIDsToClean :: ![ThreadId],
     _ccCursorLocationName :: !Name,
+    _ccEventBaseCost :: !Int,
     -- | Timeout in microseconds for events to be generated. Only works in
     -- DEBUG mode.
     _ccTimeout :: !Int
@@ -77,6 +79,7 @@ instance Default CommandCenterState where
         _ccPreloadedGifs = [],
         _ccTIDsToClean = [],
         _ccCursorLocationName = LogPort,
+        _ccEventBaseCost = 50,
         _ccTimeout = 1_000_000
       }
 
