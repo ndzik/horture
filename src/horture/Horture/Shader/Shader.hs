@@ -108,8 +108,12 @@ uniform sampler2D texture1;
 
 out vec4 frag_colour;
 
+// NOTE: DisplayShader expects RGB colors in RGBA format, thus invalidating any
+// input alpha values and replacing them with 1.0. Keeps compatibility high
+// between multiple display applications.
 void main() {
-  frag_colour = texture2D(texture1, texCoord);
+  vec4 col = texture2D(texture1, texCoord);
+  frag_colour = vec4(col.x, col.y, col.z, 1.0);
 }
   |]
 
