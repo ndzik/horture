@@ -259,7 +259,8 @@ initResources = do
               (Cycle, [cycleColoursShader]),
               (Blink, [blinkShader]),
               (Mirror, [mirrorShader]),
-              (Invert, [invertShader])
+              (Invert, [invertShader]),
+              (Toonify, [toonShader])
             ]
           buildLinkAndUniform p = do
             hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])

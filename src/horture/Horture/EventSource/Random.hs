@@ -104,6 +104,10 @@ randomizeShaderEffect Cycle = newRandomCycleShader
 randomizeShaderEffect Blink = newRandomBlinkShader
 randomizeShaderEffect Mirror = newRandomMirrorShader
 randomizeShaderEffect Invert = newRandomInvertShader
+randomizeShaderEffect Toonify = newRandomToonShader
+
+newRandomToonShader :: (LastMember IO effs) => Eff effs Effect
+newRandomToonShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Toonify
 
 newRandomInvertShader :: (LastMember IO effs) => Eff effs Effect
 newRandomInvertShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Invert

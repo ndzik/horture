@@ -18,6 +18,7 @@ module Horture.Shader.Shader
     gifVertexShader,
     mirrorShader,
     invertShader,
+    toonShader,
   )
 where
 
@@ -367,13 +368,52 @@ uniform double lifetime = 0;
 uniform double dt = 0;
 layout(location = 0) out vec4 frag_colour;
 
-vec4 mirror(sampler2D tex, vec2 uv, double lifetime, double dt) {
+vec4 invert(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec4 c = texture2D(tex, uv);
   return vec4(1 - c.x, 1 - c.y, 1 - c.z, 1);
 }
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = mirror(texture1, uv, lifetime, dt);
+  frag_colour = invert(texture1, uv, lifetime, dt);
+}
+    |]
+
+toonShader :: ByteString
+toonShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
+layout(location = 0) out vec4 frag_colour;
+float levels = 8.0 - 1.0;
+float contrast = 1.2;
+float brightness = 1.1;
+
+vec3 hsl2rgb(vec3 hsl) {
+    float t = hsl.y * ((hsl.z < 0.5) ? hsl.z : (1.0 - hsl.z));
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(hsl.xxx + K.xyz) * 6.0 - K.www);
+    return (hsl.z + t) * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), 2.0*t / hsl.z);
+}
+
+vec4 toonify(sampler2D tex, vec2 uv, double lifetime, double dt) {
+  float colorFactor = 1.0;
+  vec4 color = texture2D(tex, uv);
+  // BT.709 coefficients related to human perception.
+  float grey = 0.21 * color.r + 0.71 * color.g + 0.07 * color.b;
+  grey = clamp(grey * brightness, 0.0, 1.0);
+  float posterized = round(grey * levels) / levels;
+  float contrasted = clamp(contrast * (posterized - 0.5) + 0.5, 0.0, 1.0);
+  vec3 rgb = hsl2rgb(vec3(0.153, 1.0, contrasted));
+  return vec4(rgb, 1.0);
+}
+
+void main() {
+  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
+  frag_colour = toonify(texture1, uv, lifetime, dt);
 }
     |]

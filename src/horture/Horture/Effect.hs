@@ -41,6 +41,7 @@ data ShaderEffect
   | Blink
   | Mirror
   | Invert
+  | Toonify
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 instance Show Effect where
@@ -69,6 +70,7 @@ instance Entitled ShaderEffect where
   toTitle Blink = "EyesClosed"
   toTitle Mirror = "Discombobulated"
   toTitle Invert = "InvertColors"
+  toTitle Toonify = "Toonify"
 
 class FromText d where
   fromText :: Text -> d
