@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Horture.CommandCenter.CommandCenter
@@ -16,7 +16,7 @@ import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center
 import Brick.Widgets.List
 import qualified Colog
-import Control.Concurrent (ThreadId, forkIO, forkOS, killThread)
+import Control.Concurrent (ThreadId, forkIO, forkOS, killThread, threadDelay)
 import Control.Concurrent.Chan.Synchronous
 import Control.Lens
 import Control.Monad.Catch
@@ -44,7 +44,7 @@ import Horture.Object
 import Linear.V3
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client.TLS
-import Network.WebSockets (runClient)
+import Network.WebSockets (ConnectionException (..), runClient)
 import Numeric (showHex)
 import Run
 import Servant.Client (mkClientEnv, runClientM)
@@ -325,27 +325,36 @@ spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
           }
   case scheme of
     Https ->
-      liftIO . forkIO $
-        runSecureClient
-          host
-          (fromIntegral port)
-          path
-          (hortureWSStaticClientApp uid evChan env)
-          `catch` \(e :: SomeException) -> do
-            logError . pack . show $ e
+      liftIO . forkIO $ do
+        let action =
+              runSecureClient
+                host
+                (fromIntegral port)
+                path
+                (hortureWSStaticClientApp uid evChan env)
+                `catch` \(e :: ConnectionException) -> do
+                  logError . pack . show $ e
+                  threadDelay oneSec
+                  action
+        action
     Http ->
-      liftIO . forkIO $
-        runClient
-          host
-          port
-          path
-          (hortureWSStaticClientApp uid evChan env)
-          `catch` \(e :: SomeException) -> do
-            logError . pack . show $ e
+      liftIO . forkIO $ do
+        let action =
+              runClient
+                host
+                (fromIntegral port)
+                path
+                (hortureWSStaticClientApp uid evChan env)
+                `catch` \(e :: ConnectionException) -> do
+                  logError . pack . show $ e
+                  threadDelay oneSec
+                  action
+        action
   where
     logError = HL.withColog Colog.Error (logActionChan logChan)
     logActionChan :: Chan Text -> Colog.LogAction IO Text
     logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
+    oneSec = 1_000_000
 
 focused :: AttrName
 focused = attrName "focused"
