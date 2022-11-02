@@ -4,6 +4,7 @@
 
 module Horture.Render
   ( renderGifs,
+    renderBackground,
     renderScene,
     scaleForAspectRatio,
     m44ToGLmatrix,
@@ -83,12 +84,22 @@ indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxInd
       | (accumulatedTime + fromIntegral d) < timeSinceBirth = go gifDelays (accumulatedTime + fromIntegral d) (i + 1)
       | otherwise = i
 
+renderBackground :: (HortureLogger (Horture l)) => Double -> Horture l ()
+renderBackground dt = do
+  backgroundP <- asks (^. backgroundProg . shader)
+  backgroundTexUnit <- asks (^. backgroundProg . textureUnit)
+  timeUni <- asks (^. backgroundProg . timeUniform)
+  activeTexture $= backgroundTexUnit
+  uniform timeUni $= dt
+  currentProgram $= Just backgroundP
+  drawBaseQuad
+
 -- | renderScene renders the captured application window. It is assumed that
 -- the horture texture was already initialized at this point.
 renderScene :: (HortureLogger (Horture l)) => Double -> Scene -> Horture l ()
 renderScene t scene = do
   let s = scene ^. screen
-  backgroundProg <- asks (^. screenProg . shader)
+  screenP <- asks (^. screenProg . shader)
   (HortureState dp _ pm dim) <- get
   screenTexUnit <- asks (^. screenProg . textureUnit)
   sourceTexObject <- asks (^. screenProg . textureObject)
@@ -99,7 +110,7 @@ renderScene t scene = do
   -- Apply shaders to captured texture.
   applySceneShaders t scene
   -- Final renderpass rendering scene.
-  currentProgram $= Just backgroundProg
+  currentProgram $= Just screenP
   -- Apply behavioural effects to the scene itself.
   applyScreenBehaviours t s >>= trackScreen t >>= projectScreen
   drawBaseQuad

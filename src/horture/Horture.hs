@@ -70,6 +70,7 @@ playScene s = do
     go startTime (Just s) = do
       dt <- deltaTime startTime
       clearView
+      renderBackground dt
       renderScene dt s
       renderGifs dt . _gifs $ s
       updateView
@@ -232,12 +233,15 @@ shutdown win = do
 -- TODO: Move HortureScreenProgram & HortureGifProgram initialisation code into
 -- this function and return the compound structs instead of this ugly big
 -- tuple.
-initResources :: IO (VertexArrayObject, BufferObject, BufferObject, Program, Program, Map.Map ShaderEffect [HortureShaderProgram])
+initResources :: IO (VertexArrayObject, BufferObject, BufferObject, Program, Program, Program, Map.Map ShaderEffect [HortureShaderProgram])
 initResources = do
   vao <- genObjectName
   bindVertexArrayObject $= Just vao
   vbo <- genObjectName
   bindBuffer ArrayBuffer $= Just vbo
+  bvsp <- loadShaderBS "passthrough.shader" VertexShader passthroughVertexShader
+  bfsp <- loadShaderBS "background.shader" FragmentShader juliaFractalShader
+  backgroundProg <- linkShaderProgram [bvsp, bfsp]
   vsp <- loadShaderBS "mvp.shader" VertexShader mvpVertexShader
   fsp <- loadShaderBS "display.shader" FragmentShader displayShader
   prog <- linkShaderProgram [vsp, fsp]
@@ -248,7 +252,7 @@ initResources = do
   currentProgram $= Just prog
   veo <- genObjectName
   bindBuffer ArrayBuffer $= Just veo
-  return (vao, vbo, veo, prog, gifProg, effs)
+  return (vao, vbo, veo, backgroundProg, prog, gifProg, effs)
   where
     compileAndLinkShaderEffects vsp = do
       let shaderProgs =

@@ -40,7 +40,7 @@ import Prelude hiding (readFile)
 run :: [(FilePath, Asset)] -> Maybe (Chan Text) -> Chan Event -> Window -> IO ()
 run gifs logChan evChan w = do
   glW <- initGLFW
-  (vao, vbo, veo, prog, gifProg, effs) <- initResources
+  (vao, vbo, veo, backgroundProg, prog, gifProg, effs) <- initResources
   dp <- openDisplay ""
   let ds = defaultScreen dp
   root <- rootWindow dp ds
@@ -64,7 +64,11 @@ run gifs logChan evChan w = do
   when (isNothing res) exitFailure
 
   let screenTextureUnit = TextureUnit 0
+      backgroundTextureUnit = TextureUnit 1
       gifTextureUnit = TextureUnit 4
+
+  -- Background
+  backgroundTimeUniform <- uniformLocation backgroundProg "time"
 
   -- GIFs
   gifModelUniform <- uniformLocation gifProg "model"
@@ -204,6 +208,12 @@ run gifs logChan evChan w = do
                   _hortureGifProgramIndexUniform = gifTexIndex,
                   _hortureGifProgramTextureUnit = gifTextureUnit,
                   _hortureGifProgramAssets = hortureGifs
+                },
+            _backgroundProg =
+              HortureBackgroundProgram
+                { _hortureBackgroundProgramShader = backgroundProg,
+                  _hortureBackgroundProgramTimeUniform = backgroundTimeUniform,
+                  _hortureBackgroundProgramTextureUnit = backgroundTextureUnit
                 },
             _eventChan = evChan,
             _logChan = logChan,

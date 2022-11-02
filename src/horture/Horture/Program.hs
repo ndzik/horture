@@ -43,6 +43,13 @@ data HortureGifProgram = HortureGifProgram
   }
   deriving (Show)
 
+data HortureBackgroundProgram = HortureBackgroundProgram
+  { _hortureBackgroundProgramShader :: !Program,
+    _hortureBackgroundProgramTimeUniform :: !UniformLocation,
+    _hortureBackgroundProgramTextureUnit :: !TextureUnit
+  }
+  deriving (Show)
+
 -- | A shader in horture which can be used as an effect.
 data HortureShaderProgram = HortureShaderProgram
   { _hortureShaderProgramShader :: !Program,
@@ -54,3 +61,4 @@ data HortureShaderProgram = HortureShaderProgram
 makeFields ''HortureScreenProgram
 makeFields ''HortureGifProgram
 makeFields ''HortureShaderProgram
+makeFields ''HortureBackgroundProgram
