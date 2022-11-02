@@ -7,7 +7,7 @@ where
 import Control.Monad
 import Foreign (Storable (peekElemOff))
 import Graphics.X11.Xlib (Image)
-import Horture.X11
+import Horture.Backend.X11
 import System.IO (IOMode (AppendMode), hPrint, hPutStrLn, withFile)
 
 dumpImageToFile :: FilePath -> Image -> Int -> IO ()

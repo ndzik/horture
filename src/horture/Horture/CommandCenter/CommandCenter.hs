@@ -28,6 +28,7 @@ import Data.Text (Text, pack)
 import Graphics.Vty hiding (Config, Event)
 import Graphics.X11 (Window)
 import Horture
+import Horture.Backend.X11
 import Horture.Command
 import Horture.CommandCenter.Event
 import Horture.CommandCenter.State

@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeApplications #-}
 
-module Horture.X11
+module Horture.Backend.X11.X11
   ( imgPtr,
     ximageData,
     ximagebitsPerPixel,
@@ -12,6 +12,7 @@ module Horture.X11
     ximageGMask,
     ximageBMask,
     ximageDepth,
+    updateXWindowTexture,
   )
 where
 
@@ -19,6 +20,8 @@ import Data.Word
 import Foreign.C.Types
 import Foreign.Ptr
 import Foreign.Storable
+import Graphics.Rendering.OpenGL as GL
+import Graphics.X11
 import Graphics.X11.Xlib.Types
 
 imgPtr :: Image -> Ptr Image
@@ -83,3 +86,17 @@ ximageOffset (Image p) = peekByteOff @CInt (castPtr p) xoffset
   where
     szCint = sizeOf @CInt undefined
     xoffset = 2 * szCint
+
+-- | updateWindowTexture updates the OpenGL texture for the captured window
+-- using the given dimensions together with the source image as a data source.
+updateXWindowTexture :: (Int, Int) -> Image -> IO ()
+updateXWindowTexture (w, h) i = do
+  src <- ximageData i
+  let pd = PixelData BGRA UnsignedInt8888Rev src
+  texSubImage2D
+    Texture2D
+    0
+    (TexturePosition2D 0 0)
+    (TextureSize2D (fromIntegral w) (fromIntegral h))
+    pd
+  destroyImage i

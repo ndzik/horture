@@ -35,7 +35,7 @@ library horture-lib
                             , Horture.Scene
                             , Horture.Horture
                             , Horture.Logging
-                            , Horture.X11
+                            , Horture.Backend.X11
                             , Horture.Shader.Shader
                             , Horture.Error
                             , Horture.Command
@@ -54,6 +54,7 @@ library horture-lib
 
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
+                            , Horture.Backend.X11.X11
                             , Horture.EventSource.Random
                             , Horture.EventSource.Logger
                             , Horture.EventSource.Local

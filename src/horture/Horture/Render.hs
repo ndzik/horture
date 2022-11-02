@@ -35,7 +35,6 @@ import Horture.Object
 import Horture.Program
 import Horture.Scene
 import Horture.State
-import Horture.X11
 import Linear.Matrix
 import Linear.Projection
 import Linear.V4
