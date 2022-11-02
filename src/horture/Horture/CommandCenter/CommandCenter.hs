@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
@@ -16,7 +18,7 @@ import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center
 import Brick.Widgets.List
 import qualified Colog
-import Control.Concurrent (ThreadId, forkIO, forkOS, killThread, threadDelay)
+import Control.Concurrent (ThreadId, forkIO, forkOS, killThread, newEmptyMVar, readMVar, threadDelay)
 import Control.Concurrent.Chan.Synchronous
 import Control.Lens
 import Control.Monad.Catch
@@ -26,8 +28,6 @@ import Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text, pack)
 import Graphics.Vty hiding (Config, Event)
-import Graphics.X11 (Window)
-import Horture
 import Horture.Backend.X11
 import Horture.Command
 import Horture.CommandCenter.Event
@@ -39,6 +39,8 @@ import Horture.EventSource.Controller hiding (logError, logInfo, logWarn)
 import Horture.EventSource.Local
 import Horture.EventSource.Random
 import Horture.EventSource.WebSocketClient
+import Horture.Horture
+import Horture.Initializer
 import Horture.Loader
 import qualified Horture.Logging as HL
 import Horture.Object
@@ -46,8 +48,6 @@ import Linear.V3
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client.TLS
 import Network.WebSockets (ConnectionException (..), runClient)
-import Numeric (showHex)
-import Run
 import Servant.Client (mkClientEnv, runClientM)
 import Servant.Client.Core.BaseUrl
 import System.Directory
@@ -110,9 +110,9 @@ drawUI cs =
           ]
       ]
 
-currentCaptureUI :: Maybe (String, Window) -> Widget Name
+currentCaptureUI :: Maybe String -> Widget Name
 currentCaptureUI Nothing = center (str "No window is captured")
-currentCaptureUI (Just (n, w)) = center (str . unlines $ ["Capturing: " <> n, "WinID: 0x" <> showHex w ""])
+currentCaptureUI (Just s) = center (str s)
 
 instance Splittable [] where
   splitAt n ls = (take n ls, drop n ls)
@@ -290,25 +290,40 @@ grabHorture = do
 
   logChan <- liftIO $ newChan @Text
   evChan <- liftIO $ newChan @Event
-  res@(_, w) <-
-    liftIO x11UserGrabWindow >>= \case
-      Nothing -> throwM UserAvoidedWindowSelection
-      Just res -> pure res
 
   -- Event source thread.
   evSourceTID <- spawnEventSource hurl evChan logChan
   -- Horture rendering thread. Does not have to be externally killed, because
   -- we will try to end it cooperatively by issuing an external exit command.
-  void . liftIO . forkOS $ run plg (Just logChan) evChan w
+  mv <- liftIO newEmptyMVar
+  let env =
+        HortureInitializerEnvironment
+          { _hortureInitializerEnvironmentLogChan = logChan,
+            _hortureInitializerEnvironmentGrabbedWin = mv
+          }
+      logError = HL.withColog Colog.Error (logActionChan logChan)
+  void . liftIO . forkOS $ do
+    let action = initialize @'Channel plg (Just logChan) evChan
+    runHortureInitializer env action >>= \case
+      Left err -> logError . pack . show $ err
+      Right _ -> return ()
   -- Logging relay thread `Renderer` -> `Frontend`.
   logSourceTID <- liftIO . forkIO . forever $ pipeToBrickChan logChan brickChan CCLog
   -- Cache ThreadIDs which can to be killed externally.
   ccTIDsToClean .= [evSourceTID, logSourceTID]
+
+  res <-
+    liftIO (readMVar mv) >>= \case
+      Nothing -> throwM UserAvoidedWindowSelection
+      Just res -> return res
   modify $ \ccs ->
     ccs
       { _ccEventChan = Just evChan,
         _ccCapturedWin = Just res
       }
+  where
+    logActionChan :: Chan Text -> Colog.LogAction IO Text
+    logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
 
 spawnEventSource :: Maybe BaseUrl -> Chan Event -> Chan Text -> EventM Name CommandCenterState ThreadId
 spawnEventSource Nothing evChan _ = do

@@ -28,7 +28,6 @@ import Control.Lens
 import Data.Default
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import Graphics.X11
 import Horture.CommandCenter.Event
 import Horture.Effect
 import Horture.Event
@@ -46,7 +45,7 @@ data Name
 data CommandCenterState = CCState
   { _ccEventChan :: !(Maybe (Chan Event)),
     _ccBrickEventChan :: !(Maybe (BChan CommandCenterEvent)),
-    _ccCapturedWin :: !(Maybe (String, Window)),
+    _ccCapturedWin :: !(Maybe String),
     _ccControllerChans :: !(Maybe (Chan EventControllerInput, Chan EventControllerResponse)),
     _ccLog :: ![Text],
     _ccGifs :: ![FilePath],
