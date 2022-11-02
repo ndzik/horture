@@ -1,5 +1,8 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -15,7 +18,7 @@ import Brick.Widgets.Border.Style (unicode)
 import Brick.Widgets.Center
 import Brick.Widgets.List
 import qualified Colog
-import Control.Concurrent (ThreadId, forkIO, forkOS, killThread)
+import Control.Concurrent (ThreadId, forkIO, forkOS, killThread, newEmptyMVar, readMVar, threadDelay)
 import Control.Concurrent.Chan.Synchronous
 import Control.Lens
 import Control.Monad.Catch
@@ -25,8 +28,7 @@ import Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text, pack)
 import Graphics.Vty hiding (Config, Event)
-import Graphics.X11 (Window)
-import Horture
+import Horture.Backend.X11
 import Horture.Command
 import Horture.CommandCenter.Event
 import Horture.CommandCenter.State
@@ -35,16 +37,17 @@ import Horture.Effect
 import Horture.Event
 import Horture.EventSource.Controller hiding (logError, logInfo, logWarn)
 import Horture.EventSource.Local
+import Horture.EventSource.Random
 import Horture.EventSource.WebSocketClient
+import Horture.Horture
+import Horture.Initializer
 import Horture.Loader
 import qualified Horture.Logging as HL
 import Horture.Object
 import Linear.V3
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client.TLS
-import Network.WebSockets (runClient)
-import Numeric (showHex)
-import Run
+import Network.WebSockets (ConnectionException (..), runClient)
 import Servant.Client (mkClientEnv, runClientM)
 import Servant.Client.Core.BaseUrl
 import System.Directory
@@ -107,9 +110,9 @@ drawUI cs =
           ]
       ]
 
-currentCaptureUI :: Maybe (String, Window) -> Widget Name
+currentCaptureUI :: Maybe String -> Widget Name
 currentCaptureUI Nothing = center (str "No window is captured")
-currentCaptureUI (Just (n, w)) = center (str . unlines $ ["Capturing: " <> n, "WinID: 0x" <> showHex w ""])
+currentCaptureUI (Just s) = center (str s)
 
 instance Splittable [] where
   splitAt n ls = (take n ls, drop n ls)
@@ -220,12 +223,13 @@ refreshEventSource Nothing = logInfo "No EventSource controller available"
 refreshEventSource (Just pipe) = do
   writeAndHandleResponse pipe InputPurgeAll
 
-  gifs <- gets _ccPreloadedGifs
+  gifs <- gets (^. ccPreloadedGifs)
+  baseCost <- gets (^. ccEventBaseCost)
   let gifEffs = map (\(fp, _) -> AddGif fp Forever (V3 0 0 0) []) gifs
       shaderEffs = map (AddShaderEffect Forever) . enumFrom $ minBound
       allEffs = gifEffs ++ [AddScreenBehaviour Forever [], AddRapidFire []] ++ shaderEffs
   mapM_
-    (\eff -> writeAndHandleResponse pipe (InputEnable (toTitle eff, eff)))
+    (\eff -> writeAndHandleResponse pipe (InputEnable (toTitle eff, eff, baseCost * effectToCost eff)))
     allEffs
 
   writeAndHandleResponse pipe InputListEvents
@@ -286,25 +290,40 @@ grabHorture = do
 
   logChan <- liftIO $ newChan @Text
   evChan <- liftIO $ newChan @Event
-  res@(_, w) <-
-    liftIO x11UserGrabWindow >>= \case
-      Nothing -> throwM UserAvoidedWindowSelection
-      Just res -> pure res
 
   -- Event source thread.
   evSourceTID <- spawnEventSource hurl evChan logChan
   -- Horture rendering thread. Does not have to be externally killed, because
   -- we will try to end it cooperatively by issuing an external exit command.
-  void . liftIO . forkOS $ run plg (Just logChan) evChan w
+  mv <- liftIO newEmptyMVar
+  let env =
+        HortureInitializerEnvironment
+          { _hortureInitializerEnvironmentLogChan = logChan,
+            _hortureInitializerEnvironmentGrabbedWin = mv
+          }
+      logError = HL.withColog Colog.Error (logActionChan logChan)
+  void . liftIO . forkOS $ do
+    let action = initialize @'Channel plg (Just logChan) evChan
+    runHortureInitializer env action >>= \case
+      Left err -> logError . pack . show $ err
+      Right _ -> return ()
   -- Logging relay thread `Renderer` -> `Frontend`.
   logSourceTID <- liftIO . forkIO . forever $ pipeToBrickChan logChan brickChan CCLog
   -- Cache ThreadIDs which can to be killed externally.
   ccTIDsToClean .= [evSourceTID, logSourceTID]
+
+  res <-
+    liftIO (readMVar mv) >>= \case
+      Nothing -> throwM UserAvoidedWindowSelection
+      Just res -> return res
   modify $ \ccs ->
     ccs
       { _ccEventChan = Just evChan,
         _ccCapturedWin = Just res
       }
+  where
+    logActionChan :: Chan Text -> Colog.LogAction IO Text
+    logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
 
 spawnEventSource :: Maybe BaseUrl -> Chan Event -> Chan Text -> EventM Name CommandCenterState ThreadId
 spawnEventSource Nothing evChan _ = do
@@ -313,30 +332,45 @@ spawnEventSource Nothing evChan _ = do
   liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
 spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
   registeredEffs <- gets (^. ccRegisteredEffects)
+  gifEffs <- gets (^. ccGifs)
   uid <- gets (^. ccUserId)
+  let env =
+        StaticEffectRandomizerEnv
+          { _registeredEffects = registeredEffs,
+            _gifEffects = gifEffs
+          }
   case scheme of
     Https ->
-      liftIO . forkIO $
-        runSecureClient
-          host
-          (fromIntegral port)
-          path
-          (hortureWSStaticClientApp uid evChan registeredEffs)
-          `catch` \(e :: SomeException) -> do
-            logError . pack . show $ e
+      liftIO . forkIO $ do
+        let action =
+              runSecureClient
+                host
+                (fromIntegral port)
+                path
+                (hortureWSStaticClientApp uid evChan env)
+                `catch` \(e :: ConnectionException) -> do
+                  logError . pack . show $ e
+                  threadDelay oneSec
+                  action
+        action
     Http ->
-      liftIO . forkIO $
-        runClient
-          host
-          port
-          path
-          (hortureWSStaticClientApp uid evChan registeredEffs)
-          `catch` \(e :: SomeException) -> do
-            logError . pack . show $ e
+      liftIO . forkIO $ do
+        let action =
+              runClient
+                host
+                (fromIntegral port)
+                path
+                (hortureWSStaticClientApp uid evChan env)
+                `catch` \(e :: ConnectionException) -> do
+                  logError . pack . show $ e
+                  threadDelay oneSec
+                  action
+        action
   where
     logError = HL.withColog Colog.Error (logActionChan logChan)
     logActionChan :: Chan Text -> Colog.LogAction IO Text
     logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
+    oneSec = 1_000_000
 
 focused :: AttrName
 focused = attrName "focused"
@@ -386,7 +420,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
           Just auth -> return auth
           Nothing -> error "No AuthorizationToken available, authorize Horture first"
         uid <- fetchUserId helixApi cid auth
-        cs <- spawnTwitchEventController helixApi uid cid auth appChan baseC
+        cs <- spawnTwitchEventController helixApi uid cid auth appChan
         return (Just cs, uid)
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
@@ -404,6 +438,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
           _ccUserId = uid,
           _ccControllerChans = controllerChans,
           _ccBrickEventChan = Just appChan,
+          _ccEventBaseCost = baseC,
           _ccTimeout = delay
         }
 
@@ -432,9 +467,8 @@ spawnTwitchEventController ::
   Text ->
   Text ->
   BChan CommandCenterEvent ->
-  Int ->
   IO (Chan EventControllerInput, Chan EventControllerResponse)
-spawnTwitchEventController helixApi uid cid auth appChan baseC = do
+spawnTwitchEventController helixApi uid cid auth appChan = do
   mgr <-
     newManager =<< case baseUrlScheme helixApi of
       Https -> return tlsManagerSettings
@@ -450,7 +484,7 @@ spawnTwitchEventController helixApi uid cid auth appChan baseC = do
       killThread
       ( const $
           runHortureTwitchEventController
-            (TCS channelPointsClient baseC uid clientEnv Map.empty)
+            (TCS channelPointsClient uid clientEnv Map.empty)
             logChan
             controllerInputChan
             controllerResponseChan

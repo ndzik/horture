@@ -37,7 +37,6 @@ import Twitch.Rest.Types
 
 data TwitchControllerState = TCS
   { _twitchControllerStateClient :: !TwitchChannelPointsClient,
-    _twitchControllerStateBaseCost :: !Int,
     _twitchControllerStateBroadcasterId :: !Text,
     _twitchControllerStateClientEnv :: !ClientEnv,
     -- | Events associates an effects title with its effect and twitch-id.
@@ -72,17 +71,16 @@ handleTwitchEventController = interpret $ \case
 -- channel points reward on the associated channel.
 putCustomReward ::
   (Members '[State TwitchControllerState, Logger] effs, LastMember IO effs) =>
-  (Text, Effect) ->
+  (Text, Effect, Int) ->
   Eff effs Bool
-putCustomReward (title, eff) = do
+putCustomReward (title, eff, cost) = do
   TwitchChannelPointsClient {createCustomReward} <- gets @TwitchControllerState (^. client)
   id <- gets @TwitchControllerState (^. broadcasterId)
   env <- gets @TwitchControllerState (^. clientEnv)
-  baseC <- gets @TwitchControllerState (^. baseCost)
   let body =
         CreateCustomRewardBody
           { createcustomrewardbodyTitle = title,
-            createcustomrewardbodyCost = baseC,
+            createcustomrewardbodyCost = cost,
             createcustomrewardbodyPrompt = Nothing,
             createcustomrewardbodyIsEnabled = Nothing,
             createcustomrewardbodyBackgroundColor = Nothing,

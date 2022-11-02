@@ -12,17 +12,15 @@ import Horture.Program
 data HortureStatic = HortureStatic
   { _screenProg :: !HortureScreenProgram,
     _gifProg :: !HortureGifProgram,
-    _planeVertexLocation :: !AttribLocation,
-    _planeTexLocation :: !AttribLocation,
+    _backgroundProg :: !HortureBackgroundProgram,
     _eventChan :: !(Chan Event),
     _logChan :: !(Maybe (Chan Text)),
     _glWin :: !GLFW.Window,
     _backgroundColor :: !(Color4 Float)
   }
 
-data HortureState = HortureState
-  { _display :: !Display,
-    _xWin :: !Window,
+data HortureState hdl = HortureState
+  { _envHandle :: !hdl,
     _capture :: !Drawable,
     _dim :: !(Int, Int)
   }

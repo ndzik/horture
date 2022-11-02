@@ -5,6 +5,7 @@ module Horture.Effect
     Position,
     FromText (..),
     Entitled (..),
+    effectToCost,
   )
 where
 
@@ -24,6 +25,13 @@ data Effect
   | AddRapidFire ![Effect]
   | Noop
 
+effectToCost :: Effect -> Int
+effectToCost AddGif {} = 1
+effectToCost AddScreenBehaviour {} = 2
+effectToCost AddShaderEffect {} = 4
+effectToCost AddRapidFire {} = 6
+effectToCost Noop {} = 0
+
 data ShaderEffect
   = Barrel
   | Blur
@@ -31,6 +39,9 @@ data ShaderEffect
   | Flashbang
   | Cycle
   | Blink
+  | Mirror
+  | Invert
+  | Toonify
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 instance Show Effect where
@@ -57,6 +68,9 @@ instance Entitled ShaderEffect where
   toTitle Flashbang = "FLASHBANG"
   toTitle Cycle = "TakeTheWhitePill"
   toTitle Blink = "EyesClosed"
+  toTitle Mirror = "Discombobulated"
+  toTitle Invert = "InvertColors"
+  toTitle Toonify = "Toonify"
 
 class FromText d where
   fromText :: Text -> d

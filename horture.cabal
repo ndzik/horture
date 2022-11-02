@@ -35,10 +35,13 @@ library horture-lib
                             , Horture.Scene
                             , Horture.Horture
                             , Horture.Logging
-                            , Horture.X11
+                            , Horture.Backend.X11
                             , Horture.Shader.Shader
                             , Horture.Error
                             , Horture.Command
+                            , Horture.Initializer
+                            , Horture.WindowGrabber
+                            , Horture.GL
                             , Horture.Events
                             , Horture.Event
                             , Horture.State
@@ -50,10 +53,14 @@ library horture-lib
                             , Horture.Loader
                             , Horture.Effect
                             , Horture.Gif
-                            , Run
 
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
+                            , Horture.Backend.X11.LinuxX11
+                            , Horture.Backend.X11.X11
+                            , Horture.Backend.X11.Initializer
+                            , Horture.Initializer.Initializer
+                            , Horture.Initializer.Environment
                             , Horture.EventSource.Random
                             , Horture.EventSource.Logger
                             , Horture.EventSource.Local
@@ -67,6 +74,7 @@ library horture-lib
                             , Horture.Loader.Config
                             , Horture.Loader.TextureLoader
                             , Horture.Loader.FilePreloader
+                            , Horture.Debug
 
     -- LANGUAGE extensions used by modules in this package.
     build-depends:          base ^>=4.14.3.0

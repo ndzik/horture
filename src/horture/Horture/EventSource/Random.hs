@@ -7,18 +7,20 @@
 module Horture.EventSource.Random
   ( runStaticEffectRandomizer,
     runAnyEffectRandomizer,
-    StaticEffectRandomizerEnv,
+    StaticEffectRandomizerEnv (..),
+    gifEffects,
+    registeredEffects,
   )
 where
 
+import Control.Lens
 import Control.Monad
 import Control.Monad.Freer
 import Control.Monad.Freer.Reader
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Array.IO
-import Data.Functor ((<&>))
 import qualified Data.Map.Strict as Map
-import Data.Text (Text, unpack)
+import Data.Text (Text)
 import Horture.Behaviour
 import Horture.Effect
 import Horture.EventSource.EventSource
@@ -32,7 +34,12 @@ import System.Random.Stateful
     randomRM,
   )
 
-type StaticEffectRandomizerEnv = Map.Map Text (Text, Effect)
+data StaticEffectRandomizerEnv = StaticEffectRandomizerEnv
+  { _registeredEffects :: !(Map.Map Text (Text, Effect)),
+    _gifEffects :: ![FilePath]
+  }
+
+makeLenses ''StaticEffectRandomizerEnv
 
 type StaticEffectRandomizerListEnv = [FilePath]
 
@@ -63,21 +70,13 @@ newRapidFireEffect = do
       (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
       Int ->
       Eff effs Effect
-    newRandomGif' _ = do
-      AddGif <$> randomFilePathFromMap
-        <*> (Limited <$> uniformRM' 8 18)
-        <*> ( V3
-                <$> (randomM' <&> (sin . (* 48)))
-                <*> (randomM' <&> (cos . (* 19)))
-                <*> return 0
-            )
-        <*> (uniformRM' 0 3 >>= newRandomBehaviours)
-    randomFilePathFromMap ::
+    newRandomGif' _ = randomFilePath >>= newRandomGifWith
+    randomFilePath ::
       (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
       Eff effs GifIndex
-    randomFilePathFromMap = do
-      gifs <- ask @StaticEffectRandomizerEnv >>= return . Map.toList
-      uniformRM' 0 (length gifs - 1) <&> unpack . fst . (gifs !!)
+    randomFilePath = do
+      gifs <- asks @StaticEffectRandomizerEnv (^. gifEffects)
+      uniformRM' 0 (length gifs - 1) <&> (gifs !!)
 
 newRandomGifWith ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
@@ -103,35 +102,35 @@ randomizeShaderEffect Stitch = newRandomStitchShader
 randomizeShaderEffect Flashbang = newRandomFlashbangShader
 randomizeShaderEffect Cycle = newRandomCycleShader
 randomizeShaderEffect Blink = newRandomBlinkShader
+randomizeShaderEffect Mirror = newRandomMirrorShader
+randomizeShaderEffect Invert = newRandomInvertShader
+randomizeShaderEffect Toonify = newRandomToonShader
 
-newRandomBarrelShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomToonShader :: (LastMember IO effs) => Eff effs Effect
+newRandomToonShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Toonify
+
+newRandomInvertShader :: (LastMember IO effs) => Eff effs Effect
+newRandomInvertShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Invert
+
+newRandomMirrorShader :: (LastMember IO effs) => Eff effs Effect
+newRandomMirrorShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Mirror
+
+newRandomBarrelShader :: (LastMember IO effs) => Eff effs Effect
 newRandomBarrelShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Barrel
 
-newRandomBlurShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomBlurShader :: (LastMember IO effs) => Eff effs Effect
 newRandomBlurShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Blur
 
-newRandomStitchShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomStitchShader :: (LastMember IO effs) => Eff effs Effect
 newRandomStitchShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Stitch
 
-newRandomFlashbangShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomFlashbangShader :: (LastMember IO effs) => Eff effs Effect
 newRandomFlashbangShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang
 
-newRandomCycleShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomCycleShader :: (LastMember IO effs) => Eff effs Effect
 newRandomCycleShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Cycle
 
-newRandomBlinkShader ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
-  Eff effs Effect
+newRandomBlinkShader :: (LastMember IO effs) => Eff effs Effect
 newRandomBlinkShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 3) <*> return Blink
 
 -- | Generate a random value uniformly distributed over the given range.

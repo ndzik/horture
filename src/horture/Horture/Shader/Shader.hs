@@ -16,6 +16,10 @@ module Horture.Shader.Shader
     flashbangShader,
     gifFragmentShader,
     gifVertexShader,
+    mirrorShader,
+    invertShader,
+    toonShader,
+    juliaFractalShader,
   )
 where
 
@@ -105,8 +109,12 @@ uniform sampler2D texture1;
 
 out vec4 frag_colour;
 
+// NOTE: DisplayShader expects RGB colors in RGBA format, thus invalidating any
+// input alpha values and replacing them with 1.0. Keeps compatibility high
+// between multiple display applications.
 void main() {
-  frag_colour = texture2D(texture1, texCoord);
+  vec4 col = texture2D(texture1, texCoord);
+  frag_colour = vec4(col.x, col.y, col.z, 1.0);
 }
   |]
 
@@ -274,7 +282,7 @@ layout(location = 0) out vec4 frag_colour;
 vec4 flashbang(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec4 c = texture2D(tex, uv);
   double pp = 1 - (dt / lifetime);
-  return vec4(pp * (1 - c.x) + c.x, pp * (1 - c.y) + c.y, pp * (1 - c.z) + c.z, 1);
+  return vec4(pp * (1 - c.x) + c.x, pp * (1 - c.y) + c.y, pp * (1 - c.z) + c.z, pp);
 }
 
 void main() {
@@ -328,5 +336,166 @@ vec4 blink(sampler2D tex, vec2 uv, double lifetime, double dt) {
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
   frag_colour = blink(texture1, uv, lifetime, dt);
+}
+    |]
+
+-- | mirrorShader goes into black and white.
+mirrorShader :: ByteString
+mirrorShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
+layout(location = 0) out vec4 frag_colour;
+
+vec4 mirror(sampler2D tex, vec2 uv, double lifetime, double dt) {
+  vec2 texSize = textureSize(tex, 0);
+  return texture2D(tex, vec2(texSize.x - uv.x, uv.y));
+}
+
+void main() {
+  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
+  frag_colour = mirror(texture1, uv, lifetime, dt);
+}
+    |]
+
+invertShader :: ByteString
+invertShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
+layout(location = 0) out vec4 frag_colour;
+
+vec4 invert(sampler2D tex, vec2 uv, double lifetime, double dt) {
+  vec4 c = texture2D(tex, uv);
+  return vec4(1 - c.x, 1 - c.y, 1 - c.z, 1);
+}
+
+void main() {
+  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
+  frag_colour = invert(texture1, uv, lifetime, dt);
+}
+    |]
+
+toonShader :: ByteString
+toonShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
+layout(location = 0) out vec4 frag_colour;
+float levels = 8.0 - 1.0;
+float contrast = 1.2;
+float brightness = 1.1;
+
+vec3 hsl2rgb(vec3 hsl) {
+    float t = hsl.y * ((hsl.z < 0.5) ? hsl.z : (1.0 - hsl.z));
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(hsl.xxx + K.xyz) * 6.0 - K.www);
+    return (hsl.z + t) * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), 2.0*t / hsl.z);
+}
+
+vec4 toonify(sampler2D tex, vec2 uv, double lifetime, double dt) {
+  float colorFactor = 1.0;
+  vec4 color = texture2D(tex, uv);
+  // BT.709 coefficients related to human perception.
+  float grey = 0.21 * color.r + 0.71 * color.g + 0.07 * color.b;
+  grey = clamp(grey * brightness, 0.0, 1.0);
+  float posterized = round(grey * levels) / levels;
+  float contrasted = clamp(contrast * (posterized - 0.5) + 0.5, 0.0, 1.0);
+  vec3 rgb = hsl2rgb(vec3(0.153, 1.0, contrasted));
+  return vec4(rgb, 1.0);
+}
+
+void main() {
+  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
+  frag_colour = toonify(texture1, uv, lifetime, dt);
+}
+    |]
+
+-- Shader shamelessly copied from here:
+-- https://github.com/jklintan/shaders
+juliaFractalShader :: ByteString
+juliaFractalShader =
+  [r|
+# version 410 core
+// Global variables
+uniform float time;
+
+// 2D coordinates
+in vec2 texCoord;
+// Output fragment color
+out vec4 FragColor;
+
+// Add two complex number c = x + yi together
+vec2 complex_add(vec2 lhs, vec2 rhs)
+{
+	return vec2(lhs.x + rhs.x, lhs.y + rhs.y);
+}
+
+// Multiply two complex number c = x + yi together
+vec2 complex_mul(vec2 lhs, vec2 rhs)
+{
+	return vec2(lhs.x * rhs.x - lhs.y * rhs.y, lhs.x * rhs.y + lhs.y * rhs.x);
+}
+
+// Determine which points on the screen that belongs to
+// the Julia set and which does not.
+float julia_iteration(float max_iters, vec2 z, vec2 c) {
+	for(int i = 0 ; i < max_iters ; i++) {
+		if(length(z) > 2.0) {
+			return i/max_iters;
+		}
+
+		// Find new z which we calculate from
+		// f(z) = z^2 + c
+		vec2 z_squared = complex_mul(z, z);
+		z = complex_add(z_squared, c);
+	}
+	// This will determine the background color
+	// e.g. this is a number not part of the Julia set.
+	return 0.0;
+}
+
+void main()
+{
+	// Animation parameters, use a Hermite interpolation
+	const float timespan = 20.0;  // Reset animation after 20s
+	float w = smoothstep(0.0, 40.0, fract(time/timespan));
+	float scale_anim_param = 1.0 + smoothstep(2.0, 0.1, fract(time/timespan));
+	float anim_param = 0.64 + 80.0 * w;
+
+	// Get the complex number to base the Julia set on, using
+	// different complex numbers gives different looks of the
+	// Julia set. Some interesting numbers are:
+	// c = -0.70176 - 0.3842i
+	// c = 0.285 + 0.01i
+	// c = -0.835 - 0.2321i
+	// c = -0.4 + 0.6i
+
+	// c = i, a dendrite fractal (on the boundary of the Mandelbrot set)
+	// c = -0.123 + 0.745i, Douady's rabbit fractal
+	// c = -0.75, the San Marco fractal
+	// c = -0.391 - 0.587i, the Siegel disk fractal
+
+	vec2 complex_number = vec2(0.285, 0.01);
+
+	// By multiplying the complex number with the anim_param
+	// we can get interesting animations of the set.
+	// complex_number = complex_mul(complex_number, vec2(anim_param, anim_param));
+
+	float color = julia_iteration(1000, texCoord / 2, complex_number);
+	float multiplier = 2.0; // Used to enhance the colors & contrast.
+	FragColor = vec4(vec3(color) * multiplier, 1.0);
 }
     |]

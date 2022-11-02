@@ -10,6 +10,7 @@ module Horture.EventSource.WebSocketClient
 where
 
 import Control.Concurrent.Chan.Synchronous
+import Control.Lens
 import Control.Monad.Freer
 import Control.Monad.Freer.Reader
 import Control.Monad.State
@@ -21,8 +22,8 @@ import Horture.EventSource.EventSource
 import Horture.EventSource.Random
 import Horture.Server.Message
 import Network.WebSockets
-import qualified Twitch.EventSub.Notification as TEvent
 import qualified Twitch.EventSub.Event as TEvent
+import qualified Twitch.EventSub.Notification as TEvent
 
 runWSEventSource ::
   (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs, LastMember IO effs) =>
@@ -53,13 +54,11 @@ effectFromTitle ::
   Text ->
   Eff effs Effect
 effectFromTitle title =
-  asks @StaticEffectRandomizerEnv
-    ( \m -> case Map.lookup title m of
-        Nothing -> Noop
-        Just (_, eff) -> eff
-    )
+  asks @StaticEffectRandomizerEnv (^. registeredEffects) >>= \m -> case Map.lookup title m of
+    Nothing -> return Noop
+    Just (_, eff) -> return eff
 
-hortureWSStaticClientApp :: Text -> Chan Event -> Map.Map Text (Text, Effect) -> ClientApp ()
+hortureWSStaticClientApp :: Text -> Chan Event -> StaticEffectRandomizerEnv -> ClientApp ()
 hortureWSStaticClientApp bid evChan env conn = do
   liftIO $ sendTextData conn (HortureAuthorization bid)
   runM
