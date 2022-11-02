@@ -39,7 +39,7 @@ import Linear.Matrix
 import Linear.Projection
 import Linear.V4
 
-renderGifs :: (HortureLogger (Horture l)) => Double -> Map.Map GifIndex [ActiveGif] -> Horture l ()
+renderGifs :: (HortureLogger (Horture l hdl)) => Double -> Map.Map GifIndex [ActiveGif] -> Horture l hdl ()
 renderGifs _ m | Map.null m = return ()
 renderGifs dt m = do
   prog <- asks (^. gifProg . shader)
@@ -52,7 +52,7 @@ renderGifs dt m = do
   -- General preconditions are set. Render all GIFs of the same type at once.
   mapM_ (renderGifType modelUniform gifIndexUniform) . Map.toList $ m
   where
-    renderGifType :: (HortureLogger (Horture l)) => UniformLocation -> UniformLocation -> (GifIndex, [ActiveGif]) -> Horture l ()
+    renderGifType :: (HortureLogger (Horture l hdl)) => UniformLocation -> UniformLocation -> (GifIndex, [ActiveGif]) -> Horture l hdl ()
     renderGifType _ _ (_, []) = return ()
     renderGifType modelUniform gifIndexUniform (_, gifsOfSameType@(g : _)) = do
       let HortureGif _ _ gifTextureObject numOfImgs delays = _afGif g
@@ -83,7 +83,7 @@ indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxInd
       | (accumulatedTime + fromIntegral d) < timeSinceBirth = go gifDelays (accumulatedTime + fromIntegral d) (i + 1)
       | otherwise = i
 
-renderBackground :: (HortureLogger (Horture l)) => Double -> Horture l ()
+renderBackground :: (HortureLogger (Horture l hdl)) => Double -> Horture l hdl ()
 renderBackground dt = do
   backgroundP <- asks (^. backgroundProg . shader)
   backgroundTexUnit <- asks (^. backgroundProg . textureUnit)
@@ -95,7 +95,7 @@ renderBackground dt = do
 
 -- | renderScene renders the captured application window. It is assumed that
 -- the horture texture was already initialized at this point.
-renderScene :: (HortureLogger (Horture l)) => Double -> Scene -> Horture l ()
+renderScene :: (HortureLogger (Horture l hdl), WindowPoller hdl (Horture l hdl)) => Double -> Scene -> Horture l hdl ()
 renderScene t scene = do
   let s = scene ^. screen
   screenP <- asks (^. screenProg . shader)
@@ -126,7 +126,7 @@ captureApplicationFrame dp pm dim =
   liftIO $ getWindowImage dp pm dim >>= updateWindowTexture dim
 
 -- | Applies all shader effects in the current scene to the captured window.
-applySceneShaders :: (HortureLogger (Horture l)) => Double -> Scene -> Horture l ()
+applySceneShaders :: (HortureLogger (Horture l hdl)) => Double -> Scene -> Horture l hdl ()
 applySceneShaders t scene = do
   fb <- asks (^. screenProg . framebuffer)
   -- Set custom framebuffer as target for read&writes.
@@ -145,11 +145,11 @@ applySceneShaders t scene = do
   liftIO $ generateMipmap' Texture2D
 
 applyShaderEffect ::
-  (HortureLogger (Horture l)) =>
+  (HortureLogger (Horture l hdl)) =>
   Double ->
   (ShaderEffect, Double, Lifetime) ->
   (TextureObject, TextureObject) ->
-  Horture l (TextureObject, TextureObject)
+  Horture l hdl (TextureObject, TextureObject)
 applyShaderEffect t (eff, birth, lt) buffers = do
   shaderProgs <-
     asks (Map.lookup eff . (^. screenProg . shaderEffects)) >>= \case
@@ -175,7 +175,7 @@ applyShaderEffect t (eff, birth, lt) buffers = do
     setLifetimeUniform (Limited s) uni = uniform uni $= s
     setLifetimeUniform Forever uni = uniform uni $= (0 :: Double)
 
-applyScreenBehaviours :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
+applyScreenBehaviours :: (HortureLogger (Horture l hdl)) => Double -> Object -> Horture l hdl Object
 applyScreenBehaviours t screen = do
   dim <- gets (^. dim)
   let bs = screen ^. behaviours
@@ -183,7 +183,7 @@ applyScreenBehaviours t screen = do
       s' = foldr (\(f, bt, Limited lt) o -> f ((t - bt) / lt) o) s bs
   return s'
 
-trackScreen :: (HortureLogger (Horture l)) => Double -> Object -> Horture l Object
+trackScreen :: (HortureLogger (Horture l hdl)) => Double -> Object -> Horture l hdl Object
 trackScreen _ screen = do
   viewUniform <- asks (^. screenProg . viewUniform)
   let s = screen
@@ -193,7 +193,7 @@ trackScreen _ screen = do
   liftIO $ m44ToGLmatrix lookAtM >>= (uniform viewUniform $=)
   return s
 
-projectScreen :: (HortureLogger (Horture l)) => Object -> Horture l ()
+projectScreen :: (HortureLogger (Horture l hdl)) => Object -> Horture l hdl ()
 projectScreen s = do
   modelUniform <- asks (^. screenProg . modelUniform)
   projectionUniform <- asks (^. screenProg . projectionUniform)

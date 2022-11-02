@@ -15,7 +15,7 @@ import Horture.Logging
 import Horture.Scene
 import Horture.State
 
-pollHortureEvents :: (HortureLogger (Horture l)) => Double -> Double -> Scene -> Horture l (Maybe Scene)
+pollHortureEvents :: (HortureLogger (Horture l hdl)) => Double -> Double -> Scene -> Horture l hdl (Maybe Scene)
 pollHortureEvents timeNow dt s = do
   asks _eventChan >>= liftIO . tryReadChan
     >>= \case
@@ -25,10 +25,10 @@ pollHortureEvents timeNow dt s = do
       _otherwise -> do
         return (Just s)
 
-handleHortureEvent :: Double -> Double -> Scene -> Event -> Horture l (Maybe Scene)
+handleHortureEvent :: Double -> Double -> Scene -> Event -> Horture l hdl (Maybe Scene)
 handleHortureEvent timeNow dt s (EventEffect eff) = Just <$> applyEffect timeNow dt s eff
 handleHortureEvent _ _ _ (EventCommand Exit) = return Nothing
 handleHortureEvent _ _ _ (EventCommand _cmd) = throwError $ HE "unimplemented"
 
-applyEffect :: Double -> Double -> Scene -> Effect -> Horture l Scene
+applyEffect :: Double -> Double -> Scene -> Effect -> Horture l hdl Scene
 applyEffect timeNow dt s eff = return $ apply timeNow dt eff s

@@ -19,9 +19,8 @@ data HortureStatic = HortureStatic
     _backgroundColor :: !(Color4 Float)
   }
 
-data HortureState = HortureState
-  { _display :: !Display,
-    _xWin :: !Window,
+data HortureState hdl = HortureState
+  { _envHandle :: !hdl,
     _capture :: !Drawable,
     _dim :: !(Int, Int)
   }

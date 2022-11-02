@@ -1,12 +1,14 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Horture
   ( SizeUpdate (..),
+    HortureEffects,
     hortureName,
     resizeWindow',
     verts,
@@ -65,8 +67,10 @@ import System.Exit
 hortureName :: String
 hortureName = "horture"
 
+type HortureEffects hdl l = (HortureLogger (Horture l hdl), WindowPoller hdl (Horture l hdl))
+
 -- | playScene plays the given scene in a Horture context.
-playScene :: (HortureLogger (Horture l)) => Scene -> Horture l ()
+playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
   go 0 (Just s)
@@ -87,95 +91,29 @@ playScene s = do
                      )
     handleHortureError (HE err) = logError . pack $ err
 
-clearView :: Horture l ()
+clearView :: Horture l hdl ()
 clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
 
-updateView :: Horture l ()
+updateView :: Horture l hdl ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
 
-pollEvents :: (HortureLogger (Horture l)) => Scene -> Double -> Double -> Horture l (Maybe Scene)
+pollEvents :: HortureEffects hdl l => Scene -> Double -> Double -> Horture l hdl (Maybe Scene)
 pollEvents s timeNow dt = do
   pollGLFWEvents
-  pollXEvents
+  pollWindowEnvironment
   pollHortureEvents timeNow dt s
 
-pollGLFWEvents :: Horture l ()
+pollGLFWEvents :: Horture l hdl ()
 pollGLFWEvents = liftIO GLFW.pollEvents
 
-pollXEvents :: Horture l ()
-pollXEvents = do
-  glWin <- asks _glWin
-  modelUniform <- asks (^. screenProg . modelUniform)
-  projectionUniform <- asks (^. screenProg . projectionUniform)
-  backTexObj <- asks (^. screenProg . backTextureObject)
-  screenTexObj <- asks (^. screenProg . textureObject)
-  screenTexUnit <- asks (^. screenProg . textureUnit)
-  xWin <- gets _xWin
-  dp <- gets _display
-  pm <- gets _capture
-  (oldW, oldH) <- gets _dim
-  (pm, (newW, newH)) <- liftIO $
-    allocaXEvent $ \evptr -> do
-      doIt <- checkWindowEvent dp xWin structureNotifyMask evptr
-      if doIt
-        then do
-          getEvent evptr >>= \case
-            ConfigureEvent {..} -> do
-              -- Retrieve a new pixmap
-              newPm <- xCompositeNameWindowPixmap dp xWin
-              -- Update reference, aspect ratio & destroy old pixmap.
-              freePixmap dp pm
-              -- Update overlay window with new aspect ratio.
-              let newWInt = fromIntegral ev_width
-                  newHInt = fromIntegral ev_height
-                  newWFloat = fromIntegral ev_width
-                  newHFloat = fromIntegral ev_height
-              GLFW.setWindowSize glWin newWInt newHInt
-              GLFW.setWindowPos glWin (fromIntegral ev_x) (fromIntegral ev_y)
-              let !anyPixelData = PixelData BGRA UnsignedInt8888Rev nullPtr
-              -- Update texture bindings!
-              activeTexture $= screenTexUnit
-              textureBinding Texture2D $= Just screenTexObj
-              texImage2D
-                Texture2D
-                NoProxy
-                0
-                RGBA'
-                (TextureSize2D (fromIntegral ev_width) (fromIntegral ev_height))
-                0
-                anyPixelData
-              generateMipmap' Texture2D
-              textureBinding Texture2D $= Just backTexObj
-              texImage2D
-                Texture2D
-                NoProxy
-                0
-                RGBA'
-                (TextureSize2D (fromIntegral ev_width) (fromIntegral ev_height))
-                0
-                anyPixelData
-              generateMipmap' Texture2D
-
-              -- TODO: WHY does this have no effect?
-              let proj = projectionForAspectRatio (newWFloat, newHFloat)
-              m44ToGLmatrix proj >>= (uniform projectionUniform $=)
-
-              let model = scaleForAspectRatio (newWInt, newHInt)
-              m44ToGLmatrix model >>= (uniform modelUniform $=)
-
-              return (newPm, (newWInt, newHInt))
-            _otherwise -> return (pm, (oldW, oldH))
-        else return (pm, (oldW, oldH))
-  modify $ \hs -> hs {_dim = (newW, newH), _capture = pm}
-
-deltaTime :: Double -> Horture l Double
+deltaTime :: Double -> Horture l hdl Double
 deltaTime startTime =
   getTime >>= \currentTime -> return $ currentTime - startTime
 
-setTime :: Double -> Horture l ()
+setTime :: Double -> Horture l hdl ()
 setTime = liftIO . GLFW.setTime
 
-getTime :: Horture l Double
+getTime :: Horture l hdl Double
 getTime =
   liftIO GLFW.getTime >>= \case
     Nothing -> throwError . HE $ "GLFW not running or initialized"
