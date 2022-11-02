@@ -53,6 +53,7 @@ import Horture.Effect
 import Horture.Error
 import Horture.Events
 import Horture.Gif
+import Horture.GL
 import Horture.Horture
 import Horture.Loader
 import Horture.Loader.Asset (Asset)

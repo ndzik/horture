@@ -40,6 +40,7 @@ library horture-lib
                             , Horture.Error
                             , Horture.Command
                             , Horture.Initializer
+                            , Horture.GL
                             , Horture.Events
                             , Horture.Event
                             , Horture.State

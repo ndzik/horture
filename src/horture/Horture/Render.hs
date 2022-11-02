@@ -28,6 +28,7 @@ import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale)
 import Graphics.X11
 import Horture.Effect
 import Horture.Error (HortureError (HE))
+import Horture.GL
 import Horture.Gif
 import Horture.Horture
 import Horture.Logging
