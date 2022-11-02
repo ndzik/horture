@@ -16,29 +16,20 @@ module Horture
     planeVertsSize,
     vertsElement,
     vertsElementSize,
-    ximageData,
     initResources,
     initGLFW,
-    m44ToGLmatrix,
     playScene,
-    identityM44,
-    x11UserGrabWindow,
   )
 where
 
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.State
 import Data.Bifunctor
-import Data.Bits
 import Data.Default
 import qualified Data.Map.Strict as Map
 import Data.Text (pack)
-import Data.Word
-import Foreign.C.String
 import Foreign.C.Types
-import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
@@ -46,13 +37,9 @@ import Graphics.GLUtil as Util hiding (throwError)
 import Graphics.GLUtil.Camera3D as Cam3D
 import Graphics.Rendering.OpenGL as GL hiding (Color, Invert, flush)
 import qualified Graphics.UI.GLFW as GLFW
-import Graphics.X11 hiding (resizeWindow)
-import Graphics.X11.Xlib.Extras
-import Graphics.X11.Xlib.Types
 import Horture.Effect
 import Horture.Error
 import Horture.Events
-import Horture.Gif
 import Horture.GL
 import Horture.Horture
 import Horture.Loader
@@ -63,6 +50,7 @@ import Horture.Render
 import Horture.Scene
 import Horture.Shader.Shader
 import Horture.State
+import Horture.WindowGrabber
 import System.Exit
 
 hortureName :: String
@@ -91,6 +79,8 @@ playScene s = do
                          go startTime (Just s)
                      )
     handleHortureError (HE err) = logError . pack $ err
+    handleHortureError (WindowEnvironmentInitializationErr err) = logError . pack $ err
+    handleHortureError WindowEnvironmentQueryHortureErr = logError . pack . show $ WindowEnvironmentQueryHortureErr
 
 clearView :: Horture l hdl ()
 clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
@@ -137,12 +127,6 @@ planeVertsSize = length verts * floatSize
 
 vertsElementSize :: Int
 vertsElementSize = length vertsElement * uintSize
-
-ximageData :: Image -> IO (Ptr Word8)
-ximageData (Image p) = peek (plusPtr @Image @(Ptr CIntPtr) p xdataPtr) >>= \buf -> return . castPtr $ buf
-  where
-    szCint = sizeOf @CInt undefined
-    xdataPtr = 4 * szCint
 
 initGLFW :: IO GLFW.Window
 initGLFW = do
@@ -370,40 +354,3 @@ initHortureBackgroundProgram = do
     backgroundTextureUnit = TextureUnit 1
 
 data SizeUpdate = GLFWUpdate !(Int, Int) | XUpdate !(CInt, CInt) deriving (Show, Eq)
-
-x11UserGrabWindow :: IO (Maybe (String, Window))
-x11UserGrabWindow = do
-  dp <- openDisplay ""
-  let ds = defaultScreen dp
-  root <- rootWindow dp ds
-  cursor <- createFontCursor dp xC_crosshair
-  _ <-
-    grabPointer
-      dp
-      root
-      False
-      ( buttonMotionMask
-          .|. buttonPressMask
-          .|. buttonReleaseMask
-      )
-      grabModeAsync
-      grabModeAsync
-      root
-      cursor
-      currentTime
-
-  userDecision <- allocaXEvent $ \evptr -> do
-    nextEvent dp evptr
-    getEvent evptr >>= \case
-      ButtonEvent {..} -> do
-        alloca $ \cptr -> do
-          s <- xFetchName dp ev_subwindow cptr
-          if s == 0
-            then return . Just $ ("unknown", ev_subwindow)
-            else peek cptr >>= peekCString >>= \n -> return . Just $ (n, ev_subwindow)
-      _otherwise -> return Nothing
-
-  ungrabPointer dp currentTime
-  freeCursor dp cursor
-  closeDisplay dp
-  return userDecision

@@ -6,11 +6,7 @@ module Horture.Render
   ( renderGifs,
     renderBackground,
     renderScene,
-    scaleForAspectRatio,
-    m44ToGLmatrix,
-    identityM44,
     indexForGif,
-    projectionForAspectRatio,
   )
 where
 
@@ -21,11 +17,8 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
-import Foreign.Ptr
-import Foreign.Storable
 import Graphics.GLUtil.Camera3D as Util
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale)
-import Graphics.X11
 import Horture.Effect
 import Horture.Error (HortureError (HE))
 import Horture.GL
@@ -36,9 +29,9 @@ import Horture.Object
 import Horture.Program
 import Horture.Scene
 import Horture.State
+import Horture.WindowGrabber
 import Linear.Matrix
 import Linear.Projection
-import Linear.V4
 
 renderGifs :: (HortureLogger (Horture l hdl)) => Double -> Map.Map GifIndex [ActiveGif] -> Horture l hdl ()
 renderGifs _ m | Map.null m = return ()
@@ -100,13 +93,13 @@ renderScene :: (HortureLogger (Horture l hdl), WindowPoller hdl (Horture l hdl))
 renderScene t scene = do
   let s = scene ^. screen
   screenP <- asks (^. screenProg . shader)
-  (HortureState dp _ pm dim) <- get
   screenTexUnit <- asks (^. screenProg . textureUnit)
   sourceTexObject <- asks (^. screenProg . textureObject)
   -- Bind texture which we read from.
   activeTexture $= screenTexUnit
   textureBinding Texture2D $= Just sourceTexObject
-  captureApplicationFrame dp pm dim
+  -- Fetch the next frame.
+  nextFrame
   -- Apply shaders to captured texture.
   applySceneShaders t scene
   -- Final renderpass rendering scene.
@@ -114,17 +107,6 @@ renderScene t scene = do
   -- Apply behavioural effects to the scene itself.
   applyScreenBehaviours t s >>= trackScreen t >>= projectScreen
   drawBaseQuad
-
--- | Updates currently bound texture with the pixeldata of the frame for the
--- captured application.
-captureApplicationFrame ::
-  (HortureLogger (Horture l)) =>
-  Display ->
-  Drawable ->
-  (Int, Int) ->
-  Horture l ()
-captureApplicationFrame dp pm dim =
-  liftIO $ getWindowImage dp pm dim >>= updateWindowTexture dim
 
 -- | Applies all shader effects in the current scene to the captured window.
 applySceneShaders :: (HortureLogger (Horture l hdl)) => Double -> Scene -> Horture l hdl ()
@@ -202,68 +184,3 @@ projectScreen s = do
   let proj = projectionForAspectRatio (fromIntegral w, fromIntegral h)
   liftIO $ m44ToGLmatrix proj >>= (uniform projectionUniform $=)
   liftIO $ m44ToGLmatrix (model s) >>= (uniform modelUniform $=)
-
-drawBaseQuad :: Horture l ()
-drawBaseQuad = liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
-
-genMipMap :: Horture l ()
-genMipMap = liftIO $ generateMipmap' Texture2D
-
--- | m44ToGLmatrix converts the row based representation of M44 to a GLmatrix
--- representation which is column based.
-m44ToGLmatrix :: (Show a, MatrixComponent a) => M44 a -> IO (GLmatrix a)
-m44ToGLmatrix m = withNewMatrix ColumnMajor (\p -> poke (castPtr p) m')
-  where
-    m' = transpose m
-
-identityM44 :: M44 Float
-identityM44 =
-  V4
-    (V4 1 0 0 0)
-    (V4 0 1 0 0)
-    (V4 0 0 1 0)
-    (V4 0 0 0 1)
-
-scaleForAspectRatio :: (Int, Int) -> M44 Float
-scaleForAspectRatio (ww, wh) = scaling
-  where
-    aspectRatio = fromIntegral ww / fromIntegral wh
-    scaling =
-      V4
-        (V4 aspectRatio 0 0 0)
-        (V4 0 1 0 0)
-        (V4 0 0 1 0)
-        (V4 0 0 0 1)
-
--- | getWindowImage fetches the image of the currently captured application
--- window.
-getWindowImage :: Display -> Drawable -> (Int, Int) -> IO Image
-getWindowImage dp pm (w, h) =
-  getImage
-    dp
-    pm
-    1
-    1
-    (fromIntegral w)
-    (fromIntegral h)
-    0xFFFFFFFF
-    zPixmap
-
--- | updateWindowTexture updates the OpenGL texture for the captured window
--- using the given dimensions together with the source image as a data source.
-updateWindowTexture :: (Int, Int) -> Image -> IO ()
-updateWindowTexture (w, h) i = do
-  src <- ximageData i
-  let pd = PixelData BGRA UnsignedInt8888Rev src
-  texSubImage2D
-    Texture2D
-    0
-    (TexturePosition2D 0 0)
-    (TextureSize2D (fromIntegral w) (fromIntegral h))
-    pd
-  destroyImage i
-
-projectionForAspectRatio :: (Float, Float) -> M44 Float
-projectionForAspectRatio (ww, wh) = proj
-  where
-    proj = Util.projectionMatrix (Util.deg2rad 90) (ww / wh) 0.1 1000

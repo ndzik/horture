@@ -1,3 +1,7 @@
-module Horture.Error (HortureError(..)) where
+module Horture.Error (HortureError (..)) where
 
-newtype HortureError = HE String deriving (Show)
+data HortureError
+  = HE !String
+  | WindowEnvironmentInitializationErr !String
+  | WindowEnvironmentQueryHortureErr
+  deriving (Show)

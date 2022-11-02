@@ -5,6 +5,7 @@ module Horture.Logging
   ( logDummy,
     logChannel,
     withColog,
+    logEvent',
     HortureLogger (..),
   )
 where
