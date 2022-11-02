@@ -39,6 +39,7 @@ library horture-lib
                             , Horture.Shader.Shader
                             , Horture.Error
                             , Horture.Command
+                            , Horture.Initializer
                             , Horture.Events
                             , Horture.Event
                             , Horture.State
@@ -55,6 +56,8 @@ library horture-lib
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
                             , Horture.Backend.X11.X11
+                            , Horture.Initializer.Initializer
+                            , Horture.Initializer.Environment
                             , Horture.EventSource.Random
                             , Horture.EventSource.Logger
                             , Horture.EventSource.Local
