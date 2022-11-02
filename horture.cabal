@@ -67,6 +67,7 @@ library horture-lib
                             , Horture.Loader.Config
                             , Horture.Loader.TextureLoader
                             , Horture.Loader.FilePreloader
+                            , Horture.Debug
 
     -- LANGUAGE extensions used by modules in this package.
     build-depends:          base ^>=4.14.3.0
