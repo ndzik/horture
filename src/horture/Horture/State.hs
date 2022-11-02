@@ -13,8 +13,6 @@ data HortureStatic = HortureStatic
   { _screenProg :: !HortureScreenProgram,
     _gifProg :: !HortureGifProgram,
     _backgroundProg :: !HortureBackgroundProgram,
-    _planeVertexLocation :: !AttribLocation,
-    _planeTexLocation :: !AttribLocation,
     _eventChan :: !(Chan Event),
     _logChan :: !(Maybe (Chan Text)),
     _glWin :: !GLFW.Window,
