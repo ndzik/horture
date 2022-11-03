@@ -282,7 +282,7 @@ layout(location = 0) out vec4 frag_colour;
 vec4 flashbang(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec4 c = texture2D(tex, uv);
   double pp = 1 - (dt / lifetime);
-  return vec4(pp * (1 - c.x) + c.x, pp * (1 - c.y) + c.y, pp * (1 - c.z) + c.z, pp);
+  return vec4(pp * (1 - c.x) + c.x, pp * (1 - c.y) + c.y, pp * (1 - c.z) + c.z, 1.0);
 }
 
 void main() {
