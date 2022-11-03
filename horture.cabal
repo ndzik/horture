@@ -104,6 +104,7 @@ library horture-lib
                             , OpenGL
                             , lens
                             , JuicyPixels
+                            , async
                             , filepath
                             , directory
                             , mtl

@@ -228,9 +228,8 @@ refreshEventSource (Just pipe) = do
   let gifEffs = map (\(fp, _) -> AddGif fp Forever (V3 0 0 0) []) gifs
       shaderEffs = map (AddShaderEffect Forever) . enumFrom $ minBound
       allEffs = gifEffs ++ [AddScreenBehaviour Forever [], AddRapidFire []] ++ shaderEffs
-  mapM_
-    (\eff -> writeAndHandleResponse pipe (InputEnable (toTitle eff, eff, baseCost * effectToCost eff)))
-    allEffs
+
+  writeAndHandleResponse pipe . InputEnable . map (\eff -> (toTitle eff, eff, baseCost * effectToCost eff)) $ allEffs
 
   writeAndHandleResponse pipe InputListEvents
 

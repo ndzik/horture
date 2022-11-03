@@ -9,7 +9,7 @@
 module Horture.EventSource.Controller.Controller
   ( EventController (..),
     listAllEvents,
-    enableEvent,
+    enableEvents,
     purgeAllEvents,
     controlEventSource,
     EventControllerResponse (..),
@@ -31,10 +31,10 @@ data EventController a where
   -- title of the effect with the effect itself and a EventSource
   -- defined/controlled identifier.
   ListAllEvents :: EventController [(Text, (Text, Effect))]
-  -- | Enables the given (Name, Effect, Int) event pair on the controlled
+  -- | Enables the given [(Name, Effect, Int)] event pairs on the controlled
   -- source associated with the given cost, if applicable. Bool indicates
   -- success.
-  EnableEvent :: (Text, Effect, Int) -> EventController Bool
+  EnableEvents :: [(Text, Effect, Int)] -> EventController Bool
   -- | Purge all enabled events. This disables all events on the controlled
   -- event source.
   PurgeAllEvents :: EventController Bool
@@ -43,7 +43,7 @@ makeEffect ''EventController
 
 data EventControllerInput
   = InputListEvents
-  | InputEnable !(Text, Effect, Int)
+  | InputEnable ![(Text, Effect, Int)]
   | InputPurgeAll
   | InputTerminate
   deriving (Show)
@@ -76,7 +76,7 @@ controlEventSource inputChan resChan = do
       res <-
         liftIO (readChan ic) >>= \case
           InputListEvents -> listAllEvents >>= liftIO . writeChan rc . ListEvents >> return True
-          InputEnable t -> enableEvent t >>= liftIO . writeChan rc . Enable >> return True
+          InputEnable t -> enableEvents t >>= liftIO . writeChan rc . Enable >> return True
           InputPurgeAll -> purgeAllEvents >>= liftIO . writeChan rc . PurgeAll >> return True
           InputTerminate -> purgeAllEvents >>= liftIO . writeChan rc . PurgeAll >> return False
       when res $ go ic rc
