@@ -30,6 +30,8 @@ library horture-lib
     exposed-modules:        Horture
                             , Horture.Authorize
                             , Horture.Path
+                            , Horture.Audio
+                            , Horture.Audio.PipeWire
                             , Horture.CommandCenter.CommandCenter
                             , Horture.CommandCenter.Event
                             , Horture.CommandCenter.State
@@ -57,6 +59,7 @@ library horture-lib
 
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
+                            , Horture.Audio.Recorder
                             , Horture.Backend.X11.LinuxX11
                             , Horture.Backend.X11.X11
                             , Horture.Backend.X11.Initializer
@@ -113,10 +116,18 @@ library horture-lib
                             , vty
                             , brick
                             , array
+                            , carray
+                            , fft
+                            , stm
+                            , loop
                             , websockets
                             , wuss
                             , GLFW-b
                             , GLUtil
+    c-sources:
+                            cbits/record.c
+    pkgconfig-depends:
+                            libpipewire-0.3
     ghc-options:
                             -Wall
                             -fno-warn-name-shadowing

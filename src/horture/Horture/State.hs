@@ -1,11 +1,14 @@
 module Horture.State where
 
+import Control.Concurrent (MVar)
 import Control.Concurrent.Chan.Synchronous
+import Control.Concurrent.STM
 import Control.Lens.TH
 import Data.Text (Text)
 import Graphics.Rendering.OpenGL hiding (get)
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
+import Horture.Audio.Recorder
 import Horture.Event
 import Horture.Program
 
@@ -21,6 +24,8 @@ data HortureStatic = HortureStatic
 
 data HortureState hdl = HortureState
   { _envHandle :: !hdl,
+    _audioRecording :: !(Maybe (MVar ())),
+    _audioStorage :: !(TVar (Maybe FFTSnapshot)),
     _capture :: !Drawable,
     _dim :: !(Int, Int)
   }
