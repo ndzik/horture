@@ -20,6 +20,7 @@ module Horture.Shader.Shader
     invertShader,
     toonShader,
     juliaFractalShader,
+    audioShader,
   )
 where
 
@@ -129,6 +130,8 @@ uniform sampler2D texture1;
 uniform float barrelPower = 1.5;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform double dominatingFrequency = -1;
+uniform double amplitude = -1;
 
 layout(location = 0) out vec4 frag_colour;
 
@@ -162,6 +165,8 @@ uniform sampler2D texture1;
 uniform float stitchSize = 6.0;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform double dominatingFrequency = -1;
+uniform double amplitude = -1;
 layout(location = 0) out vec4 frag_colour;
 
 vec4 stitchIt(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -208,6 +213,8 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform double dominatingFrequency = -1;
+uniform double amplitude = -1;
 layout(location = 0) out vec4 frag_colour;
 
 float offset[3] = float[](0.0, 2.3846153846, 6.2307602308);
@@ -243,6 +250,8 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform double dominatingFrequency = -1;
+uniform double amplitude = -1;
 layout(location = 0) out vec4 frag_colour;
 
 float offset[3] = float[](0.0, 2.3846153846, 6.2307602308);
@@ -277,6 +286,8 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform double dominatingFrequency = -1;
+uniform double amplitude = -1;
 layout(location = 0) out vec4 frag_colour;
 
 vec4 flashbang(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -301,6 +312,8 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform double dominatingFrequency = -1;
+uniform double amplitude = -1;
 layout(location = 0) out vec4 frag_colour;
 
 vec4 cycleColours(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -325,6 +338,8 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform double dominatingFrequency = -1;
+uniform double amplitude = -1;
 layout(location = 0) out vec4 frag_colour;
 
 vec4 blink(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -349,6 +364,8 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform double dominatingFrequency = -1;
+uniform double amplitude = -1;
 layout(location = 0) out vec4 frag_colour;
 
 vec4 mirror(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -371,6 +388,8 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform double dominatingFrequency = -1;
+uniform double amplitude = -1;
 layout(location = 0) out vec4 frag_colour;
 
 vec4 invert(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -393,6 +412,8 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform double dominatingFrequency = -1;
+uniform double amplitude = -1;
 layout(location = 0) out vec4 frag_colour;
 float levels = 8.0 - 1.0;
 float contrast = 1.2;
@@ -422,6 +443,47 @@ void main() {
   frag_colour = toonify(texture1, uv, lifetime, dt);
 }
     |]
+
+audioShader :: ByteString
+audioShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
+uniform double dominatingFrequency = -1;
+uniform double amplitude = -1;
+
+layout(location = 0) out vec4 frag_colour;
+
+vec3 hsl2rgb(vec3 hsl) {
+    float t = hsl.y * ((hsl.z < 0.5) ? hsl.z : (1.0 - hsl.z));
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(hsl.xxx + K.xyz) * 6.0 - K.www);
+    return (hsl.z + t) * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), 2.0*t / hsl.z);
+}
+
+vec4 applyVisualization(sampler2D tex, vec2 uv, double lifetime, double dt, double freq, double amp) {
+  vec4 rgba = texture2D(tex, uv);
+  const double maxFreq = 16000;
+  double ff = 1 - clamp(freq-40, 0, maxFreq)/maxFreq;
+  double fa = clamp(amp*2-20, 0, 100)/100;
+  double r = 1 * ff * fa;
+  double g = 1 * ff * fa;
+  double b = 1 * ff * fa;
+
+  float dtoc = distance(uv, vec2(0.5, 0.5));
+  vec4 tint = vec4(mix(rgba.x, r, 0.1), mix(rgba.y, g, 0.2), rgba.z, rgba.w);
+  return mix(tint, rgba, 1-abs(dtoc));
+}
+
+void main() {
+  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
+  frag_colour = applyVisualization(texture1, uv, lifetime, dt, dominatingFrequency, amplitude);
+}
+  |]
 
 -- Shader shamelessly copied from here:
 -- https://github.com/jklintan/shaders
