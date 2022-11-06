@@ -16,8 +16,11 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
+import Foreign
 import Graphics.GLUtil.Camera3D as Util
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale)
+import Horture.Audio
+import Horture.Audio.PipeWire ()
 import Horture.Effect
 import Horture.Error (HortureError (HE))
 import Horture.GL
@@ -117,8 +120,9 @@ applySceneShaders t scene = do
   backTexture <- asks (^. screenProg . backTextureObject)
   -- Use tmp texture with correct dimensions to enable ping-ponging.
   textureBinding Texture2D $= Just backTexture
+  fft <- currentFFTPeak
   let effs = scene ^. shaders
-  (finishedTex, _) <- foldrM (applyShaderEffect t) (frontTexture, backTexture) effs
+  (finishedTex, _) <- foldrM (applyShaderEffect fft t) (frontTexture, backTexture) effs
   -- Unbind post-processing framebuffer and bind default framebuffer for
   -- on-screen rendering.
   bindFramebuffer Framebuffer $= defaultFramebufferObject
@@ -128,11 +132,12 @@ applySceneShaders t scene = do
 
 applyShaderEffect ::
   (HortureLogger (Horture l hdl)) =>
+  FFTSnapshot ->
   Double ->
   (ShaderEffect, Double, Lifetime) ->
   (TextureObject, TextureObject) ->
   Horture l hdl (TextureObject, TextureObject)
-applyShaderEffect t (eff, birth, lt) buffers = do
+applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
   shaderProgs <-
     asks (Map.lookup eff . (^. screenProg . shaderEffects)) >>= \case
       Nothing -> throwError $ HE "unhandled shadereffect encountered"
@@ -147,6 +152,7 @@ applyShaderEffect t (eff, birth, lt) buffers = do
       liftIO $ framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D w 0
       currentProgram $= Just (prog ^. shader)
       setLifetimeUniform lt (prog ^. lifetimeUniform)
+      liftIO . withArray [bass, mids, highs] $ uniformv (prog ^. frequenciesUniform) 3
       uniform (prog ^. dtUniform) $= t - birth
       drawBaseQuad
       genMipMap

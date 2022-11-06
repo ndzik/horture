@@ -54,7 +54,8 @@ data HortureBackgroundProgram = HortureBackgroundProgram
 data HortureShaderProgram = HortureShaderProgram
   { _hortureShaderProgramShader :: !Program,
     _hortureShaderProgramLifetimeUniform :: !UniformLocation,
-    _hortureShaderProgramDtUniform :: !UniformLocation
+    _hortureShaderProgramDtUniform :: !UniformLocation,
+    _hortureShaderProgramFrequenciesUniform :: !UniformLocation
   }
   deriving (Show)
 

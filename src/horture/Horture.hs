@@ -208,11 +208,13 @@ initShaderEffects = do
             hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])
             lifetimeUniform <- uniformLocation hsp "lifetime"
             dtUniform <- uniformLocation hsp "dt"
+            dominatingFreqUniform <- uniformLocation hsp "frequencies"
             return
               HortureShaderProgram
                 { _hortureShaderProgramShader = hsp,
                   _hortureShaderProgramLifetimeUniform = lifetimeUniform,
-                  _hortureShaderProgramDtUniform = dtUniform
+                  _hortureShaderProgramDtUniform = dtUniform,
+                  _hortureShaderProgramFrequenciesUniform = dominatingFreqUniform
                 }
       Map.fromList <$> mapM (sequenceRight . second (sequence . (buildLinkAndUniform <$>))) shaderProgs
     sequenceRight :: (ShaderEffect, IO [HortureShaderProgram]) -> IO (ShaderEffect, [HortureShaderProgram])
