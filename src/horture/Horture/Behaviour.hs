@@ -23,7 +23,7 @@ import Linear.Vector
 
 -- | pulse applies a pulsing effect, similar to a heartbeat.
 pulse :: Float -> Float -> Float -> Behaviour
-pulse min amplifier frequency t o =
+pulse min amplifier frequency _ t o =
   o & scale
     %~ ( !+!
            V4
@@ -36,7 +36,7 @@ pulse min amplifier frequency t o =
 -- | convolute applies a convolution effect where an object appears to be
 -- wrapping up into itself.
 convolute :: Behaviour
-convolute t o =
+convolute _ t o =
   o & scale
     %~ ( !+!
            V4
@@ -47,7 +47,7 @@ convolute t o =
        )
 
 shake :: Float -> Float -> Float -> Behaviour
-shake amp scale frequency t o =
+shake amp scale frequency _ t o =
   o & pos
     %~ ( ^+^
            V3
@@ -57,7 +57,7 @@ shake amp scale frequency t o =
        )
 
 circle :: Float -> Behaviour
-circle frequency t o =
+circle frequency _ t o =
   o & pos
     %~ ( ^+^
            V3
@@ -67,7 +67,8 @@ circle frequency t o =
        )
 
 moveTo :: V3 Float -> Behaviour
-moveTo target t o = o & pos %~ lerp (realToFrac t) target
+moveTo target _ t o = o & pos %~ lerp (realToFrac t) target
 
 rotate :: Float -> Behaviour
-rotate factor t o = o & orientation %~ \oq -> axisAngle (V3 0 0 (-1)) (deg2rad (realToFrac t * factor)) * oq
+rotate factor _ t o = o & orientation %~ \oq -> axisAngle (V3 0 0 (-1)) (deg2rad (realToFrac t * factor)) * oq
+

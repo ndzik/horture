@@ -57,7 +57,7 @@ renderGifs dt m = do
         ( ( \o -> do
               let bs = o ^. behaviours
                   timeSinceBirth = dt - _birth o
-                  o' = foldr (\(f, _, _) o -> f timeSinceBirth o) o bs
+                  o' = foldr (\(f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
                   texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
               liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform modelUniform $=)
               uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
@@ -103,16 +103,17 @@ renderScene t scene = do
   -- Fetch the next frame.
   nextFrame
   -- Apply shaders to captured texture.
-  applySceneShaders t scene
+  fft <- currentFFTPeak
+  applySceneShaders fft t scene
   -- Final renderpass rendering scene.
   currentProgram $= Just screenP
   -- Apply behavioural effects to the scene itself.
-  applyScreenBehaviours t s >>= trackScreen t >>= projectScreen
+  applyScreenBehaviours fft t s >>= trackScreen t >>= projectScreen
   drawBaseQuad
 
 -- | Applies all shader effects in the current scene to the captured window.
-applySceneShaders :: (HortureLogger (Horture l hdl)) => Double -> Scene -> Horture l hdl ()
-applySceneShaders t scene = do
+applySceneShaders :: (HortureLogger (Horture l hdl)) => FFTSnapshot -> Double -> Scene -> Horture l hdl ()
+applySceneShaders fft t scene = do
   fb <- asks (^. screenProg . framebuffer)
   -- Set custom framebuffer as target for read&writes.
   bindFramebuffer Framebuffer $= fb
@@ -120,7 +121,6 @@ applySceneShaders t scene = do
   backTexture <- asks (^. screenProg . backTextureObject)
   -- Use tmp texture with correct dimensions to enable ping-ponging.
   textureBinding Texture2D $= Just backTexture
-  fft <- currentFFTPeak
   let effs = scene ^. shaders
   (finishedTex, _) <- foldrM (applyShaderEffect fft t) (frontTexture, backTexture) effs
   -- Unbind post-processing framebuffer and bind default framebuffer for
@@ -163,12 +163,15 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
     setLifetimeUniform (Limited s) uni = uniform uni $= s
     setLifetimeUniform Forever uni = uniform uni $= (0 :: Double)
 
-applyScreenBehaviours :: (HortureLogger (Horture l hdl)) => Double -> Object -> Horture l hdl Object
-applyScreenBehaviours t screen = do
+applyScreenBehaviours :: (HortureLogger (Horture l hdl)) => FFTSnapshot -> Double -> Object -> Horture l hdl Object
+applyScreenBehaviours fft t screen = do
   dim <- gets (^. dim)
   let bs = screen ^. behaviours
       s = screen & scale .~ scaleForAspectRatio dim
-      s' = foldr (\(f, bt, Limited lt) o -> f ((t - bt) / lt) o) s bs
+      s' = foldr (\(f, bt, lt) o -> case lt of
+                                      Limited lt -> f fft ((t - bt) / lt) o
+                                      Forever -> f fft t o
+                                      ) s bs
   return s'
 
 trackScreen :: (HortureLogger (Horture l hdl)) => Double -> Object -> Horture l hdl Object
