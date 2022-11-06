@@ -16,9 +16,10 @@ module Horture.EventSource.Controller.TwitchController
   )
 where
 
+import Control.Concurrent.Async
 import Control.Concurrent.Chan.Synchronous
 import Control.Lens
-import Control.Monad (void)
+import Control.Monad (join, void)
 import Control.Monad.Freer
 import Control.Monad.Freer.State
 import Control.Monad.IO.Class (MonadIO (liftIO))
@@ -63,45 +64,49 @@ handleTwitchEventController ::
   Eff (EventController : effs) ~> Eff effs
 handleTwitchEventController = interpret $ \case
   ListAllEvents -> gets @TwitchControllerState (Map.toList . (^. events))
-  EnableEvent c -> putCustomReward c
+  EnableEvents c -> putCustomRewards c
   PurgeAllEvents -> deleteAllRewards
 
--- | putCustomReward registers the given (Title, Effect) pair as a custom
--- channel points reward on the associated channel.
-putCustomReward ::
+-- | putCustomRewards registers the given [(Title, Effect)] pairs as custom
+-- channel points rewards on the associated channel.
+putCustomRewards ::
   (Members '[State TwitchControllerState, Logger] effs, LastMember IO effs) =>
-  (Text, Effect, Int) ->
+  [(Text, Effect, Int)] ->
   Eff effs Bool
-putCustomReward (title, eff, cost) = do
+putCustomRewards rewards = do
   TwitchChannelPointsClient {createCustomReward} <- gets @TwitchControllerState (^. client)
   id <- gets @TwitchControllerState (^. broadcasterId)
   env <- gets @TwitchControllerState (^. clientEnv)
-  let body =
-        CreateCustomRewardBody
-          { createcustomrewardbodyTitle = title,
-            createcustomrewardbodyCost = cost,
-            createcustomrewardbodyPrompt = Nothing,
-            createcustomrewardbodyIsEnabled = Nothing,
-            createcustomrewardbodyBackgroundColor = Nothing,
-            createcustomrewardbodyIsUserInputRequired = Nothing,
-            createcustomrewardbodyIsMaxPerStreamEnabled = Nothing,
-            createcustomrewardbodyMaxPerStream = Nothing,
-            createcustomrewardbodyIsMaxPerUserPerStreamEnabled = Nothing,
-            createcustomrewardbodyMaxPerUserPerStream = Nothing,
-            createcustomrewardbodyIsGlobalCooldownEnabled = Nothing,
-            createcustomrewardbodyGlobalCooldownSeconds = Nothing,
-            createcustomrewardbodyShouldRedemptionsSkipRequestQuee = Nothing
-          }
-  liftIO (runClientM (createCustomReward id body) env) >>= \case
-    Right (DataResponse crs) -> mapM_ (storeCustomRewardCreation (title, eff) . getcustomrewardsdataId) crs >> return True
-    Left err -> (logError . pack . show $ err) >> return False
+  res <- liftIO (mapConcurrently (go createCustomReward env id) rewards)
+  all (== True) <$> (mapM storeCustomRewardCreation . join $ res)
+  where
+    go call env id (title, eff, cost) = do
+      let body =
+            CreateCustomRewardBody
+              { createcustomrewardbodyTitle = title,
+                createcustomrewardbodyCost = cost,
+                createcustomrewardbodyPrompt = Nothing,
+                createcustomrewardbodyIsEnabled = Nothing,
+                createcustomrewardbodyBackgroundColor = Nothing,
+                createcustomrewardbodyIsUserInputRequired = Nothing,
+                createcustomrewardbodyIsMaxPerStreamEnabled = Nothing,
+                createcustomrewardbodyMaxPerStream = Nothing,
+                createcustomrewardbodyIsMaxPerUserPerStreamEnabled = Nothing,
+                createcustomrewardbodyMaxPerUserPerStream = Nothing,
+                createcustomrewardbodyIsGlobalCooldownEnabled = Nothing,
+                createcustomrewardbodyGlobalCooldownSeconds = Nothing,
+                createcustomrewardbodyShouldRedemptionsSkipRequestQuee = Nothing
+              }
+      runClientM (call id body) env >>= \case
+        Right (DataResponse crs) -> return $ map (\d -> Right (title, (getcustomrewardsdataId d, eff))) crs
+        Left err -> return [Left . pack . show $ err] -- (logError . pack . show $ err) >> return False
 
 storeCustomRewardCreation ::
-  (Members '[State TwitchControllerState] effs) =>
-  (Text, Effect) ->
-  Text ->
-  Eff effs ()
-storeCustomRewardCreation (title, eff) id = modify @TwitchControllerState (& events %~ Map.insert title (id, eff))
+  (Members '[State TwitchControllerState, Logger] effs) =>
+  Either Text (Text, (Text, Effect)) ->
+  Eff effs Bool
+storeCustomRewardCreation (Right (title, (id, eff))) = modify @TwitchControllerState (& events %~ Map.insert title (id, eff)) >> return True
+storeCustomRewardCreation (Left err) = logError err >> return False
 
 -- | deleteAllRewards deletes all custom channel points rewards managed by this
 -- client-id (application).
@@ -113,9 +118,10 @@ deleteAllRewards = do
   id <- gets @TwitchControllerState (^. broadcasterId)
   env <- gets @TwitchControllerState (^. clientEnv)
   effs <- getAllRewards
-  ress <- mapM (\effId -> liftIO (runClientM (deleteCustomReward id effId) env)) effs
-  foldrM resolveResult True ress
+  res <- liftIO $ mapConcurrently (go deleteCustomReward env id) effs
+  foldrM resolveResult True res
   where
+    go call env id effId = runClientM (call id effId) env
     resolveResult (Left err) _ = (logError . pack . show $ err) >> return False
     resolveResult _ False = return False
     resolveResult _ _ = return True
