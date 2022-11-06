@@ -26,6 +26,7 @@ data HortureState hdl = HortureState
   { _envHandle :: !hdl,
     _audioRecording :: !(Maybe (MVar ())),
     _audioStorage :: !(TVar (Maybe FFTSnapshot)),
+    _mvgAvg :: ![FFTSnapshot],
     _capture :: !Drawable,
     _dim :: !(Int, Int)
   }

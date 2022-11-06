@@ -1,6 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -21,13 +20,11 @@ import Control.Monad.Except
 import Control.Monad.State
 import Data.Array.CArray.Base
 import Data.Maybe
-import Data.Text (pack)
 import Foreign.C.Types
 import Foreign.ForeignPtr
 import Foreign.Ptr
 import Foreign.Storable
 import Horture.Audio.Recorder
-import Horture.Error
 import Horture.Horture
 import Horture.Logging
 import Horture.State
@@ -54,8 +51,18 @@ instance (HortureLogger (Horture l hdl)) => AudioRecorder (Horture l hdl) where
       Just stopIt -> liftIO (putMVar stopIt ()) >> audioRecording .= Nothing
   currentFFTPeak =
     gets (^. audioStorage) >>= liftIO . readTVarIO >>= \case
-      Nothing -> (logWarn . pack . show $ AudioSourceUnavailableErr) >> return (0, 0, 0)
-      Just res -> (logInfo . pack . show $ res) >> return res
+      Nothing -> return (0, 0, 0)
+      Just res -> do
+        mvgAvg %= take 10 . (res :)
+        gets (^. mvgAvg) >>= \l -> takeAvg (fromIntegral . length $ l) l
+
+takeAvg :: Int -> [(Double, Double, Double)] -> Horture l hdl (Double, Double, Double)
+takeAvg n ffts = do
+  let (b, m, h) = foldr go (0, 0, 0) ffts
+      n' = fromIntegral n
+  return (b / n', m / n', h / n')
+  where
+    go (bassA, midA, highA) (bassB, midB, highB) = (bassA + bassB, midA + midB, highA + highB)
 
 foreign import ccall "wrapper"
   mkAudioCallback :: AudioCallback -> IO (FunPtr AudioCallback)
@@ -71,17 +78,15 @@ onProcessAudio :: MVar () -> TVar (Maybe FFTSnapshot) -> AudioCallback
 onProcessAudio shouldStop stm sampleRate _nChannels nSamples samples = do
   cSamples <- CArray (0 :: Int) (fromIntegral $ nSamples - 1) (fromIntegral nSamples) <$> newForeignPtr_ samples
   let fftRes = dst1 cSamples
-  (i, amp) <- withCArray fftRes $ \ptr -> do
-    numLoopState 0 (fromIntegral $ nSamples - 1) (0, 0) $ \acc i -> max acc . (i,) <$> peekElemOff ptr i
-  atomically $ writeTVar stm (Just (fromIntegral sampleRate, toFrequency i, realToFrac amp))
+      nyqFreq = fromIntegral @_ @Double sampleRate / 2
+      n = fromIntegral nSamples / nyqFreq
+      bassIndex = round $ 4500 * n -- 0 - 4500 Hz
+      midIndex = round $ 9000 * n -- 4500 - 9000 Hz
+      highIndex = round $ 16000 * n -- 9000 - 16000 Hz
+  withCArray fftRes $ \ptr -> do
+    res <-
+      (,,) <$> numLoopState 0 bassIndex 0 (\acc i -> (acc +) . abs . realToFrac <$> peekElemOff ptr i)
+        <*> numLoopState bassIndex midIndex 0 (\acc i -> (acc +) . abs . realToFrac <$> peekElemOff ptr i)
+        <*> numLoopState midIndex highIndex 0 (\acc i -> (acc +) . abs . realToFrac <$> peekElemOff ptr i)
+    atomically $ writeTVar stm (Just res)
   isNothing <$> tryReadMVar shouldStop
-  where
-    max :: (Int, CFloat) -> (Int, CFloat) -> (Int, CFloat)
-    max (i, v) (j, w)
-      | abs v >= abs w = (i, abs v)
-      | otherwise = (j, abs w)
-    toFrequency :: Int -> Double
-    toFrequency i = (fromIntegral i / n) * nyq
-      where
-        nyq = fromIntegral sampleRate / 2
-        n = fromIntegral nSamples / 2

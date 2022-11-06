@@ -1,7 +1,7 @@
 module Horture.Audio.Recorder (AudioRecorder (..), FFTSnapshot) where
 
--- | (SamplingRate, Dominating Frequency, Amplitude)
-type FFTSnapshot = (Int, Double, Double)
+-- | (BassAmp, MidAmp, HighAmp)
+type FFTSnapshot = (Double, Double, Double)
 
 -- | An AudioRecorder records the audio from some source/sink and provides an
 -- interface to query information about the live audio.

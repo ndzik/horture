@@ -125,6 +125,7 @@ initialize gifs logChan evChan = do
             _capture = pm,
             _audioRecording = Nothing,
             _audioStorage = storage,
+            _mvgAvg = [],
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr)
           }
   let hc =
