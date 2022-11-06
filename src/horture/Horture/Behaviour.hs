@@ -9,6 +9,7 @@ module Horture.Behaviour
     shake,
     moveTo,
     rotate,
+    audiophile,
   )
 where
 
@@ -72,3 +73,14 @@ moveTo target _ t o = o & pos %~ lerp (realToFrac t) target
 rotate :: Float -> Behaviour
 rotate factor _ t o = o & orientation %~ \oq -> axisAngle (V3 0 0 (-1)) (deg2rad (realToFrac t * factor)) * oq
 
+audiophile :: Behaviour
+audiophile (bass, _, _) _ o =
+  let amplifier = 0.001
+   in o & scale
+        %~ ( !*!
+               V4
+                 (V4 (1 + amplifier * realToFrac bass) 0 0 0)
+                 (V4 0 (1 + amplifier * realToFrac bass) 0 0)
+                 (V4 0 0 (1 + amplifier * realToFrac bass) 0)
+                 (V4 0 0 0 1)
+           )
