@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 -- | Condition types according to the twitch specification:
 --
 -- https://dev.twitch.tv/docs/eventsub/eventsub-reference#conditions
