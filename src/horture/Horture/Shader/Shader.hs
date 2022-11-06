@@ -453,12 +453,12 @@ vec4 applyVisualization(sampler2D tex, vec2 uv, double lifetime, double dt, doub
   double fb = clamp(freq[0]*2-1, 0, 100)/100;
   double fm = clamp(freq[1]*2-1, 0, 100)/100;
   double fh = clamp(freq[2]*2-1, 0, 100)/100;
-  double r = 1.4 * fb;
-  double g = 1.6 * fm;
-  double b = 1.8 * fh;
+  double r = 2.4 * fb;
+  double g = 2.6 * fm;
+  double b = 2.8 * fh;
 
   float dtoc = distance(uv, vec2(0.5, 0.5));
-  vec4 tint = vec4(mix(rgba.x, r, 0.2), mix(rgba.y, g, 0.2), mix(rgba.z, b, 0.3), rgba.w);
+  vec4 tint = vec4(mix(rgba.x, r, 0.4), mix(rgba.y, g, 0.5), mix(rgba.z, b, 0.6), rgba.w);
   return mix(tint, rgba, clamp(0.30 + 1-abs(dtoc), 0, 1));
 }
 
