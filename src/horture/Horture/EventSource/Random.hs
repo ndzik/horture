@@ -104,6 +104,10 @@ randomizeShaderEffect Blink = newRandomBlinkShader
 randomizeShaderEffect Mirror = newRandomMirrorShader
 randomizeShaderEffect Invert = newRandomInvertShader
 randomizeShaderEffect Toonify = newRandomToonShader
+randomizeShaderEffect Audiophile = newRandomMusicShader
+
+newRandomMusicShader :: (LastMember IO effs) => Eff effs Effect
+newRandomMusicShader = AddShaderEffect <$> (Limited <$> uniformRM' 10 20) <*> return Audiophile
 
 newRandomToonShader :: (LastMember IO effs) => Eff effs Effect
 newRandomToonShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Toonify

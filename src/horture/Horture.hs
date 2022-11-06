@@ -202,7 +202,8 @@ initShaderEffects = do
               (Blink, [blinkShader]),
               (Mirror, [mirrorShader]),
               (Invert, [invertShader]),
-              (Toonify, [toonShader])
+              (Toonify, [toonShader]),
+              (Audiophile, [audioShader])
             ]
           buildLinkAndUniform p = do
             hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])
