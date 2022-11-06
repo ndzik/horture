@@ -26,7 +26,7 @@ import Linear.Vector
 pulse :: Float -> Float -> Float -> Behaviour
 pulse min amplifier frequency _ t o =
   o & scale
-    %~ ( !+!
+    %~ ( !*!
            V4
              (V4 (min + amplifier * sin (frequency * realToFrac t)) 0 0 0)
              (V4 0 (min + amplifier * sin (frequency * realToFrac t)) 0 0)
