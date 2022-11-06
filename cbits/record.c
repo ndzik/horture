@@ -112,10 +112,6 @@ on_stream_param_changed(void *_data, uint32_t id, const struct spa_pod *param)
 
         /* call a helper function to parse the format for us. */
         spa_format_audio_raw_parse(param, &data->format.info.raw);
-
-        fprintf(stdout, "capturing rate:%d channels:%d\n",
-                        data->format.info.raw.rate, data->format.info.raw.channels);
-
 }
 
 static const struct pw_stream_events stream_events = {
@@ -157,12 +153,6 @@ int run(bool (*cb) (uint32_t rate, uint32_t n_channels, uint32_t n_samples, floa
                         PW_KEY_MEDIA_CATEGORY, "Capture",
                         PW_KEY_MEDIA_ROLE, "Music",
                         NULL);
-
-        const char* res;
-        if ((res = pw_properties_get(props, PW_KEY_MEDIA_CATEGORY)) != NULL) {
-                printf("Success, fetching property: ");
-                printf("%s\n", res);
-        }
 
         pw_properties_set(props, PW_KEY_STREAM_CAPTURE_SINK, "true");
 
