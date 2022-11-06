@@ -447,26 +447,19 @@ uniform double frequencies[3] = {0, 0, 0};
 
 layout(location = 0) out vec4 frag_colour;
 
-vec3 hsl2rgb(vec3 hsl) {
-    float t = hsl.y * ((hsl.z < 0.5) ? hsl.z : (1.0 - hsl.z));
-    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-    vec3 p = abs(fract(hsl.xxx + K.xyz) * 6.0 - K.www);
-    return (hsl.z + t) * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), 2.0*t / hsl.z);
-}
-
 vec4 applyVisualization(sampler2D tex, vec2 uv, double lifetime, double dt, double freq[3]) {
   vec4 rgba = texture2D(tex, uv);
   const double maxFreq = 16000;
   double fb = clamp(freq[0]*2-1, 0, 100)/100;
   double fm = clamp(freq[1]*2-1, 0, 100)/100;
   double fh = clamp(freq[2]*2-1, 0, 100)/100;
-  double r = 1.5 * fb;
-  double g = 1.2 * fm;
-  double b = 1 * fh;
+  double r = 1.4 * fb;
+  double g = 1.6 * fm;
+  double b = 1.8 * fh;
 
   float dtoc = distance(uv, vec2(0.5, 0.5));
   vec4 tint = vec4(mix(rgba.x, r, 0.2), mix(rgba.y, g, 0.2), mix(rgba.z, b, 0.3), rgba.w);
-  return mix(tint, rgba, clamp(0.20 + 1-abs(dtoc), 0, 1));
+  return mix(tint, rgba, clamp(0.30 + 1-abs(dtoc), 0, 1));
 }
 
 void main() {
