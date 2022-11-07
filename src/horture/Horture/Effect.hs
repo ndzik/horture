@@ -42,6 +42,7 @@ data ShaderEffect
   | Mirror
   | Invert
   | Toonify
+  | Audiophile
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 instance Show Effect where
@@ -71,6 +72,7 @@ instance Entitled ShaderEffect where
   toTitle Mirror = "Discombobulated"
   toTitle Invert = "InvertColors"
   toTitle Toonify = "Toonify"
+  toTitle Audiophile = "Audiophile"
 
 class FromText d where
   fromText :: Text -> d

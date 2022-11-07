@@ -2,7 +2,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -36,9 +35,7 @@ instance
 
 -- | Updates currently bound texture with the pixeldata of the frame for the
 -- captured application.
-captureApplicationFrame ::
-  (HortureLogger (Horture l (Display, Window))) =>
-  Horture l (Display, Window) ()
+captureApplicationFrame :: Horture l (Display, Window) ()
 captureApplicationFrame = do
   (dp, pm) <- gets (^. envHandle)
   dim <- gets (^. dim)

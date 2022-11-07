@@ -72,6 +72,10 @@ readImagesAndMetadata gif = do
         }
     )
 
+-- | unifyDynamicImages tightly packs the list of DynamicImages into RGBA8
+-- format.
+-- This is horribly slow and would benefit from a custom C decoder which
+-- tightly packs GIFs when decoding.
 unifyDynamicImages :: (Int, Int) -> [DynamicImage] -> FilePreloader (ForeignPtr Word8)
 unifyDynamicImages (w, h) imgs = do
   let -- stride is the number of bytes each image occupies.

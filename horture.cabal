@@ -26,9 +26,12 @@ library horture-lib
                             , TypeApplications
                             , TypeOperators
                             , OverloadedStrings
+                            , LambdaCase
     exposed-modules:        Horture
                             , Horture.Authorize
                             , Horture.Path
+                            , Horture.Audio
+                            , Horture.Audio.PipeWire
                             , Horture.CommandCenter.CommandCenter
                             , Horture.CommandCenter.Event
                             , Horture.CommandCenter.State
@@ -56,6 +59,7 @@ library horture-lib
 
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
+                            , Horture.Audio.Recorder
                             , Horture.Backend.X11.LinuxX11
                             , Horture.Backend.X11.X11
                             , Horture.Backend.X11.Initializer
@@ -104,6 +108,7 @@ library horture-lib
                             , OpenGL
                             , lens
                             , JuicyPixels
+                            , async
                             , filepath
                             , directory
                             , mtl
@@ -112,10 +117,18 @@ library horture-lib
                             , vty
                             , brick
                             , array
+                            , carray
+                            , fft
+                            , stm
+                            , loop
                             , websockets
                             , wuss
                             , GLFW-b
                             , GLUtil
+    c-sources:
+                            cbits/record.c
+    pkgconfig-depends:
+                            libpipewire-0.3
     ghc-options:
                             -Wall
                             -fno-warn-name-shadowing
@@ -129,6 +142,7 @@ library horture-server-lib
                             , TypeApplications
                             , TypeOperators
                             , OverloadedStrings
+                            , LambdaCase
     hs-source-dirs:     src/server
     default-language:   Haskell2010
     ghc-options:
@@ -177,6 +191,7 @@ library twitch-api
                             , TypeApplications
                             , TypeOperators
                             , OverloadedStrings
+                            , LambdaCase
     hs-source-dirs:     src/twitch
     default-language:   Haskell2010
     ghc-options:
@@ -233,19 +248,21 @@ test-suite horture-test
   default-language:         Haskell2010
 
 executable horture-client
-    hs-source-dirs:         app/Client
-    main-is:                Main.hs
-    ghc-options:
-                            -Wall
-                            -fno-warn-name-shadowing
-                            -threaded
-                            -O2
-    build-depends:          base ^>=4.14.3.0
-                            , horture-lib
-                            , optparse-applicative
-    default-language:       Haskell2010
+  default-extensions:     LambdaCase
+  hs-source-dirs:         app/Client
+  main-is:                Main.hs
+  ghc-options:
+                          -Wall
+                          -fno-warn-name-shadowing
+                          -threaded
+                          -O2
+  build-depends:          base ^>=4.14.3.0
+                          , horture-lib
+                          , optparse-applicative
+  default-language:       Haskell2010
 
 executable horture-server
+  default-extensions:     LambdaCase
   hs-source-dirs:           app/Server
   main-is:                  Main.hs
   ghc-options:

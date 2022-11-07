@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
@@ -37,6 +36,8 @@ import Graphics.GLUtil as Util hiding (throwError)
 import Graphics.GLUtil.Camera3D as Cam3D
 import Graphics.Rendering.OpenGL as GL hiding (Color, Invert, flush)
 import qualified Graphics.UI.GLFW as GLFW
+import Horture.Audio
+import Horture.Audio.PipeWire ()
 import Horture.Effect
 import Horture.Error
 import Horture.Events
@@ -56,15 +57,21 @@ import System.Exit
 hortureName :: String
 hortureName = "horture"
 
-type HortureEffects hdl l = (HortureLogger (Horture l hdl), WindowPoller hdl (Horture l hdl))
+type HortureEffects hdl l =
+  ( HortureLogger (Horture l hdl),
+    WindowPoller hdl (Horture l hdl)
+  )
 
 -- | playScene plays the given scene in a Horture context.
 playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
+  startRecording
   go 0 (Just s)
   where
-    go _ Nothing = logInfo "horture stopped"
+    go _ Nothing = do
+      stopRecording
+      logInfo "horture stopped"
     go startTime (Just s) = do
       dt <- deltaTime startTime
       clearView
@@ -81,6 +88,7 @@ playScene s = do
     handleHortureError (HE err) = logError . pack $ err
     handleHortureError (WindowEnvironmentInitializationErr err) = logError . pack $ err
     handleHortureError WindowEnvironmentQueryHortureErr = logError . pack . show $ WindowEnvironmentQueryHortureErr
+    handleHortureError AudioSourceUnavailableErr = logError . pack . show $ AudioSourceUnavailableErr
 
 clearView :: Horture l hdl ()
 clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
@@ -194,17 +202,20 @@ initShaderEffects = do
               (Blink, [blinkShader]),
               (Mirror, [mirrorShader]),
               (Invert, [invertShader]),
-              (Toonify, [toonShader])
+              (Toonify, [toonShader]),
+              (Audiophile, [audioShader])
             ]
           buildLinkAndUniform p = do
             hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])
             lifetimeUniform <- uniformLocation hsp "lifetime"
             dtUniform <- uniformLocation hsp "dt"
+            dominatingFreqUniform <- uniformLocation hsp "frequencies"
             return
               HortureShaderProgram
                 { _hortureShaderProgramShader = hsp,
                   _hortureShaderProgramLifetimeUniform = lifetimeUniform,
-                  _hortureShaderProgramDtUniform = dtUniform
+                  _hortureShaderProgramDtUniform = dtUniform,
+                  _hortureShaderProgramFrequenciesUniform = dominatingFreqUniform
                 }
       Map.fromList <$> mapM (sequenceRight . second (sequence . (buildLinkAndUniform <$>))) shaderProgs
     sequenceRight :: (ShaderEffect, IO [HortureShaderProgram]) -> IO (ShaderEffect, [HortureShaderProgram])

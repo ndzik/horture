@@ -20,6 +20,7 @@ module Horture.Shader.Shader
     invertShader,
     toonShader,
     juliaFractalShader,
+    audioShader,
   )
 where
 
@@ -129,6 +130,7 @@ uniform sampler2D texture1;
 uniform float barrelPower = 1.5;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform vec3 frequencies = {0, 0, 0};
 
 layout(location = 0) out vec4 frag_colour;
 
@@ -162,6 +164,7 @@ uniform sampler2D texture1;
 uniform float stitchSize = 6.0;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform vec3 frequencies = {0, 0, 0};
 layout(location = 0) out vec4 frag_colour;
 
 vec4 stitchIt(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -208,6 +211,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform vec3 frequencies = {0, 0, 0};
 layout(location = 0) out vec4 frag_colour;
 
 float offset[3] = float[](0.0, 2.3846153846, 6.2307602308);
@@ -243,6 +247,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform vec3 frequencies = {0, 0, 0};
 layout(location = 0) out vec4 frag_colour;
 
 float offset[3] = float[](0.0, 2.3846153846, 6.2307602308);
@@ -277,12 +282,13 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform vec3 frequencies = {0, 0, 0};
 layout(location = 0) out vec4 frag_colour;
 
 vec4 flashbang(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec4 c = texture2D(tex, uv);
   double pp = 1 - (dt / lifetime);
-  return vec4(pp * (1 - c.x) + c.x, pp * (1 - c.y) + c.y, pp * (1 - c.z) + c.z, pp);
+  return vec4(pp * (1 - c.x) + c.x, pp * (1 - c.y) + c.y, pp * (1 - c.z) + c.z, 1.0);
 }
 
 void main() {
@@ -301,6 +307,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform vec3 frequencies = {0, 0, 0};
 layout(location = 0) out vec4 frag_colour;
 
 vec4 cycleColours(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -325,6 +332,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform vec3 frequencies = {0, 0, 0};
 layout(location = 0) out vec4 frag_colour;
 
 vec4 blink(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -349,6 +357,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform vec3 frequencies = {0, 0, 0};
 layout(location = 0) out vec4 frag_colour;
 
 vec4 mirror(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -371,6 +380,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform vec3 frequencies = {0, 0, 0};
 layout(location = 0) out vec4 frag_colour;
 
 vec4 invert(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -393,6 +403,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
+uniform vec3 frequencies = {0, 0, 0};
 layout(location = 0) out vec4 frag_colour;
 float levels = 8.0 - 1.0;
 float contrast = 1.2;
@@ -422,6 +433,40 @@ void main() {
   frag_colour = toonify(texture1, uv, lifetime, dt);
 }
     |]
+
+audioShader :: ByteString
+audioShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
+uniform double frequencies[3] = {0, 0, 0};
+
+layout(location = 0) out vec4 frag_colour;
+
+vec4 applyVisualization(sampler2D tex, vec2 uv, double lifetime, double dt, double freq[3]) {
+  vec4 rgba = texture2D(tex, uv);
+  const double maxFreq = 16000;
+  double fb = clamp(freq[0]*2-1, 0, 100)/100;
+  double fm = clamp(freq[1]*2-1, 0, 100)/100;
+  double fh = clamp(freq[2]*2-1, 0, 100)/100;
+  double r = 2.4 * fb;
+  double g = 2.6 * fm;
+  double b = 2.8 * fh;
+
+  float dtoc = distance(uv, vec2(0.5, 0.5));
+  vec4 tint = vec4(mix(rgba.x, r, 0.4), mix(rgba.y, g, 0.5), mix(rgba.z, b, 0.6), rgba.w);
+  return mix(tint, rgba, clamp(0.30 + 1-abs(dtoc), 0, 1));
+}
+
+void main() {
+  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
+  frag_colour = applyVisualization(texture1, uv, lifetime, dt, frequencies);
+}
+  |]
 
 -- Shader shamelessly copied from here:
 -- https://github.com/jklintan/shaders

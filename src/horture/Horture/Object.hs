@@ -9,6 +9,7 @@ import Linear.Matrix
 import Linear.Quaternion
 import Linear.V3
 import Linear.V4
+import Horture.Audio
 
 -- | Lifetime describes for how long an object can live. Either forever or for
 -- a limited time. Limited defines the lifetime in seconds.
@@ -67,6 +68,6 @@ isStillAlive timeNow (Limited s) tob = (timeNow - tob) <= s
 -- | Each object can have multiple behaviours attached to it. The behaviour
 -- decides how this object will be displayed during its lifetime depending on
 -- how long it already exists.
-type Behaviour = Double -> Object -> Object
+type Behaviour = FFTSnapshot -> Double -> Object -> Object
 
 makeLenses ''Object

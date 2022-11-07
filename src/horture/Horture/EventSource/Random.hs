@@ -1,6 +1,5 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -105,6 +104,10 @@ randomizeShaderEffect Blink = newRandomBlinkShader
 randomizeShaderEffect Mirror = newRandomMirrorShader
 randomizeShaderEffect Invert = newRandomInvertShader
 randomizeShaderEffect Toonify = newRandomToonShader
+randomizeShaderEffect Audiophile = newRandomAudioShader
+
+newRandomAudioShader :: (LastMember IO effs) => Eff effs Effect
+newRandomAudioShader = AddShaderEffect <$> (Limited <$> uniformRM' 16 26) <*> return Audiophile
 
 newRandomToonShader :: (LastMember IO effs) => Eff effs Effect
 newRandomToonShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Toonify
@@ -207,7 +210,7 @@ newRandomScreenBehaviours n = do
   moveTo' <- moveTo . V3 0 0 <$> ((+ (-1)) . (/ 1) . negate <$> randomM')
   pulse' <- newRandomPulse
   rotate' <- rotate <$> randomRM' (-50) 50
-  take n . cycle <$> liftIO (shuffle [moveTo', shake', pulse', rotate', convolute])
+  take n . cycle <$> liftIO (shuffle [moveTo', shake', pulse', rotate', convolute, audiophile])
 
 newRandomBehaviours :: (LastMember IO effs) => Int -> Eff effs [Behaviour]
 newRandomBehaviours n = do
@@ -216,7 +219,7 @@ newRandomBehaviours n = do
   pulse' <- newRandomPulse
   circle' <- newRandomCircle
   rotate' <- rotate <$> randomRM' (-200) 200
-  take n . cycle <$> liftIO (shuffle [shake', moveTo', pulse', rotate', circle', convolute])
+  take n . cycle <$> liftIO (shuffle [shake', moveTo', pulse', rotate', circle', convolute, audiophile])
 
 newRandomShake :: (LastMember IO effs) => Eff effs Behaviour
 newRandomShake = shake <$> randomM' <*> uniformRM' 80 160 <*> randomM'

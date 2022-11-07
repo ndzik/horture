@@ -2,7 +2,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -17,6 +16,7 @@ where
 
 import Control.Concurrent.Chan.Synchronous
 import Control.Concurrent.MVar
+import Control.Concurrent.STM (newTVarIO)
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -63,7 +63,8 @@ instance
     (,window) <$> liftIO (openDisplay "")
 
 initialize ::
-  forall l hdl. ( (Display, Window) ~ hdl, HortureLogger (HortureInitializer l hdl)) =>
+  forall l hdl.
+  ((Display, Window) ~ hdl, HortureLogger (HortureInitializer l hdl)) =>
   [(FilePath, Asset)] ->
   Maybe (Chan Text) ->
   Chan Event ->
@@ -111,6 +112,7 @@ initialize gifs logChan evChan = do
   liftIO $ GLFW.setWindowPos glW (fromIntegral . wa_x $ attr) (fromIntegral . wa_y $ attr)
 
   (hsp, hgp, hbp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) gifs
+  storage <- liftIO $ newTVarIO Nothing
   let scene =
         def
           { _screen = def,
@@ -121,6 +123,9 @@ initialize gifs logChan evChan = do
         HortureState
           { _envHandle = (dp, w),
             _capture = pm,
+            _audioRecording = Nothing,
+            _audioStorage = storage,
+            _mvgAvg = [],
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr)
           }
   let hc =
