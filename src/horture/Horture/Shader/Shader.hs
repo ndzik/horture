@@ -130,7 +130,7 @@ uniform sampler2D texture1;
 uniform float barrelPower = 1.5;
 uniform double lifetime = 0;
 uniform double dt = 0;
-uniform vec3 frequencies = {0, 0, 0};
+uniform vec3 frequencies = vec3(0, 0, 0);
 
 layout(location = 0) out vec4 frag_colour;
 
@@ -164,7 +164,7 @@ uniform sampler2D texture1;
 uniform float stitchSize = 6.0;
 uniform double lifetime = 0;
 uniform double dt = 0;
-uniform vec3 frequencies = {0, 0, 0};
+uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 vec4 stitchIt(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -211,7 +211,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
-uniform vec3 frequencies = {0, 0, 0};
+uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 float offset[3] = float[](0.0, 2.3846153846, 6.2307602308);
@@ -247,7 +247,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
-uniform vec3 frequencies = {0, 0, 0};
+uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 float offset[3] = float[](0.0, 2.3846153846, 6.2307602308);
@@ -282,7 +282,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
-uniform vec3 frequencies = {0, 0, 0};
+uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 vec4 flashbang(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -307,7 +307,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
-uniform vec3 frequencies = {0, 0, 0};
+uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 vec4 cycleColours(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -332,7 +332,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
-uniform vec3 frequencies = {0, 0, 0};
+uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 vec4 blink(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -357,7 +357,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
-uniform vec3 frequencies = {0, 0, 0};
+uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 vec4 mirror(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -380,7 +380,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
-uniform vec3 frequencies = {0, 0, 0};
+uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 vec4 invert(sampler2D tex, vec2 uv, double lifetime, double dt) {
@@ -403,7 +403,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
-uniform vec3 frequencies = {0, 0, 0};
+uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 float levels = 8.0 - 1.0;
 float contrast = 1.2;
@@ -443,7 +443,7 @@ in vec2 texCoord;
 uniform sampler2D texture1;
 uniform double lifetime = 0;
 uniform double dt = 0;
-uniform double frequencies[3] = {0, 0, 0};
+uniform double frequencies[3] = double[3](0, 0, 0);
 
 layout(location = 0) out vec4 frag_colour;
 
