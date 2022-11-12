@@ -7,6 +7,7 @@
 
 module Horture.CommandCenter.CommandCenter
   ( runCommandCenter,
+    runDebugCenter,
   )
 where
 
@@ -43,6 +44,7 @@ import Horture.Initializer
 import Horture.Loader
 import qualified Horture.Logging as HL
 import Horture.Object
+import Horture.Scene
 import Linear.V3
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client.TLS
@@ -301,7 +303,12 @@ grabHorture = do
           }
       logError = HL.withColog Colog.Error (logActionChan logChan)
   void . liftIO . forkOS $ do
-    let action = initialize @'Channel plg (Just logChan) evChan
+    let startScene =
+          def
+            { _screen = def,
+              _shaders = []
+            }
+        action = initialize @'Channel startScene plg (Just logChan) evChan
     runHortureInitializer env action >>= \case
       Left err -> logError . pack . show $ err
       Right _ -> return ()
@@ -401,6 +408,29 @@ handleCCExceptions EventSourceUnavailable = logError "Source of horture events n
 
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
+
+runDebugCenter :: IO ()
+runDebugCenter = do
+  let buildVty = mkVty defaultConfig
+  appChan <- newBChan 10
+  initialVty <- buildVty
+  void $
+    customMain
+      initialVty
+      buildVty
+      Nothing
+      app
+      def
+        { _ccGifs = [],
+          _ccGifsList = list AssetPort [] 1,
+          _ccPreloadedGifs = [],
+          _ccHortureUrl = Nothing,
+          _ccUserId = "some_user_id",
+          _ccControllerChans = Nothing,
+          _ccBrickEventChan = Just appChan,
+          _ccEventBaseCost = 10,
+          _ccTimeout = 1000 * 1000
+        }
 
 runCommandCenter :: Bool -> Config -> IO ()
 runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay) = do
