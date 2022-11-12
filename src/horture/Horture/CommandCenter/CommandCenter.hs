@@ -20,6 +20,7 @@ import Brick.Widgets.List
 import qualified Colog
 import Control.Concurrent (ThreadId, forkIO, forkOS, killThread, newEmptyMVar, readMVar, threadDelay)
 import Control.Concurrent.Chan.Synchronous
+import Control.Concurrent.STM (TVar, atomically, modifyTVar, newTVarIO)
 import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Except
@@ -167,6 +168,7 @@ appEvent (VtyEvent (EvKey (KChar 'k') [])) = do
     LogPort -> vScrollBy scrollLogPort 1
     AssetPort -> ccGifsList %= listMoveUp
     _otherwise -> return ()
+appEvent (VtyEvent (EvKey (KChar 's') [])) = gets _ccEventSourceEnabled >>= toggleEventSource
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'l') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'p') [])) = gets _ccControllerChans >>= purgeEventSource
@@ -176,6 +178,12 @@ appEvent (VtyEvent (EvKey (KChar 'q') [])) = stopHorture
 appEvent (VtyEvent (EvKey KEsc [])) = stopApplication
 appEvent (AppEvent e) = handleCCEvent e
 appEvent _else = return ()
+
+toggleEventSource :: Maybe (TVar Bool) -> EventM Name CommandCenterState ()
+toggleEventSource Nothing = logWarn "No eventsource is running"
+toggleEventSource (Just tv) = do
+  liftIO . atomically . modifyTVar tv $ not
+  logInfo "EventSource toggled"
 
 handleCCEvent :: CommandCenterEvent -> EventM Name CommandCenterState ()
 handleCCEvent (CCLog msg) = modify (\cs -> cs {_ccLog = msg : _ccLog cs})
@@ -202,7 +210,8 @@ stopHorture = do
         ccs
           { _ccEventChan = Nothing,
             _ccCapturedWin = Nothing,
-            _ccTIDsToClean = []
+            _ccTIDsToClean = [],
+            _ccEventSourceEnabled = Nothing
           }
     )
 
@@ -330,15 +339,29 @@ grabHorture = do
     logActionChan :: Chan Text -> Colog.LogAction IO Text
     logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
 
+-- | fetchOrCreateEventSourceTVar looks up if an EventSourceTVar is already
+-- registered. If that is not the case, it creates a default initialized TVar,
+-- registers it in the `CommandCenterState` and returns mentioned tvar.
+fetchOrCreateEventSourceTVar :: EventM Name CommandCenterState (TVar Bool)
+fetchOrCreateEventSourceTVar = do
+  tv <-
+    gets (^. ccEventSourceEnabled) >>= \case
+      Nothing -> liftIO $ newTVarIO True
+      Just tv -> return tv
+  ccEventSourceEnabled .= Just tv
+  return tv
+
 spawnEventSource :: Maybe BaseUrl -> Chan Event -> Chan Text -> EventM Name CommandCenterState ThreadId
 spawnEventSource Nothing evChan _ = do
   timeout <- gets (^. ccTimeout)
   gifs <- gets (^. ccGifs)
-  liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
+  enabledTVar <- fetchOrCreateEventSourceTVar
+  liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs enabledTVar
 spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
   registeredEffs <- gets (^. ccRegisteredEffects)
   gifEffs <- gets (^. ccGifs)
   uid <- gets (^. ccUserId)
+  enabledTVar <- fetchOrCreateEventSourceTVar
   let env =
         StaticEffectRandomizerEnv
           { _registeredEffects = registeredEffs,
@@ -352,7 +375,7 @@ spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
                 host
                 (fromIntegral port)
                 path
-                (hortureWSStaticClientApp uid evChan env)
+                (hortureWSStaticClientApp uid evChan env enabledTVar)
                 `catch` \(e :: ConnectionException) -> do
                   logError . pack . show $ e
                   threadDelay oneSec
@@ -365,7 +388,7 @@ spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
                 host
                 (fromIntegral port)
                 path
-                (hortureWSStaticClientApp uid evChan env)
+                (hortureWSStaticClientApp uid evChan env enabledTVar)
                 `catch` \(e :: ConnectionException) -> do
                   logError . pack . show $ e
                   threadDelay oneSec
@@ -418,7 +441,7 @@ runDebugCenter = do
     customMain
       initialVty
       buildVty
-      Nothing
+      (Just appChan)
       app
       def
         { _ccGifs = [],

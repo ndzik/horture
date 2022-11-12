@@ -9,6 +9,7 @@ module Horture.EventSource.WebSocketClient
 where
 
 import Control.Concurrent.Chan.Synchronous
+import Control.Concurrent.STM (TVar)
 import Control.Lens
 import Control.Monad.Freer
 import Control.Monad.Freer.Reader
@@ -57,11 +58,12 @@ effectFromTitle title =
     Nothing -> return Noop
     Just (_, eff) -> return eff
 
-hortureWSStaticClientApp :: Text -> Chan Event -> StaticEffectRandomizerEnv -> ClientApp ()
-hortureWSStaticClientApp bid evChan env conn = do
+hortureWSStaticClientApp :: Text -> Chan Event -> StaticEffectRandomizerEnv -> TVar Bool -> ClientApp ()
+hortureWSStaticClientApp bid evChan env enabled conn = do
   liftIO $ sendTextData conn (HortureAuthorization bid)
   runM
     . runReader env
+    . runReader enabled
     . runStaticEffectRandomizer
     . runWSEventSource conn evChan
     $ eventSource

@@ -61,21 +61,24 @@ newRapidFireEffect ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRapidFireEffect = do
-  n <- (uniformRM' @Int) 6 16
-  gfs <- mapM newRandomGif' [1 .. n]
-  return $ AddRapidFire gfs
+  asks @StaticEffectRandomizerEnv (^. gifEffects) >>= \case
+    [] -> return Noop
+    gifs -> do
+      n <- (uniformRM' @Int) 6 16
+      gfs <- mapM (newRandomGif' gifs) [1 .. n]
+      return $ AddRapidFire gfs
   where
     newRandomGif' ::
       (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+      [FilePath] ->
       Int ->
       Eff effs Effect
-    newRandomGif' _ = randomFilePath >>= newRandomGifWith
+    newRandomGif' gifs _ = randomFilePath gifs >>= newRandomGifWith
     randomFilePath ::
       (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+      [FilePath] ->
       Eff effs GifIndex
-    randomFilePath = do
-      gifs <- asks @StaticEffectRandomizerEnv (^. gifEffects)
-      uniformRM' 0 (length gifs - 1) <&> (gifs !!)
+    randomFilePath gifs = uniformRM' 0 (length gifs - 1) <&> (gifs !!)
 
 newRandomGifWith ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
@@ -194,15 +197,18 @@ newRandomGif ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRandomGif =
-  AddGif
-    <$> (ask @StaticEffectRandomizerListEnv >>= \gifs -> uniformRM' 0 (length gifs - 1) <&> (gifs !!))
-    <*> (Limited <$> uniformRM' 8 18)
-    <*> ( V3
-            <$> (randomM' <&> (sin . (* 20)))
-            <*> (randomM' <&> (cos . (* 33)))
-            <*> return 0
-        )
-    <*> (uniformRM' 0 3 >>= newRandomBehaviours)
+  ask @StaticEffectRandomizerListEnv >>= \case
+    [] -> return Noop
+    gifs ->
+      AddGif
+        <$> (uniformRM' 0 (length gifs - 1) <&> (gifs !!))
+        <*> (Limited <$> uniformRM' 8 18)
+        <*> ( V3
+                <$> (randomM' <&> (sin . (* 20)))
+                <*> (randomM' <&> (cos . (* 33)))
+                <*> return 0
+            )
+        <*> (uniformRM' 0 3 >>= newRandomBehaviours)
 
 newRandomScreenBehaviours :: (LastMember IO effs) => Int -> Eff effs [Behaviour]
 newRandomScreenBehaviours n = do
