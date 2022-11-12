@@ -31,7 +31,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
 import Graphics.X11.Xlib.Extras hiding (Event)
 import Horture
-import Horture.Backend.X11.LinuxX11 ()
+import Horture.Backend.X11.LinuxX11 (CaptureHandle)
 import Horture.Error
 import Horture.Event
 import Horture.Horture
@@ -45,7 +45,7 @@ import Horture.WindowGrabber
 import Numeric (showHex)
 
 instance
-  (HortureLogger (HortureInitializer l hdl), hdl ~ (Display, Window)) =>
+  (HortureLogger (HortureInitializer l hdl), hdl ~ CaptureHandle) =>
   WindowGrabber hdl (HortureInitializer l hdl)
   where
   grabAnyWindow = do
@@ -58,11 +58,11 @@ instance
         Just res -> return res
     liftIO . putMVar mv . Just . unlines $ ["Capturing: " <> name, "WinID: 0x" <> showHex window ""]
     logInfo . pack . unwords $ ["User selected application to grab:", name]
-    (,window) <$> liftIO (openDisplay "")
+    (,window,True) <$> liftIO (openDisplay "")
 
 initialize ::
   forall l hdl.
-  ((Display, Window) ~ hdl, HortureLogger (HortureInitializer l hdl)) =>
+  (CaptureHandle ~ hdl, HortureLogger (HortureInitializer l hdl)) =>
   Scene ->
   [(FilePath, Asset)] ->
   Maybe (Chan Text) ->
@@ -70,7 +70,7 @@ initialize ::
   HortureInitializer l hdl ()
 initialize startScene gifs logChan evChan = do
   glW <- liftIO initGLFW
-  (dp, w) <- grabAnyWindow
+  (dp, w, isMapped) <- grabAnyWindow
 
   let ds = defaultScreen dp
   root <- liftIO $ rootWindow dp ds
@@ -115,8 +115,8 @@ initialize startScene gifs logChan evChan = do
   let scene = startScene {_gifCache = hgp ^. assets}
       hs =
         HortureState
-          { _envHandle = (dp, w),
-            _capture = pm,
+          { _envHandle = (dp, w, isMapped),
+            _capture = Just pm,
             _audioRecording = Nothing,
             _audioStorage = storage,
             _mvgAvg = [],
