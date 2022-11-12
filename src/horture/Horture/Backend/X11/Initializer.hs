@@ -21,9 +21,7 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Bits
-import Data.Default
 import Data.Foldable
-import qualified Data.Map.Strict as Map
 import Data.Text (Text, pack)
 import Foreign.C.String
 import Foreign.Marshal.Alloc
@@ -65,11 +63,12 @@ instance
 initialize ::
   forall l hdl.
   ((Display, Window) ~ hdl, HortureLogger (HortureInitializer l hdl)) =>
+  Scene ->
   [(FilePath, Asset)] ->
   Maybe (Chan Text) ->
   Chan Event ->
   HortureInitializer l hdl ()
-initialize gifs logChan evChan = do
+initialize startScene gifs logChan evChan = do
   glW <- liftIO initGLFW
   (dp, w) <- grabAnyWindow
 
@@ -113,12 +112,7 @@ initialize gifs logChan evChan = do
 
   (hsp, hgp, hbp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) gifs
   storage <- liftIO $ newTVarIO Nothing
-  let scene =
-        def
-          { _screen = def,
-            _gifs = Map.empty,
-            _gifCache = hgp ^. assets
-          }
+  let scene = startScene {_gifCache = hgp ^. assets}
       hs =
         HortureState
           { _envHandle = (dp, w),
