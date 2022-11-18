@@ -450,9 +450,10 @@ layout(location = 0) out vec4 frag_colour;
 vec4 applyVisualization(sampler2D tex, vec2 uv, double lifetime, double dt, double freq[3]) {
   vec4 rgba = texture2D(tex, uv);
   const double maxFreq = 16000;
-  double fb = clamp(freq[0]*2-1, 0, 100)/100;
-  double fm = clamp(freq[1]*2-1, 0, 100)/100;
-  double fh = clamp(freq[2]*2-1, 0, 100)/100;
+  double ceil = 1000;
+  double fb = clamp(freq[0]*2-1, 0, ceil)/ceil;
+  double fm = clamp(freq[1]*2-1, 0, ceil)/ceil;
+  double fh = clamp(freq[2]*2-1, 0, ceil)/ceil;
   double r = 2.4 * fb;
   double g = 2.6 * fm;
   double b = 2.8 * fh;
