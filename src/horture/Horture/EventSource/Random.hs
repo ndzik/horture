@@ -110,7 +110,7 @@ randomizeShaderEffect Toonify = newRandomToonShader
 randomizeShaderEffect Audiophile = newRandomAudioShader
 
 newRandomAudioShader :: (LastMember IO effs) => Eff effs Effect
-newRandomAudioShader = AddShaderEffect <$> (Limited <$> uniformRM' 16 26) <*> return Audiophile
+newRandomAudioShader = AddShaderEffect <$> (Limited <$> uniformRM' 26 36) <*> return Audiophile
 
 newRandomToonShader :: (LastMember IO effs) => Eff effs Effect
 newRandomToonShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Toonify
