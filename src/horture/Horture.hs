@@ -352,7 +352,7 @@ initHortureGifProgram gifs = do
 initHortureBackgroundProgram :: IO HortureBackgroundProgram
 initHortureBackgroundProgram = do
   bvsp <- loadShaderBS "passthrough.shader" VertexShader passthroughVertexShader
-  bfsp <- loadShaderBS "background.shader" FragmentShader juliaFractalShader
+  bfsp <- loadShaderBS "background.shader" FragmentShader backgroundShader
   backgroundProg <- linkShaderProgram [bvsp, bfsp]
   backgroundTimeUniform <- uniformLocation backgroundProg "time"
   return $
