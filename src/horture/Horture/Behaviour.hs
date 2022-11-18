@@ -75,7 +75,7 @@ rotate factor _ t o = o & orientation %~ \oq -> axisAngle (V3 0 0 (-1)) (deg2rad
 
 audiophile :: Behaviour
 audiophile (bass, _, _) _ o =
-  let amplifier = 0.001
+  let amplifier = 0.0001
    in o & scale
         %~ ( !*!
                V4
