@@ -17,13 +17,16 @@ module Horture.CommandCenter.State
     ccGifsList,
     ccEventBaseCost,
     ccCursorLocationName,
+    ccEventSourceEnabled,
     Name (..),
   )
 where
 
 import Brick.BChan
+import Brick.Widgets.List (GenericList, list)
 import Control.Concurrent (ThreadId)
 import Control.Concurrent.Chan.Synchronous
+import Control.Concurrent.STM (TVar)
 import Control.Lens
 import Data.Default
 import qualified Data.Map.Strict as Map
@@ -33,7 +36,6 @@ import Horture.Effect
 import Horture.Event
 import Horture.EventSource.Controller
 import Horture.Loader.Asset
-import Brick.Widgets.List (GenericList, list)
 import Servant.Client (BaseUrl)
 
 data Name
@@ -51,6 +53,7 @@ data CommandCenterState = CCState
     _ccGifs :: ![FilePath],
     _ccGifsList :: !(GenericList Name [] FilePath),
     _ccHortureUrl :: !(Maybe BaseUrl),
+    _ccEventSourceEnabled :: !(Maybe (TVar Bool)),
     _ccUserId :: !Text,
     _ccPreloadedGifs :: ![(FilePath, Asset)],
     _ccRegisteredEffects :: !(Map.Map Text (Text, Effect)),
@@ -72,6 +75,7 @@ instance Default CommandCenterState where
         _ccHortureUrl = Nothing,
         _ccRegisteredEffects = Map.empty,
         _ccUserId = "",
+        _ccEventSourceEnabled = Nothing,
         _ccLog = [],
         _ccGifs = [],
         _ccGifsList = list AssetPort [] 1,

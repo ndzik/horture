@@ -37,8 +37,9 @@ main = execParser opts >>= handleParams
 
 data HortureParams = HortureParams
   { _config :: !FilePath,
-    _debug :: !Bool,
-    _authorize :: !Bool
+    _mock :: !Bool,
+    _authorize :: !Bool,
+    _debug :: !Bool
   }
   deriving (Show)
 
@@ -64,9 +65,16 @@ cmdParser =
           <> showDefault
           <> help "Authorize horture with for your twitch account."
       )
+    <*> switch
+      ( long "debug"
+          <> short 'd'
+          <> showDefault
+          <> help "Debug mode, will only run the CommandCenter."
+      )
 
 handleParams :: HortureParams -> IO ()
-handleParams (HortureParams fp mockMode wantAuth) =
+handleParams (HortureParams _ _ _ True) = runDebugCenter
+handleParams (HortureParams fp mockMode wantAuth _) =
   resolvePath fp >>= parseHortureClientConfig >>= \case
     Nothing -> print "invalid horture client config" >> exitFailure
     Just cfg -> do

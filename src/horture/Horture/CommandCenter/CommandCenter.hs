@@ -7,6 +7,7 @@
 
 module Horture.CommandCenter.CommandCenter
   ( runCommandCenter,
+    runDebugCenter,
   )
 where
 
@@ -19,6 +20,7 @@ import Brick.Widgets.List
 import qualified Colog
 import Control.Concurrent (ThreadId, forkIO, forkOS, killThread, newEmptyMVar, readMVar, threadDelay)
 import Control.Concurrent.Chan.Synchronous
+import Control.Concurrent.STM (TVar, atomically, modifyTVar, newTVarIO)
 import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Except
@@ -43,6 +45,7 @@ import Horture.Initializer
 import Horture.Loader
 import qualified Horture.Logging as HL
 import Horture.Object
+import Horture.Scene
 import Linear.V3
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client.TLS
@@ -165,6 +168,7 @@ appEvent (VtyEvent (EvKey (KChar 'k') [])) = do
     LogPort -> vScrollBy scrollLogPort 1
     AssetPort -> ccGifsList %= listMoveUp
     _otherwise -> return ()
+appEvent (VtyEvent (EvKey (KChar 's') [])) = gets _ccEventSourceEnabled >>= toggleEventSource
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'l') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'p') [])) = gets _ccControllerChans >>= purgeEventSource
@@ -174,6 +178,12 @@ appEvent (VtyEvent (EvKey (KChar 'q') [])) = stopHorture
 appEvent (VtyEvent (EvKey KEsc [])) = stopApplication
 appEvent (AppEvent e) = handleCCEvent e
 appEvent _else = return ()
+
+toggleEventSource :: Maybe (TVar Bool) -> EventM Name CommandCenterState ()
+toggleEventSource Nothing = logWarn "No eventsource is running"
+toggleEventSource (Just tv) = do
+  liftIO . atomically . modifyTVar tv $ not
+  logInfo "EventSource toggled"
 
 handleCCEvent :: CommandCenterEvent -> EventM Name CommandCenterState ()
 handleCCEvent (CCLog msg) = modify (\cs -> cs {_ccLog = msg : _ccLog cs})
@@ -200,7 +210,8 @@ stopHorture = do
         ccs
           { _ccEventChan = Nothing,
             _ccCapturedWin = Nothing,
-            _ccTIDsToClean = []
+            _ccTIDsToClean = [],
+            _ccEventSourceEnabled = Nothing
           }
     )
 
@@ -301,7 +312,12 @@ grabHorture = do
           }
       logError = HL.withColog Colog.Error (logActionChan logChan)
   void . liftIO . forkOS $ do
-    let action = initialize @'Channel plg (Just logChan) evChan
+    let startScene =
+          def
+            { _screen = def,
+              _shaders = []
+            }
+        action = initialize @'Channel startScene plg (Just logChan) evChan
     runHortureInitializer env action >>= \case
       Left err -> logError . pack . show $ err
       Right _ -> return ()
@@ -323,15 +339,29 @@ grabHorture = do
     logActionChan :: Chan Text -> Colog.LogAction IO Text
     logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
 
+-- | fetchOrCreateEventSourceTVar looks up if an EventSourceTVar is already
+-- registered. If that is not the case, it creates a default initialized TVar,
+-- registers it in the `CommandCenterState` and returns mentioned tvar.
+fetchOrCreateEventSourceTVar :: EventM Name CommandCenterState (TVar Bool)
+fetchOrCreateEventSourceTVar = do
+  tv <-
+    gets (^. ccEventSourceEnabled) >>= \case
+      Nothing -> liftIO $ newTVarIO True
+      Just tv -> return tv
+  ccEventSourceEnabled .= Just tv
+  return tv
+
 spawnEventSource :: Maybe BaseUrl -> Chan Event -> Chan Text -> EventM Name CommandCenterState ThreadId
 spawnEventSource Nothing evChan _ = do
   timeout <- gets (^. ccTimeout)
   gifs <- gets (^. ccGifs)
-  liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs
+  enabledTVar <- fetchOrCreateEventSourceTVar
+  liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs enabledTVar
 spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
   registeredEffs <- gets (^. ccRegisteredEffects)
   gifEffs <- gets (^. ccGifs)
   uid <- gets (^. ccUserId)
+  enabledTVar <- fetchOrCreateEventSourceTVar
   let env =
         StaticEffectRandomizerEnv
           { _registeredEffects = registeredEffs,
@@ -345,7 +375,7 @@ spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
                 host
                 (fromIntegral port)
                 path
-                (hortureWSStaticClientApp uid evChan env)
+                (hortureWSStaticClientApp uid evChan env enabledTVar)
                 `catch` \(e :: ConnectionException) -> do
                   logError . pack . show $ e
                   threadDelay oneSec
@@ -358,7 +388,7 @@ spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
                 host
                 (fromIntegral port)
                 path
-                (hortureWSStaticClientApp uid evChan env)
+                (hortureWSStaticClientApp uid evChan env enabledTVar)
                 `catch` \(e :: ConnectionException) -> do
                   logError . pack . show $ e
                   threadDelay oneSec
@@ -401,6 +431,29 @@ handleCCExceptions EventSourceUnavailable = logError "Source of horture events n
 
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
+
+runDebugCenter :: IO ()
+runDebugCenter = do
+  let buildVty = mkVty defaultConfig
+  appChan <- newBChan 10
+  initialVty <- buildVty
+  void $
+    customMain
+      initialVty
+      buildVty
+      (Just appChan)
+      app
+      def
+        { _ccGifs = [],
+          _ccGifsList = list AssetPort [] 1,
+          _ccPreloadedGifs = [],
+          _ccHortureUrl = Nothing,
+          _ccUserId = "some_user_id",
+          _ccControllerChans = Nothing,
+          _ccBrickEventChan = Just appChan,
+          _ccEventBaseCost = 10,
+          _ccTimeout = 1000 * 1000
+        }
 
 runCommandCenter :: Bool -> Config -> IO ()
 runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay) = do
