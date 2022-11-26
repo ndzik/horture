@@ -24,7 +24,7 @@ import Linear.Vector
 
 -- | pulse applies a pulsing effect, similar to a heartbeat.
 pulse :: Float -> Float -> Float -> Behaviour
-pulse min amplifier frequency _ t o =
+pulse min amplifier frequency = Behaviour BehaviourPulse $ \_ t o ->
   o & scale
     %~ ( !*!
            V4
@@ -37,7 +37,7 @@ pulse min amplifier frequency _ t o =
 -- | convolute applies a convolution effect where an object appears to be
 -- wrapping up into itself.
 convolute :: Behaviour
-convolute _ t o =
+convolute = Behaviour BehaviourConvolute $ \_ t o ->
   o & scale
     %~ ( !+!
            V4
@@ -48,7 +48,7 @@ convolute _ t o =
        )
 
 shake :: Float -> Float -> Float -> Behaviour
-shake amp scale frequency _ t o =
+shake amp scale frequency = Behaviour BehaviourShake $ \_ t o ->
   o & pos
     %~ ( ^+^
            V3
@@ -57,24 +57,26 @@ shake amp scale frequency _ t o =
              0
        )
 
-circle :: Float -> Behaviour
-circle frequency _ t o =
+circle :: Float -> Float -> Behaviour
+circle scale frequency = Behaviour BehaviourCircle $ \_ t o ->
   o & pos
     %~ ( ^+^
            V3
-             (sin (frequency * realToFrac t))
-             (cos (frequency * realToFrac t))
+             (scale * sin (frequency * realToFrac t))
+             (scale * cos (frequency * realToFrac t))
              0
        )
 
 moveTo :: V3 Float -> Behaviour
-moveTo target _ t o = o & pos %~ lerp (realToFrac t) target
+moveTo target = Behaviour BehaviourMoveTo $ \_ t o ->
+  o & pos %~ lerp (realToFrac t) target
 
 rotate :: Float -> Behaviour
-rotate factor _ t o = o & orientation %~ \oq -> axisAngle (V3 0 0 (-1)) (deg2rad (realToFrac t * factor)) * oq
+rotate factor = Behaviour BehaviourRotate $ \_ t o ->
+  o & orientation %~ \oq -> axisAngle (V3 0 0 (-1)) (deg2rad (realToFrac t * factor)) * oq
 
 audiophile :: Behaviour
-audiophile (bass, _, _) _ o =
+audiophile = Behaviour BehaviourAudiophile $ \(bass, _, _) _ o ->
   let amplifier = 0.0001
    in o & scale
         %~ ( !*!

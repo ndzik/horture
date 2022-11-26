@@ -58,7 +58,7 @@ renderAssets dt m = do
             ( ( \o -> do
                   let bs = o ^. behaviours
                       timeSinceBirth = dt - _birth o
-                      o' = foldr (\(f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
+                      o' = foldr (\(Behaviour _ f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
                       texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
                   liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform modelUniform $=)
                   uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
@@ -78,7 +78,7 @@ renderAssets dt m = do
             ( ( \o -> do
                   let bs = o ^. behaviours
                       timeSinceBirth = dt - _birth o
-                      o' = foldr (\(f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
+                      o' = foldr (\(Behaviour _ f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
                   liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform modelUniform $=)
                   drawBaseQuad
               )
@@ -189,7 +189,7 @@ applyScreenBehaviours fft t screen = do
       s = screen & scale .~ scaleForAspectRatio dim
       s' =
         foldr
-          ( \(f, bt, lt) o -> case lt of
+          ( \(Behaviour _ f, bt, lt) o -> case lt of
               Limited lt -> f fft ((t - bt) / lt) o
               Forever -> f fft t o
           )
