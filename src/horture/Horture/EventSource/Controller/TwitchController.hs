@@ -99,7 +99,7 @@ putCustomRewards rewards = do
               }
       runClientM (call id body) env >>= \case
         Right (DataResponse crs) -> return $ map (\d -> Right (title, (getcustomrewardsdataId d, eff))) crs
-        Left err -> return [Left . pack . show $ err] -- (logError . pack . show $ err) >> return False
+        Left err -> return [Left . pack . show $ err]
 
 storeCustomRewardCreation ::
   (Members '[State TwitchControllerState, Logger] effs) =>

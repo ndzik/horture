@@ -233,11 +233,15 @@ refreshEventSource Nothing = logInfo "No EventSource controller available"
 refreshEventSource (Just pipe) = do
   writeAndHandleResponse pipe InputPurgeAll
 
-  assets <- gets (^. ccPreloadedAssets)
+  -- assets <- gets (^. ccPreloadedAssets)
   baseCost <- gets (^. ccEventBaseCost)
-  let assetEffs = map (\(fp, _) -> AddAsset fp Forever (V3 0 0 0) []) assets
+  let -- assetEffs = map (\(fp, _) -> AddAsset fp Forever (V3 0 0 0) []) assets
       shaderEffs = map (AddShaderEffect Forever) . enumFrom $ minBound
-      allEffs = assetEffs ++ [AddScreenBehaviour Forever [], AddRapidFire []] ++ shaderEffs
+      behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> o)) . enumFrom $ minBound
+      allEffs =
+        behaviourEffs
+          ++ [AddAsset "" Forever (V3 0 0 0) [], AddScreenBehaviour Forever [], AddRapidFire []]
+          ++ shaderEffs
 
   writeAndHandleResponse pipe . InputEnable . map (\eff -> (toTitle eff, eff, baseCost * effectToCost eff)) $ allEffs
 

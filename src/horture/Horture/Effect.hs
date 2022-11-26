@@ -56,11 +56,25 @@ class Entitled d where
   toTitle :: d -> Text
 
 instance Entitled Effect where
+  toTitle (AddAsset "" _ _ _) = "RandomGifOrImage"
   toTitle (AddAsset n _ _ _) = pack . takeFileName $ n
+  toTitle (AddScreenBehaviour _ [behaviour]) = toTitle behaviour
   toTitle (AddScreenBehaviour _ _) = "RandomScreenEffect"
   toTitle (AddShaderEffect _ eff) = toTitle eff
   toTitle (AddRapidFire _) = "RATATATATA"
   toTitle Noop = "Nothing"
+
+instance Entitled Behaviour where
+  toTitle (Behaviour name _) = toTitle name
+
+instance Entitled BehaviourType where
+  toTitle BehaviourAudiophile = "hearAndFeelIt"
+  toTitle BehaviourShake = "shakeIt"
+  toTitle BehaviourRotate = "rotateIt"
+  toTitle BehaviourMoveTo = "moveIt"
+  toTitle BehaviourCircle = "circleIt"
+  toTitle BehaviourConvolute = "whoEvenKnowsIt"
+  toTitle BehaviourPulse = "pulseIt"
 
 instance Entitled ShaderEffect where
   toTitle Barrel = "ThiccIt"
