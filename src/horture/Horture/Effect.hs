@@ -1,7 +1,7 @@
 module Horture.Effect
   ( Effect (..),
     ShaderEffect (..),
-    GifIndex,
+    AssetIndex,
     Position,
     FromText (..),
     Entitled (..),
@@ -14,19 +14,19 @@ import Horture.Object
 import Linear.V3
 import System.FilePath.Posix
 
-type GifIndex = FilePath
+type AssetIndex = FilePath
 
 type Position = V3 Float
 
 data Effect
-  = AddGif !GifIndex !Lifetime !Position ![Behaviour]
+  = AddAsset !AssetIndex !Lifetime !Position ![Behaviour]
   | AddScreenBehaviour !Lifetime ![Behaviour]
   | AddShaderEffect !Lifetime !ShaderEffect
   | AddRapidFire ![Effect]
   | Noop
 
 effectToCost :: Effect -> Int
-effectToCost AddGif {} = 1
+effectToCost AddAsset {} = 1
 effectToCost AddScreenBehaviour {} = 2
 effectToCost AddShaderEffect {} = 4
 effectToCost AddRapidFire {} = 6
@@ -46,7 +46,7 @@ data ShaderEffect
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 instance Show Effect where
-  show (AddGif fp lt pos _) = unwords ["AddGif", takeFileName fp, show lt, show pos]
+  show (AddAsset fp lt pos _) = unwords ["AddImage", takeFileName fp, show lt, show pos]
   show (AddScreenBehaviour _ _) = "AddScreenBehaviour"
   show (AddShaderEffect lt eff) = unwords ["AddShaderEffect", show lt, show eff]
   show (AddRapidFire effs) = unwords ("AddRapidFire" : map show effs)
@@ -56,7 +56,7 @@ class Entitled d where
   toTitle :: d -> Text
 
 instance Entitled Effect where
-  toTitle (AddGif n _ _ _) = pack . takeFileName $ n
+  toTitle (AddAsset n _ _ _) = pack . takeFileName $ n
   toTitle (AddScreenBehaviour _ _) = "RandomScreenEffect"
   toTitle (AddShaderEffect _ eff) = toTitle eff
   toTitle (AddRapidFire _) = "RATATATATA"
@@ -78,7 +78,7 @@ class FromText d where
   fromText :: Text -> d
 
 instance FromText Effect where
-  fromText "AddGif" = AddGif "" (Limited 8) (V3 0 0 0) []
+  fromText "AddImage" = AddAsset "" (Limited 8) (V3 0 0 0) []
   fromText "AddScreenBehaviour" = AddScreenBehaviour (Limited 8) []
   fromText "AddRapidFire" = AddRapidFire []
   fromText _ = Noop

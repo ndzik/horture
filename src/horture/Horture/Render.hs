@@ -2,7 +2,7 @@
 {-# LANGUAGE TypeApplications #-}
 
 module Horture.Render
-  ( renderGifs,
+  ( renderAssets,
     renderBackground,
     renderScene,
     indexForGif,
@@ -19,12 +19,12 @@ import qualified Data.Map.Strict as Map
 import Foreign
 import Graphics.GLUtil.Camera3D as Util
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale)
+import Horture.Asset
 import Horture.Audio
 import Horture.Audio.PipeWire ()
 import Horture.Effect
 import Horture.Error (HortureError (HE))
 import Horture.GL
-import Horture.Gif
 import Horture.Horture
 import Horture.Logging
 import Horture.Object
@@ -35,37 +35,56 @@ import Horture.WindowGrabber
 import Linear.Matrix
 import Linear.Projection
 
-renderGifs :: (HortureLogger (Horture l hdl)) => Double -> Map.Map GifIndex [ActiveGif] -> Horture l hdl ()
-renderGifs _ m | Map.null m = return ()
-renderGifs dt m = do
-  prog <- asks (^. gifProg . shader)
-  modelUniform <- asks (^. gifProg . modelUniform)
-  gifIndexUniform <- asks (^. gifProg . indexUniform)
-  gifTextureUnit <- asks (^. gifProg . textureUnit)
+renderAssets :: (HortureLogger (Horture l hdl)) => Double -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
+renderAssets _ m | Map.null m = return ()
+renderAssets dt m = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject
-  activeTexture $= gifTextureUnit
-  currentProgram $= Just prog
-  -- General preconditions are set. Render all GIFs of the same type at once.
-  mapM_ (renderGifType modelUniform gifIndexUniform) . Map.toList $ m
+  -- General preconditions are set. Render all Assets.
+  mapM_ renderAssetType . Map.toList $ m
   where
-    renderGifType :: (HortureLogger (Horture l hdl)) => UniformLocation -> UniformLocation -> (GifIndex, [ActiveGif]) -> Horture l hdl ()
-    renderGifType _ _ (_, []) = return ()
-    renderGifType modelUniform gifIndexUniform (_, gifsOfSameType@(g : _)) = do
-      let HortureGif _ _ gifTextureObject numOfImgs delays = _afGif g
-      textureBinding Texture2DArray $= Just gifTextureObject
-      mapM_
-        ( ( \o -> do
-              let bs = o ^. behaviours
-                  timeSinceBirth = dt - _birth o
-                  o' = foldr (\(f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
-                  texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
-              liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform modelUniform $=)
-              uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
-              drawBaseQuad
-          )
-            . _afObject
-        )
-        gifsOfSameType
+    renderAssetType :: (HortureLogger (Horture l hdl)) => (AssetIndex, [ActiveAsset]) -> Horture l hdl ()
+    renderAssetType (_, []) = return ()
+    renderAssetType (_, gifsOfSameType@(g : _)) = do
+      case _afAsset g of
+        HortureGif _ _ gifTextureObject numOfImgs delays -> do
+          prog <- asks (^. dynamicImageProg . gifProgram . shader)
+          modelUniform <- asks (^. dynamicImageProg . gifProgram . modelUniform)
+          gifIndexUniform <- asks (^. dynamicImageProg . gifProgram . indexUniform)
+          gifTextureUnit <- asks (^. dynamicImageProg . gifProgram . textureUnit)
+          activeTexture $= gifTextureUnit
+          currentProgram $= Just prog
+          textureBinding Texture2DArray $= Just gifTextureObject
+          mapM_
+            ( ( \o -> do
+                  let bs = o ^. behaviours
+                      timeSinceBirth = dt - _birth o
+                      o' = foldr (\(f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
+                      texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
+                  liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform modelUniform $=)
+                  uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
+                  drawBaseQuad
+              )
+                . _afObject
+            )
+            gifsOfSameType
+        HortureImage _ _ imageTextureObject -> do
+          imgProg <- asks (^. dynamicImageProg . imageProgram . shader)
+          modelUniform <- asks (^. dynamicImageProg . imageProgram . modelUniform)
+          imgTextureUnit <- asks (^. dynamicImageProg . imageProgram . textureUnit)
+          activeTexture $= imgTextureUnit
+          currentProgram $= Just imgProg
+          textureBinding Texture2D $= Just imageTextureObject
+          mapM_
+            ( ( \o -> do
+                  let bs = o ^. behaviours
+                      timeSinceBirth = dt - _birth o
+                      o' = foldr (\(f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
+                  liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform modelUniform $=)
+                  drawBaseQuad
+              )
+                . _afObject
+            )
+            gifsOfSameType
 
 -- | indexForGif returns the index of the image for the associated GIF to be
 -- viewed at the time given since birth in 100th of a second. The index is
@@ -168,10 +187,14 @@ applyScreenBehaviours fft t screen = do
   dim <- gets (^. dim)
   let bs = screen ^. behaviours
       s = screen & scale .~ scaleForAspectRatio dim
-      s' = foldr (\(f, bt, lt) o -> case lt of
-                                      Limited lt -> f fft ((t - bt) / lt) o
-                                      Forever -> f fft t o
-                                      ) s bs
+      s' =
+        foldr
+          ( \(f, bt, lt) o -> case lt of
+              Limited lt -> f fft ((t - bt) / lt) o
+              Forever -> f fft t o
+          )
+          s
+          bs
   return s'
 
 trackScreen :: (HortureLogger (Horture l hdl)) => Double -> Object -> Horture l hdl Object

@@ -7,7 +7,7 @@ module Horture.EventSource.Random
   ( runStaticEffectRandomizer,
     runAnyEffectRandomizer,
     StaticEffectRandomizerEnv (..),
-    gifEffects,
+    assetEffects,
     registeredEffects,
   )
 where
@@ -35,7 +35,7 @@ import System.Random.Stateful
 
 data StaticEffectRandomizerEnv = StaticEffectRandomizerEnv
   { _registeredEffects :: !(Map.Map Text (Text, Effect)),
-    _gifEffects :: ![FilePath]
+    _assetEffects :: ![FilePath]
   }
 
 makeLenses ''StaticEffectRandomizerEnv
@@ -51,7 +51,7 @@ runStaticEffectRandomizer ::
   Eff (RandomizeEffect : effs) x ->
   Eff effs x
 runStaticEffectRandomizer = interpret $ \case
-  RandomizeEffect (AddGif fp _ _ _) -> newRandomGifWith fp
+  RandomizeEffect (AddAsset fp _ _ _) -> newRandomAssetWith fp
   RandomizeEffect AddScreenBehaviour {} -> newRandomScreenEffect
   RandomizeEffect (AddShaderEffect _ se) -> randomizeShaderEffect se
   RandomizeEffect AddRapidFire {} -> newRapidFireEffect
@@ -61,31 +61,31 @@ newRapidFireEffect ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRapidFireEffect = do
-  asks @StaticEffectRandomizerEnv (^. gifEffects) >>= \case
+  asks @StaticEffectRandomizerEnv (^. assetEffects) >>= \case
     [] -> return Noop
-    gifs -> do
+    assets -> do
       n <- (uniformRM' @Int) 6 16
-      gfs <- mapM (newRandomGif' gifs) [1 .. n]
+      gfs <- mapM (newRandomAsset' assets) [1 .. n]
       return $ AddRapidFire gfs
   where
-    newRandomGif' ::
+    newRandomAsset' ::
       (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
       [FilePath] ->
       Int ->
       Eff effs Effect
-    newRandomGif' gifs _ = randomFilePath gifs >>= newRandomGifWith
+    newRandomAsset' assets _ = randomFilePath assets >>= newRandomAssetWith
     randomFilePath ::
       (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
       [FilePath] ->
-      Eff effs GifIndex
-    randomFilePath gifs = uniformRM' 0 (length gifs - 1) <&> (gifs !!)
+      Eff effs AssetIndex
+    randomFilePath assets = uniformRM' 0 (length assets - 1) <&> (assets !!)
 
-newRandomGifWith ::
+newRandomAssetWith ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   FilePath ->
   Eff effs Effect
-newRandomGifWith fp =
-  AddGif fp
+newRandomAssetWith fp =
+  AddAsset fp
     <$> (Limited <$> uniformRM' 8 18)
     <*> ( V3
             <$> (randomM' <&> (sin . (* 20)))
@@ -165,7 +165,7 @@ newRandomEffect ::
 newRandomEffect =
   randomM' @_ @Float >>= \r ->
     if r < 0.3
-      then newRandomGif
+      then newRandomAsset
       else
         if r < 0.5
           then newRandomScreenEffect
@@ -179,7 +179,7 @@ newRandomRapidFireEffect ::
   Eff effs Effect
 newRandomRapidFireEffect = do
   n <- (uniformRM' @Int) 6 16
-  gfs <- mapM (const newRandomGif) [1 .. n]
+  gfs <- mapM (const newRandomAsset) [1 .. n]
   return $ AddRapidFire gfs
 
 newRandomShaderEffect :: (LastMember IO effs) => Eff effs Effect
@@ -193,15 +193,15 @@ newRandomShader = uniformRM' 0 (length effs - 1) <&> (effs !!)
 newRandomScreenEffect :: (LastMember IO effs) => Eff effs Effect
 newRandomScreenEffect = AddScreenBehaviour <$> (Limited <$> uniformRM' 6 10) <*> newRandomScreenBehaviours 1
 
-newRandomGif ::
+newRandomAsset ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
   Eff effs Effect
-newRandomGif =
+newRandomAsset =
   ask @StaticEffectRandomizerListEnv >>= \case
     [] -> return Noop
-    gifs ->
-      AddGif
-        <$> (uniformRM' 0 (length gifs - 1) <&> (gifs !!))
+    assets ->
+      AddAsset
+        <$> (uniformRM' 0 (length assets - 1) <&> (assets !!))
         <*> (Limited <$> uniformRM' 8 18)
         <*> ( V3
                 <$> (randomM' <&> (sin . (* 20)))

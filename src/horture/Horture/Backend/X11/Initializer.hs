@@ -39,7 +39,7 @@ import Horture.Initializer
 import Horture.Loader.Asset
 import Horture.Logging
 import Horture.Program
-import Horture.Scene
+import Horture.Scene hiding (assets)
 import Horture.State
 import Horture.WindowGrabber
 import Numeric (showHex)
@@ -110,9 +110,9 @@ initialize startScene gifs logChan evChan = do
   liftIO $ GLFW.setWindowSize glW (fromIntegral . wa_width $ attr) (fromIntegral . wa_height $ attr)
   liftIO $ GLFW.setWindowPos glW (fromIntegral . wa_x $ attr) (fromIntegral . wa_y $ attr)
 
-  (hsp, hgp, hbp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) gifs
+  (hsp, dip, hbp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) gifs
   storage <- liftIO $ newTVarIO Nothing
-  let scene = startScene {_gifCache = hgp ^. assets}
+  let scene = startScene {_assetCache = dip ^. assets}
       hs =
         HortureState
           { _envHandle = (dp, w, isMapped),
@@ -125,7 +125,7 @@ initialize startScene gifs logChan evChan = do
   let hc =
         HortureStatic
           { _screenProg = hsp,
-            _gifProg = hgp,
+            _dynamicImageProg = dip,
             _backgroundProg = hbp,
             _eventChan = evChan,
             _logChan = logChan,
