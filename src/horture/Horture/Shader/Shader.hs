@@ -7,6 +7,7 @@ module Horture.Shader.Shader
   ( passthroughVertexShader,
     mvpVertexShader,
     displayShader,
+    imageFragmentShader,
     barrelShader,
     stitchShader,
     blurVShader,
@@ -77,6 +78,22 @@ void main() {
   frag_colour = texture(gifTexture, vec3(texCoord.x, texCoord.y, index));
 }
     |]
+
+imageFragmentShader :: ByteString
+imageFragmentShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+
+uniform sampler2D imgTexture;
+
+out vec4 frag_colour;
+
+void main() {
+  frag_colour = texture(imgTexture, vec2(texCoord.x, texCoord.y));
+}
+  |]
 
 mvpVertexShader :: ByteString
 mvpVertexShader =
