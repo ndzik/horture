@@ -1,20 +1,24 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Horture.Loader.FilePreloader
   ( FilePreloader,
-    loadGifsInMemory,
+    loadAssetsInMemory,
     runPreloader,
     loadDirectory,
   )
 where
 
-import Codec.Picture
+import Codec.Picture hiding (readImage)
 import Codec.Picture.Gif
 import Control.Lens
+import Control.Loop
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.ByteString (readFile)
+import Data.Vector.Storable (Vector, unsafeWith)
 import Data.Word
-import Foreign (Storable (poke), plusPtr)
-import Foreign.ForeignPtr
+import Foreign hiding (void)
 import Horture.Loader.Asset
 import Horture.Loader.Config
 import Horture.Loader.Error
@@ -27,87 +31,165 @@ type FilePreloader a = ExceptT LoaderError (ReaderT PreloaderConfig IO) a
 runPreloader :: PreloaderConfig -> FilePreloader a -> IO (Either LoaderError a)
 runPreloader lc = flip runReaderT lc . runExceptT
 
-loadGifsInMemory :: FilePreloader [(FilePath, Asset)]
-loadGifsInMemory = do
-  gifFiles <- asks (^. gifDirectory) >>= liftIO . makeAbsolute >>= liftIO . loadDirectory <&> filter isGif
-  mapM readImagesAndMetadata gifFiles
-
-isGif :: FilePath -> Bool
-isGif fp = takeExtension fp == ".gif"
+loadAssetsInMemory :: FilePreloader [(FilePath, Asset)]
+loadAssetsInMemory = do
+  dirContent <- asks (^. assetDirectory) >>= liftIO . makeAbsolute >>= liftIO . loadDirectory
+  mapM readAssets dirContent
 
 loadDirectory :: FilePath -> IO [FilePath]
 loadDirectory fp = listDirectory fp <&> map ((fp ++ "/") ++)
 
+readAssets :: FilePath -> FilePreloader (FilePath, Asset)
+readAssets fp = case takeExtension fp of
+  ".gif" -> readImagesAndMetadata fp
+  ".png" -> readPngImage fp
+  _else -> throwError . LoaderUnsupportedAssetType $ fp
+
+readPngImage :: FilePath -> FilePreloader (FilePath, Asset)
+readPngImage png = do
+  img <-
+    liftIO (readFile png) <&> decodePng >>= \case
+      Left err -> throwError . LoaderDecodingPNG $ show err
+      Right r -> return r
+  asset <- decodeDynamicImage img
+  return (png, asset)
+
+readImage ::
+  forall colorDataType a.
+  (Storable colorDataType, Storable a) =>
+  ImageType ->
+  Int ->
+  Int ->
+  Vector colorDataType ->
+  FilePreloader (ForeignPtr a)
+readImage it w h sourceData = do
+  let bytesPerImage = w * h * numPixelComponents * bytesPerColor
+      bytesPerColor = sizeOf @colorDataType undefined
+      numPixelComponents = case it of
+        RGB8 -> 3
+        RGBA8 -> 4
+        RGB16 -> 3
+        RGBA16 -> 4
+  sinkData <- liftIO $ mallocForeignPtrArray bytesPerImage
+  readImageOffset it w h sourceData sinkData 0
+
+readImageOffset ::
+  forall colorDataType a.
+  (Storable colorDataType, Storable a) =>
+  ImageType ->
+  Int ->
+  Int ->
+  Vector colorDataType ->
+  ForeignPtr a ->
+  Int ->
+  FilePreloader (ForeignPtr a)
+readImageOffset it w h sourceData sinkData offset = do
+  let bytesPerColor = sizeOf @colorDataType undefined
+      numPixelComponents = case it of
+        RGB8 -> 3
+        RGBA8 -> 4
+        RGB16 -> 3
+        RGBA16 -> 4
+  liftIO $
+    withForeignPtr sinkData $ \arr -> do
+      numLoop 0 h $ \y -> do
+        numLoop 0 w $ \x -> do
+          void . liftIO . unsafeWith sourceData $ \imgptr -> do
+            let r = 0
+                g = 1
+                b = 2
+                a = 3
+            readColorComponent (x, y) w bytesPerColor numPixelComponents imgptr r
+              >>= writeColorComponent (x, y) w bytesPerColor numPixelComponents arr r offset
+            readColorComponent (x, y) w bytesPerColor numPixelComponents imgptr g
+              >>= writeColorComponent (x, y) w bytesPerColor numPixelComponents arr g offset
+            readColorComponent (x, y) w bytesPerColor numPixelComponents imgptr b
+              >>= writeColorComponent (x, y) w bytesPerColor numPixelComponents arr b offset
+            -- Could be better doing it statically, but we will see.
+            when (it == RGBA8 || it == RGBA16) $ do
+              readColorComponent (x, y) w bytesPerColor numPixelComponents imgptr a
+                >>= writeColorComponent (x, y) w bytesPerColor numPixelComponents arr a offset
+  return sinkData
+  where
+    readColorComponent :: (Int, Int) -> Int -> Int -> Int -> Ptr colorDataType -> Int -> IO colorDataType
+    readColorComponent (x, y) w bytesPerColor numPixelComponents imgptr component =
+      peekByteOff @colorDataType imgptr $ x * numPixelComponents * bytesPerColor + y * numPixelComponents * bytesPerColor * w + component * bytesPerColor
+    writeColorComponent :: (Int, Int) -> Int -> Int -> Int -> Ptr a -> Int -> Int -> colorDataType -> IO ()
+    writeColorComponent (x, y) w bytesPerColor numPixelComponents arr component offset value =
+      poke (plusPtr arr (offset + (x * numPixelComponents * bytesPerColor) + (y * numPixelComponents * bytesPerColor * w) + component * bytesPerColor)) value
+
+decodeDynamicImage :: DynamicImage -> FilePreloader Asset
+decodeDynamicImage img = do
+  case img of
+    ImageRGB8 i ->
+      let w = imageWidth i
+          h = imageHeight i
+       in AssetImage w h RGB8 <$> readImage RGB8 w h (imageData i)
+    ImageRGBA8 i ->
+      let w = imageWidth i
+          h = imageHeight i
+       in AssetImage w h RGBA8 <$> readImage RGBA8 w h (imageData i)
+    ImageRGB16 i ->
+      let w = imageWidth i
+          h = imageHeight i
+       in AssetImage w h RGB16 <$> readImage RGB16 w h (imageData i)
+    ImageRGBA16 i ->
+      let w = imageWidth i
+          h = imageHeight i
+       in AssetImage w h RGBA16 <$> readImage RGBA16 w h (imageData i)
+    _otherwise -> throwError $ LoaderUnsupportedAssetType ""
+
 readImagesAndMetadata :: FilePath -> FilePreloader (FilePath, Asset)
 readImagesAndMetadata gif = do
   content <- liftIO $ readFile gif
-  (nrOfImgs, (w, h), imgs) <- case decodeGifImages content of
-    Left err -> throwError $ "decoding gif: " <> err
+  (nrOfImgs, (w, h), imgs, imgType) <- case decodeGifImages content of
+    Left err -> throwError . LoaderDecodingGif $ "decoding gif: " <> err
     Right imgs@(img : _) -> do
-      ((w, h), imgVector) <- case img of
+      let l = length imgs
+      case img of
         ImageRGBA8 i -> do
           let w = imageWidth i
               h = imageHeight i
-          imgVector <- unifyDynamicImages (w, h) imgs
-          return ((w, h), imgVector)
+          imgdata <- unifyDynamicImages (w, h) imgs
+          return (l, (w, h), imgdata, RGBA8)
         ImageRGB8 i -> do
           let w = imageWidth i
               h = imageHeight i
-          imgVector <- unifyDynamicImages (w, h) imgs
-          return ((w, h), imgVector)
-        _otherwise -> throwError "wrong encoding encountered"
-      return (length imgs, (w, h), imgVector)
-    Right _ -> throwError "invalid gif encountered"
+          imgdata <- unifyDynamicImages (w, h) imgs
+          return (l, (w, h), imgdata, RGB8)
+        _otherwise -> throwError . LoaderDecodingGif $ "wrong encoding encountered"
+    Right _ -> throwError . LoaderDecodingGif $ "invalid gif encountered"
   delaysms <- case getDelaysGifImages content of
-    Left err -> throwError $ "retrieving gif delays: " <> err
+    Left err -> throwError . LoaderDecodingGif $ "retrieving gif delays: " <> err
     Right ds -> return ds
   return
     ( gif,
       AssetGif
         { _assetGifWidth = w,
           _assetGifHeight = h,
+          _assetGifType = imgType,
           _assetNumberOfFrames = nrOfImgs,
           _assetGifDelays = delaysms,
           _assetGifImages = imgs
         }
     )
 
--- | unifyDynamicImages tightly packs the list of DynamicImages into RGBA8
--- format.
+-- | unifyDynamicImages tightly packs the list of DynamicImages into a format
+-- which can be loaded to the GPU and is compatible with OpenGL.
 -- This is horribly slow and would benefit from a custom C decoder which
 -- tightly packs GIFs when decoding.
 unifyDynamicImages :: (Int, Int) -> [DynamicImage] -> FilePreloader (ForeignPtr Word8)
-unifyDynamicImages (w, h) imgs = do
-  let -- stride is the number of bytes each image occupies.
-      stride = w * h * 4
+unifyDynamicImages _ [] = throwError LoaderEmptyGif
+unifyDynamicImages (w, h) imgs@(img : _) = do
+  -- stride is the number of bytes each image occupies.
+  stride <- case img of
+    ImageRGBA8 _ -> return $ w * h * 4
+    ImageRGB8 _ -> return $ w * h * 3
+    _otherwise -> throwError $ LoaderDecodingGif "Gif with unsupported image type"
   -- bytes in a single horizontal scanline.
   farr <- liftIO $ mallocForeignPtrArray (stride * length imgs)
-  liftIO $
-    withForeignPtr farr $ \arr -> do
-      forM_ (zip [0 ..] imgs) $ \(idx, img) -> case img of
-        ImageRGBA8 i -> do
-          _ <-
-            imageIPixels
-              ( \(x, y, PixelRGBA8 r g b a) -> do
-                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 0)) r
-                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 1)) g
-                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 2)) b
-                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 3)) a
-                  return (PixelRGBA8 r g b a)
-              )
-              i
-          return ()
-        ImageRGB8 i -> do
-          _ <-
-            imageIPixels
-              ( \(x, y, PixelRGB8 r g b) -> do
-                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 0)) r
-                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 1)) g
-                  poke (plusPtr arr (idx * stride + (x * 4) + (y * 4 * w) + 2)) b
-                  poke (plusPtr @_ @Word8 arr (idx * stride + (x * 4) + (y * 4 * w) + 3)) 0xff
-                  return (PixelRGB8 r g b)
-              )
-              i
-          return ()
-        _otherwise -> return ()
+  forM_ (zip [0 ..] imgs) $ \(idx, img) -> case img of
+    ImageRGBA8 i -> void $ readImageOffset RGBA8 w h (imageData i) farr (idx * stride)
+    ImageRGB8 i -> void $ readImageOffset RGB8 w h (imageData i) farr (idx * stride)
+    _otherwise -> return ()
   return farr

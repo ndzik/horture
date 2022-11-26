@@ -1,6 +1,12 @@
 module Horture.Loader.Error
-  ( LoaderError
+  ( LoaderError (..),
   )
 where
 
-type LoaderError = String
+data LoaderError
+  = LoaderDecodingGif !String
+  | LoaderDecodingJPEG !String
+  | LoaderDecodingPNG !String
+  | LoaderUnsupportedAssetType !String
+  | LoaderEmptyGif
+  deriving (Show)
