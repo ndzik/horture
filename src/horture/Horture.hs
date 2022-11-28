@@ -77,7 +77,7 @@ playScene s = do
       clearView
       renderBackground dt
       renderScene dt s
-      renderGifs dt . _gifs $ s
+      renderAssets dt . _assets $ s
       updateView
       s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
       go startTime s'
@@ -173,7 +173,7 @@ shutdown win = do
 initResources ::
   (GLsizei, GLsizei) ->
   [(FilePath, Asset)] ->
-  IO (HortureScreenProgram, HortureGifProgram, HortureBackgroundProgram)
+  IO (HortureScreenProgram, HortureDynamicImageProgram, HortureBackgroundProgram)
 initResources (w, h) gifs = do
   -- Initialize OpenGL primitives.
   initBaseQuad
@@ -181,12 +181,12 @@ initResources (w, h) gifs = do
   GL.clearColor $= Color4 0.1 0.1 0.1 1
   effs <- initShaderEffects
   hsp <- initHortureScreenProgram (w, h) effs
-  hgp <- initHortureGifProgram gifs
+  dip <- initHortureDynamicImageProgram gifs
   hbp <- initHortureBackgroundProgram
   -- Generic OpenGL configuration.
   blend $= Enabled
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
-  return (hsp, hgp, hbp)
+  return (hsp, dip, hbp)
 
 initShaderEffects :: IO (Map.Map ShaderEffect [HortureShaderProgram])
 initShaderEffects = do
@@ -313,8 +313,8 @@ initBaseQuad = do
   bindBuffer ElementArrayBuffer $= Just veo
   withArray vertsElement $ \ptr -> bufferData ElementArrayBuffer $= (fromIntegral vertsElementSize, ptr, StaticDraw)
 
-initHortureGifProgram :: [(FilePath, Asset)] -> IO HortureGifProgram
-initHortureGifProgram gifs = do
+initHortureDynamicImageProgram :: [(FilePath, Asset)] -> IO HortureDynamicImageProgram
+initHortureDynamicImageProgram gifs = do
   vspg <- loadShaderBS "gifvertex.shader" VertexShader gifVertexShader
   fspg <- loadShaderBS "giffragment.shader" FragmentShader gifFragmentShader
   gifProg <- linkShaderProgram [vspg, fspg]
@@ -323,31 +323,52 @@ initHortureGifProgram gifs = do
   gifTexIndex <- uniformLocation gifProg "index"
   currentProgram $= Just gifProg
   m44ToGLmatrix identityM44 >>= (uniform gifModelUniform $=)
+
+  vspg <- loadShaderBS "imagevertex.shader" VertexShader gifVertexShader
+  fspg <- loadShaderBS "imagefragment.shader" FragmentShader imageFragmentShader
+  imgProg <- linkShaderProgram [vspg, fspg]
+  imgModelUniform <- uniformLocation imgProg "model"
+  imgTexUnit <- uniformLocation imgProg "imgTexture"
+  currentProgram $= Just imgProg
+  m44ToGLmatrix identityM44 >>= (uniform imgModelUniform $=)
   (loaderResult, loaderState) <-
     runTextureLoader
       ( LC
-          { _loaderConfigPreloadedGifs = gifs,
+          { _loaderConfigPreloadedAssets = gifs,
             _loaderConfigGifProg = gifProg,
             _loaderConfigGifTexUniform = gifTexUni,
-            _loaderConfigGifTextureUnit = gifTextureUnit
+            _loaderConfigGifTextureUnit = gifTextureUnit,
+            _loaderConfigImageProg = imgProg,
+            _loaderConfigImageTexUniform = imgTexUnit,
+            _loaderConfigImageTextureUnit = imgTextureUnit
           }
       )
       def
       loadGifsGL
-  hortureGifs <- case loaderResult of
+  hortureAssets <- case loaderResult of
     Left _ -> exitFailure
     _otherwise -> do
       return $ loaderState ^. resolvedGifs
   return $
-    HortureGifProgram
-      { _hortureGifProgramShader = gifProg,
-        _hortureGifProgramModelUniform = gifModelUniform,
-        _hortureGifProgramIndexUniform = gifTexIndex,
-        _hortureGifProgramTextureUnit = gifTextureUnit,
-        _hortureGifProgramAssets = hortureGifs
+    HortureDynamicImageProgram
+      { _hortureDynamicImageProgramGifProgram =
+          HortureGifProgram
+            { _hortureGifProgramShader = gifProg,
+              _hortureGifProgramModelUniform = gifModelUniform,
+              _hortureGifProgramIndexUniform = gifTexIndex,
+              _hortureGifProgramTextureUnit = gifTextureUnit
+            },
+        _hortureDynamicImageProgramImageProgram =
+          HortureImageProgram
+            { _hortureImageProgramShader = imgProg,
+              _hortureImageProgramTextureUnit = imgTextureUnit,
+              _hortureImageProgramModelUniform = imgModelUniform
+            },
+        _hortureDynamicImageProgramAssets = hortureAssets
       }
   where
     gifTextureUnit = TextureUnit 4
+    imgTextureUnit = TextureUnit 5
 
 initHortureBackgroundProgram :: IO HortureBackgroundProgram
 initHortureBackgroundProgram = do

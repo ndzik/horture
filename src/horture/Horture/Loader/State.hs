@@ -6,12 +6,12 @@ module Horture.Loader.State where
 import Control.Lens.TH
 import Data.Default
 import Data.Map
-import Horture.Gif
+import Horture.Asset
 
 -- | LoaderState describes the state of the horture loader.
 newtype LoaderState = LS
   { -- | Gifs which were already resolved and loaded as textures.
-    _loaderStateResolvedGifs :: Map FilePath HortureGif
+    _loaderStateResolvedGifs :: Map FilePath HortureAsset
   }
   deriving (Show)
 

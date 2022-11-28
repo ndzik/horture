@@ -25,7 +25,7 @@ data Config = Config
     twitchAuthToken :: !(Maybe Text),
     hortureWsEndpoint :: !(Maybe BaseUrl),
     hortureCost :: !Int,
-    gifDirectory :: !FilePath,
+    assetDirectory :: !FilePath,
     debugDelayMs :: !Int
   }
   deriving (Show)
@@ -47,7 +47,7 @@ instance Default Config where
         hortureWsEndpoint = Nothing,
         mockUserId = Nothing,
         hortureCost = defaultHortureCost,
-        gifDirectory = "./gifs",
+        assetDirectory = "./assets",
         debugDelayMs = defaultDebugDelay
       }
 
@@ -78,7 +78,7 @@ instance FromJSON Config where
               Just v -> return v
               _otherwise -> return defaultHortureCost
           )
-      <*> o .: "gif_directory"
+      <*> o .: "asset_directory"
       <*> ( o .:? "debug_delay_ms" >>= \case
               Just v -> return v
               _otherwise -> return defaultDebugDelay

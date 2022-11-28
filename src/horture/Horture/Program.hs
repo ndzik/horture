@@ -7,7 +7,7 @@ import Control.Lens.TH
 import Data.Map.Strict
 import Graphics.Rendering.OpenGL
 import Horture.Effect
-import Horture.Gif
+import Horture.Asset
 
 -- | HortureScreenProgram contains all OpenGL informations to handle the
 -- rendering and displaying of the captured screen image.
@@ -34,12 +34,25 @@ data HortureScreenProgram = HortureScreenProgram
   }
   deriving (Show)
 
+data HortureDynamicImageProgram = HortureDynamicImageProgram
+  { _hortureDynamicImageProgramGifProgram :: !HortureGifProgram,
+    _hortureDynamicImageProgramImageProgram :: !HortureImageProgram,
+    _hortureDynamicImageProgramAssets :: !(Map FilePath HortureAsset)
+  }
+  deriving (Show)
+
 data HortureGifProgram = HortureGifProgram
   { _hortureGifProgramShader :: !Program,
     _hortureGifProgramModelUniform :: !UniformLocation,
     _hortureGifProgramIndexUniform :: !UniformLocation,
-    _hortureGifProgramAssets :: !(Map FilePath HortureGif),
     _hortureGifProgramTextureUnit :: !TextureUnit
+  }
+  deriving (Show)
+
+data HortureImageProgram = HortureImageProgram
+  { _hortureImageProgramShader :: !Program,
+    _hortureImageProgramTextureUnit :: !TextureUnit,
+    _hortureImageProgramModelUniform :: !UniformLocation
   }
   deriving (Show)
 
@@ -60,6 +73,8 @@ data HortureShaderProgram = HortureShaderProgram
   deriving (Show)
 
 makeFields ''HortureScreenProgram
+makeFields ''HortureDynamicImageProgram
+makeFields ''HortureImageProgram
 makeFields ''HortureGifProgram
 makeFields ''HortureShaderProgram
 makeFields ''HortureBackgroundProgram

@@ -7,6 +7,7 @@ module Horture.Shader.Shader
   ( passthroughVertexShader,
     mvpVertexShader,
     displayShader,
+    imageFragmentShader,
     barrelShader,
     stitchShader,
     blurVShader,
@@ -77,6 +78,22 @@ void main() {
   frag_colour = texture(gifTexture, vec3(texCoord.x, texCoord.y, index));
 }
     |]
+
+imageFragmentShader :: ByteString
+imageFragmentShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+
+uniform sampler2D imgTexture;
+
+out vec4 frag_colour;
+
+void main() {
+  frag_colour = texture(imgTexture, vec2(texCoord.x, texCoord.y));
+}
+  |]
 
 mvpVertexShader :: ByteString
 mvpVertexShader =
@@ -455,12 +472,12 @@ vec4 applyVisualization(sampler2D tex, vec2 uv, double lifetime, double dt, doub
   double fm = clamp(freq[1]*2-1, 0, ceil)/ceil;
   double fh = clamp(freq[2]*2-1, 0, ceil)/ceil;
   double r = 2.4 * fb;
-  double g = 2.6 * fm;
-  double b = 2.8 * fh;
+  double g = 1.6 * fm;
+  double b = 1.8 * fh;
 
   float dtoc = distance(uv, vec2(0.5, 0.5));
   vec4 tint = vec4(mix(rgba.x, r, 0.4), mix(rgba.y, g, 0.5), mix(rgba.z, b, 0.6), rgba.w);
-  return mix(tint, rgba, clamp(0.30 + 1-abs(dtoc), 0, 1));
+  return mix(tint, rgba, clamp(1 + abs(sin(float(freq[0]/500) * uv.x)*cos(float(freq[1]/200) * uv.y))-abs(dtoc * float(freq[0]/(2*ceil))), 0, 1));
 }
 
 void main() {

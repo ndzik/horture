@@ -20,7 +20,7 @@ import Graphics.X11
 import Graphics.X11.Xlib.Extras
 import Horture.Backend.X11.X11
 import Horture.GL
-import Horture.Gif
+import Horture.Asset
 import Horture.Horture
 import Horture.Logging
 import Horture.Program

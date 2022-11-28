@@ -14,7 +14,7 @@ import Horture.Program
 
 data HortureStatic = HortureStatic
   { _screenProg :: !HortureScreenProgram,
-    _gifProg :: !HortureGifProgram,
+    _dynamicImageProg :: !HortureDynamicImageProgram,
     _backgroundProg :: !HortureBackgroundProgram,
     _eventChan :: !(Chan Event),
     _logChan :: !(Maybe (Chan Text)),

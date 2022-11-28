@@ -7,7 +7,7 @@ module Horture.EventSource.Random
   ( runStaticEffectRandomizer,
     runAnyEffectRandomizer,
     StaticEffectRandomizerEnv (..),
-    gifEffects,
+    assetEffects,
     registeredEffects,
   )
 where
@@ -35,7 +35,7 @@ import System.Random.Stateful
 
 data StaticEffectRandomizerEnv = StaticEffectRandomizerEnv
   { _registeredEffects :: !(Map.Map Text (Text, Effect)),
-    _gifEffects :: ![FilePath]
+    _assetEffects :: ![FilePath]
   }
 
 makeLenses ''StaticEffectRandomizerEnv
@@ -51,7 +51,16 @@ runStaticEffectRandomizer ::
   Eff (RandomizeEffect : effs) x ->
   Eff effs x
 runStaticEffectRandomizer = interpret $ \case
-  RandomizeEffect (AddGif fp _ _ _) -> newRandomGifWith fp
+  RandomizeEffect (AddAsset "" _ _ _) -> newRandomAssetAny
+  RandomizeEffect (AddAsset fp _ _ _) -> newRandomAssetWith fp
+  RandomizeEffect (AddScreenBehaviour _ [Behaviour bht _]) -> case bht of
+    BehaviourPulse -> mkRandomScreenEffect <*> ((: []) <$> newRandomPulseScreen)
+    BehaviourConvolute -> mkRandomScreenEffect <*> ((: []) <$> newRandomConvolute)
+    BehaviourShake -> mkRandomScreenEffect <*> ((: []) <$> newRandomShake)
+    BehaviourCircle -> mkRandomScreenEffect <*> ((: []) <$> newRandomCircleScreen)
+    BehaviourMoveTo -> mkRandomScreenEffect <*> ((: []) <$> newRandomMoveToScreen)
+    BehaviourRotate -> mkRandomScreenEffect <*> ((: []) <$> newRandomRotate)
+    BehaviourAudiophile -> mkRandomScreenEffect <*> ((: []) <$> newRandomAudiophile)
   RandomizeEffect AddScreenBehaviour {} -> newRandomScreenEffect
   RandomizeEffect (AddShaderEffect _ se) -> randomizeShaderEffect se
   RandomizeEffect AddRapidFire {} -> newRapidFireEffect
@@ -61,31 +70,39 @@ newRapidFireEffect ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRapidFireEffect = do
-  asks @StaticEffectRandomizerEnv (^. gifEffects) >>= \case
+  asks @StaticEffectRandomizerEnv (^. assetEffects) >>= \case
     [] -> return Noop
-    gifs -> do
+    assets -> do
       n <- (uniformRM' @Int) 6 16
-      gfs <- mapM (newRandomGif' gifs) [1 .. n]
+      gfs <- mapM (newRandomAsset' assets) [1 .. n]
       return $ AddRapidFire gfs
   where
-    newRandomGif' ::
+    newRandomAsset' ::
       (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
       [FilePath] ->
       Int ->
       Eff effs Effect
-    newRandomGif' gifs _ = randomFilePath gifs >>= newRandomGifWith
+    newRandomAsset' assets _ = randomFilePath assets >>= newRandomAssetWith
     randomFilePath ::
       (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
       [FilePath] ->
-      Eff effs GifIndex
-    randomFilePath gifs = uniformRM' 0 (length gifs - 1) <&> (gifs !!)
+      Eff effs AssetIndex
+    randomFilePath assets = uniformRM' 0 (length assets - 1) <&> (assets !!)
 
-newRandomGifWith ::
+newRandomAssetAny ::
+  (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
+  Eff effs Effect
+newRandomAssetAny = do
+  asks (^. assetEffects) >>= \case
+    [] -> return Noop
+    assets -> newRandomAssetAny' assets
+
+newRandomAssetWith ::
   (Members '[Reader StaticEffectRandomizerEnv] effs, LastMember IO effs) =>
   FilePath ->
   Eff effs Effect
-newRandomGifWith fp =
-  AddGif fp
+newRandomAssetWith fp =
+  AddAsset fp
     <$> (Limited <$> uniformRM' 8 18)
     <*> ( V3
             <$> (randomM' <&> (sin . (* 20)))
@@ -165,7 +182,7 @@ newRandomEffect ::
 newRandomEffect =
   randomM' @_ @Float >>= \r ->
     if r < 0.3
-      then newRandomGif
+      then newRandomAsset
       else
         if r < 0.5
           then newRandomScreenEffect
@@ -179,7 +196,7 @@ newRandomRapidFireEffect ::
   Eff effs Effect
 newRandomRapidFireEffect = do
   n <- (uniformRM' @Int) 6 16
-  gfs <- mapM (const newRandomGif) [1 .. n]
+  gfs <- mapM (const newRandomAsset) [1 .. n]
   return $ AddRapidFire gfs
 
 newRandomShaderEffect :: (LastMember IO effs) => Eff effs Effect
@@ -190,33 +207,42 @@ newRandomShader = uniformRM' 0 (length effs - 1) <&> (effs !!)
   where
     effs = enumFrom minBound
 
-newRandomScreenEffect :: (LastMember IO effs) => Eff effs Effect
-newRandomScreenEffect = AddScreenBehaviour <$> (Limited <$> uniformRM' 6 10) <*> newRandomScreenBehaviours 1
+mkRandomScreenEffect :: (LastMember IO effs) => Eff effs ([Behaviour] -> Effect)
+mkRandomScreenEffect = AddScreenBehaviour <$> (Limited <$> uniformRM' 6 10)
 
-newRandomGif ::
+newRandomScreenEffect :: (LastMember IO effs) => Eff effs Effect
+newRandomScreenEffect = mkRandomScreenEffect <*> newRandomScreenBehaviours 1
+
+newRandomAsset ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
   Eff effs Effect
-newRandomGif =
+newRandomAsset =
   ask @StaticEffectRandomizerListEnv >>= \case
     [] -> return Noop
-    gifs ->
-      AddGif
-        <$> (uniformRM' 0 (length gifs - 1) <&> (gifs !!))
-        <*> (Limited <$> uniformRM' 8 18)
-        <*> ( V3
-                <$> (randomM' <&> (sin . (* 20)))
-                <*> (randomM' <&> (cos . (* 33)))
-                <*> return 0
-            )
-        <*> (uniformRM' 0 3 >>= newRandomBehaviours)
+    assets -> newRandomAssetAny' assets
+
+newRandomAssetAny' :: (LastMember IO effs) => [FilePath] -> Eff effs Effect
+newRandomAssetAny' assets = do
+  AddAsset
+    <$> (uniformRM' 0 (length assets - 1) <&> (assets !!))
+    <*> (Limited <$> uniformRM' 8 18)
+    <*> ( V3
+            <$> (randomM' <&> (sin . (* 20)))
+            <*> (randomM' <&> (cos . (* 33)))
+            <*> return 0
+        )
+    <*> (uniformRM' 0 3 >>= newRandomBehaviours)
 
 newRandomScreenBehaviours :: (LastMember IO effs) => Int -> Eff effs [Behaviour]
 newRandomScreenBehaviours n = do
   shake' <- newRandomShake
-  moveTo' <- moveTo . V3 0 0 <$> ((+ (-1)) . (/ 1) . negate <$> randomM')
+  moveTo' <- newRandomMoveToScreen
   pulse' <- newRandomPulse
-  rotate' <- rotate <$> randomRM' (-50) 50
+  rotate' <- newRandomRotate
   take n . cycle <$> liftIO (shuffle [moveTo', shake', pulse', rotate', convolute, audiophile])
+
+newRandomMoveToScreen :: (LastMember IO effs) => Eff effs Behaviour
+newRandomMoveToScreen = moveTo . V3 0 0 <$> ((+ (-1)) . (/ 1) . negate <$> randomM')
 
 newRandomBehaviours :: (LastMember IO effs) => Int -> Eff effs [Behaviour]
 newRandomBehaviours n = do
@@ -224,20 +250,35 @@ newRandomBehaviours n = do
   moveTo' <- newRandomMoveTo
   pulse' <- newRandomPulse
   circle' <- newRandomCircle
-  rotate' <- rotate <$> randomRM' (-200) 200
+  rotate' <- newRandomRotate
   take n . cycle <$> liftIO (shuffle [shake', moveTo', pulse', rotate', circle', convolute, audiophile])
 
 newRandomShake :: (LastMember IO effs) => Eff effs Behaviour
 newRandomShake = shake <$> randomM' <*> uniformRM' 80 160 <*> randomM'
 
+newRandomConvolute :: (LastMember IO effs) => Eff effs Behaviour
+newRandomConvolute = return convolute
+
+newRandomRotate :: (LastMember IO effs) => Eff effs Behaviour
+newRandomRotate = rotate <$> randomRM' (-50) 50
+
 newRandomMoveTo :: (LastMember IO effs) => Eff effs Behaviour
 newRandomMoveTo = moveTo <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM'))
+
+newRandomPulseScreen :: (LastMember IO effs) => Eff effs Behaviour
+newRandomPulseScreen = pulse 1 (1 / 100) <$> uniformRM' 20 200
 
 newRandomPulse :: (LastMember IO effs) => Eff effs Behaviour
 newRandomPulse = pulse <$> randomM' <*> randomM' <*> ((*) <$> uniformRM' 1 10 <*> randomM')
 
 newRandomCircle :: (LastMember IO effs) => Eff effs Behaviour
-newRandomCircle = circle <$> ((*) <$> randomM' <*> randomRM' 1 3)
+newRandomCircle = circle 1 <$> ((*) <$> randomM' <*> randomRM' 1 3)
+
+newRandomCircleScreen :: (LastMember IO effs) => Eff effs Behaviour
+newRandomCircleScreen = circle (1 / 10) <$> uniformRM' 20 30
+
+newRandomAudiophile :: (LastMember IO effs) => Eff effs Behaviour
+newRandomAudiophile = return audiophile
 
 shuffle :: [a] -> IO [a]
 shuffle xs = do
