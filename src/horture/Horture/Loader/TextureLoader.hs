@@ -13,8 +13,9 @@ import qualified Data.Map.Merge.Strict as Map
 import qualified Data.Map.Strict as Map
 import Foreign.ForeignPtr (withForeignPtr)
 import Graphics.Rendering.OpenGL hiding (get, imageHeight)
-import Horture.Gif
-import Horture.Loader.Asset
+import Horture.Asset
+import Horture.Loader.Asset (Asset (..))
+import qualified Horture.Loader.Asset as Asset
 import Horture.Loader.Config
 import Horture.Loader.Error
 import Horture.Loader.State
@@ -29,12 +30,9 @@ runTextureLoader :: LoaderConfig -> LoaderState -> TextureLoader a -> IO (Either
 runTextureLoader lc ls = flip runStateT ls . flip runReaderT lc . runExceptT
 
 loadGifsGL :: TextureLoader ()
-loadGifsGL = do
-  loadProgram
-  loadGifTextures >>= storeGifs
-  unloadProgram
+loadGifsGL = loadGifTextures >>= storeGifs
 
-storeGifs :: [HortureGif] -> TextureLoader ()
+storeGifs :: [HortureAsset] -> TextureLoader ()
 storeGifs gifs =
   resolvedGifs %= mergeMapsUpdateWithLeft (Map.fromList . map (\g -> (g ^. fullPath, g)) $ gifs)
   where
@@ -47,35 +45,74 @@ storeGifs gifs =
         r
         l
 
-loadProgram :: TextureLoader ()
-loadProgram = asks (^. gifProg) >>= (currentProgram $=) . Just
+withProgram :: Program -> TextureLoader a -> TextureLoader a
+withProgram prog action = do
+  loadProgram prog
+  res <- action
+  unloadProgram
+  return res
+
+loadProgram :: Program -> TextureLoader ()
+loadProgram = (currentProgram $=) . Just
 
 unloadProgram :: TextureLoader ()
 unloadProgram = currentProgram $= Nothing
 
-loadGifTextures :: TextureLoader [HortureGif]
+loadGifTextures :: TextureLoader [HortureAsset]
 loadGifTextures = do
   nu <- asks (^. gifTextureUnit)
-  activeTexture $= nu
-  asks (^. preloadedGifs)
+  iu <- asks (^. imageTextureUnit)
+  imgProg <- asks (^. imageProg)
+  gifProg <- asks (^. gifProg)
+  asks (^. preloadedAssets)
     >>= mapM
-      ( \(fp, AssetGif w h n ds dptr) -> do
-          gifTexObject <- genObjectName @TextureObject
-          textureBinding Texture2DArray $= Just gifTexObject
+      ( \(fp, asset) -> case asset of
+          AssetGif w h n imgType ds dptr -> withProgram gifProg $ do
+            activeTexture $= nu
+            gifTexObject <- genObjectName @TextureObject
+            textureBinding Texture2DArray $= Just gifTexObject
 
-          liftIO $
-            withForeignPtr dptr $ \ptr -> do
-              let pixelData = PixelData RGBA UnsignedByte ptr
-              texImage3D
-                Texture2DArray
-                NoProxy
-                0
-                RGBA8
-                (TextureSize3D (fromIntegral w) (fromIntegral h) (fromIntegral n))
-                0
-                pixelData
-              generateMipmap' Texture2DArray
-          gifTexUni <- asks (^. gifTexUniform)
-          uniform gifTexUni $= nu
-          return $ HortureGif fp (takeBaseName fp) gifTexObject n ds
+            let (oglInternalType, oglPixelType, oglDataType) = resolveImgType imgType
+            liftIO $
+              withForeignPtr dptr $ \ptr -> do
+                let pixelData = PixelData oglPixelType oglDataType ptr
+                texImage3D
+                  Texture2DArray
+                  NoProxy
+                  0
+                  oglInternalType
+                  (TextureSize3D (fromIntegral w) (fromIntegral h) (fromIntegral n))
+                  0
+                  pixelData
+                generateMipmap' Texture2DArray
+            gifTexUni <- asks (^. gifTexUniform)
+            uniform gifTexUni $= nu
+            return $ HortureGif fp (takeBaseName fp) gifTexObject n ds
+          AssetImage w h imgType dptr -> withProgram imgProg $ do
+            activeTexture $= iu
+            imageTexObject <- genObjectName @TextureObject
+            textureBinding Texture2D $= Just imageTexObject
+
+            let (oglInternalType, oglPixelType, oglDataType) = resolveImgType imgType
+            liftIO $
+              withForeignPtr dptr $ \ptr -> do
+                let pixelData = PixelData oglPixelType oglDataType ptr
+                texImage2D
+                  Texture2D
+                  NoProxy
+                  0
+                  oglInternalType
+                  (TextureSize2D (fromIntegral w) (fromIntegral h))
+                  0
+                  pixelData
+                generateMipmap' Texture2D
+            imageTexUni <- asks (^. imageTexUniform)
+            uniform imageTexUni $= iu
+            return $ HortureImage fp (takeBaseName fp) imageTexObject
       )
+
+resolveImgType :: Asset.ImageType -> (PixelInternalFormat, PixelFormat, DataType)
+resolveImgType Asset.RGB8 = (RGB8, RGB, UnsignedByte)
+resolveImgType Asset.RGBA8 = (RGBA8, RGBA, UnsignedByte)
+resolveImgType Asset.RGB16 = (RGB16, RGB, TwoBytes)
+resolveImgType Asset.RGBA16 = (RGBA16, RGBA, TwoBytes)

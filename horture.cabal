@@ -55,7 +55,7 @@ library horture-lib
                             , Horture.Program
                             , Horture.Loader
                             , Horture.Effect
-                            , Horture.Gif
+                            , Horture.Asset
 
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
@@ -104,6 +104,8 @@ library horture-lib
                             , http-types
                             , async
                             , freer-simple
+                            , loop
+                            , vector
                             , synchronous-channels
                             , OpenGL
                             , lens
@@ -155,7 +157,6 @@ library horture-server-lib
                         , twitch-api
                         , text
                         , lens
-                        , servant
                         , servant-client
                         , servant-client-core
                         , http-types

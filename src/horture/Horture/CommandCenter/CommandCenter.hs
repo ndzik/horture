@@ -87,7 +87,7 @@ drawUI cs =
                       withBorderStyle unicode $
                         borderWithLabel
                           (str "Assets")
-                          (availableAssetsUI . _ccGifsList $ cs),
+                          (availableAssetsUI . _ccAssetsList $ cs),
                 vBox
                   [ let mkAttr =
                           if selectedName == LogPort
@@ -161,12 +161,12 @@ appEvent (VtyEvent (EvKey (KChar '\t') [])) =
 appEvent (VtyEvent (EvKey (KChar 'j') [])) = do
   gets (^. ccCursorLocationName) >>= \case
     LogPort -> vScrollBy scrollLogPort (-1)
-    AssetPort -> ccGifsList %= listMoveDown
+    AssetPort -> ccAssetsList %= listMoveDown
     _otherwise -> return ()
 appEvent (VtyEvent (EvKey (KChar 'k') [])) = do
   gets (^. ccCursorLocationName) >>= \case
     LogPort -> vScrollBy scrollLogPort 1
-    AssetPort -> ccGifsList %= listMoveUp
+    AssetPort -> ccAssetsList %= listMoveUp
     _otherwise -> return ()
 appEvent (VtyEvent (EvKey (KChar 's') [])) = gets _ccEventSourceEnabled >>= toggleEventSource
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
@@ -233,11 +233,15 @@ refreshEventSource Nothing = logInfo "No EventSource controller available"
 refreshEventSource (Just pipe) = do
   writeAndHandleResponse pipe InputPurgeAll
 
-  gifs <- gets (^. ccPreloadedGifs)
+  -- assets <- gets (^. ccPreloadedAssets)
   baseCost <- gets (^. ccEventBaseCost)
-  let gifEffs = map (\(fp, _) -> AddGif fp Forever (V3 0 0 0) []) gifs
+  let -- assetEffs = map (\(fp, _) -> AddAsset fp Forever (V3 0 0 0) []) assets
       shaderEffs = map (AddShaderEffect Forever) . enumFrom $ minBound
-      allEffs = gifEffs ++ [AddScreenBehaviour Forever [], AddRapidFire []] ++ shaderEffs
+      behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> o)) . enumFrom $ minBound
+      allEffs =
+        behaviourEffs
+          ++ [AddAsset "" Forever (V3 0 0 0) [], AddScreenBehaviour Forever [], AddRapidFire []]
+          ++ shaderEffs
 
   writeAndHandleResponse pipe . InputEnable . map (\eff -> (toTitle eff, eff, baseCost * effectToCost eff)) $ allEffs
 
@@ -290,7 +294,7 @@ grabHorture = do
     Nothing -> return ()
     Just _ -> throwM AlreadyCapturingWindow
 
-  plg <- gets _ccPreloadedGifs
+  plg <- gets _ccPreloadedAssets
   hurl <- gets _ccHortureUrl
   brickChan <-
     gets (^. ccBrickEventChan) >>= \case
@@ -354,18 +358,18 @@ fetchOrCreateEventSourceTVar = do
 spawnEventSource :: Maybe BaseUrl -> Chan Event -> Chan Text -> EventM Name CommandCenterState ThreadId
 spawnEventSource Nothing evChan _ = do
   timeout <- gets (^. ccTimeout)
-  gifs <- gets (^. ccGifs)
+  assets <- gets (^. ccAssets)
   enabledTVar <- fetchOrCreateEventSourceTVar
-  liftIO . forkIO $ hortureLocalEventSource timeout evChan gifs enabledTVar
+  liftIO . forkIO $ hortureLocalEventSource timeout evChan assets enabledTVar
 spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
   registeredEffs <- gets (^. ccRegisteredEffects)
-  gifEffs <- gets (^. ccGifs)
+  assetEffs <- gets (^. ccAssets)
   uid <- gets (^. ccUserId)
   enabledTVar <- fetchOrCreateEventSourceTVar
   let env =
         StaticEffectRandomizerEnv
           { _registeredEffects = registeredEffs,
-            _gifEffects = gifEffs
+            _assetEffects = assetEffs
           }
   case scheme of
     Https ->
@@ -437,6 +441,12 @@ runDebugCenter = do
   let buildVty = mkVty defaultConfig
   appChan <- newBChan 10
   initialVty <- buildVty
+  let dir = Horture.Config.assetDirectory def
+  assets <- makeAbsolute dir >>= loadDirectory
+  preloadedAssets <-
+    runPreloader (PLC dir) loadAssetsInMemory >>= \case
+      Left _ -> pure []
+      Right plg -> pure plg
   void $
     customMain
       initialVty
@@ -444,9 +454,9 @@ runDebugCenter = do
       (Just appChan)
       app
       def
-        { _ccGifs = [],
-          _ccGifsList = list AssetPort [] 1,
-          _ccPreloadedGifs = [],
+        { _ccAssets = assets,
+          _ccAssetsList = list AssetPort assets 1,
+          _ccPreloadedAssets = preloadedAssets,
           _ccHortureUrl = Nothing,
           _ccUserId = "some_user_id",
           _ccControllerChans = Nothing,
@@ -457,12 +467,12 @@ runDebugCenter = do
 
 runCommandCenter :: Bool -> Config -> IO ()
 runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay) = do
-  gifs <- makeAbsolute dir >>= loadDirectory
-  preloadedGifs <-
-    runPreloader (PLC dir) loadGifsInMemory >>= \case
-      Left err -> print err >> exitFailure
-      Right plg -> return plg
+  assets <- makeAbsolute dir >>= loadDirectory
   appChan <- newBChan 10
+  preloadedAssets <-
+    runPreloader (PLC dir) loadAssetsInMemory >>= \case
+      Left err -> print err >> exitFailure
+      Right pla -> pure pla
   (controllerChans, uid) <-
     if mockMode
       then return (Nothing, "")
@@ -482,9 +492,9 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
       (Just appChan)
       app
       def
-        { _ccGifs = gifs,
-          _ccGifsList = list AssetPort gifs 1,
-          _ccPreloadedGifs = preloadedGifs,
+        { _ccAssets = assets,
+          _ccAssetsList = list AssetPort assets 1,
+          _ccPreloadedAssets = preloadedAssets,
           _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
           _ccUserId = uid,
           _ccControllerChans = controllerChans,
