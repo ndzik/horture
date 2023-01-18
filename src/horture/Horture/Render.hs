@@ -44,7 +44,7 @@ renderAssets dt m = do
   where
     renderAssetType :: (HortureLogger (Horture l hdl)) => (AssetIndex, [ActiveAsset]) -> Horture l hdl ()
     renderAssetType (_, []) = return ()
-    renderAssetType (_, gifsOfSameType@(g : _)) = do
+    renderAssetType (_, assetsOfSameType@(g : _)) = do
       case _afAsset g of
         HortureGif _ _ gifTextureObject numOfImgs delays -> do
           prog <- asks (^. dynamicImageProg . gifProgram . shader)
@@ -55,18 +55,11 @@ renderAssets dt m = do
           currentProgram $= Just prog
           textureBinding Texture2DArray $= Just gifTextureObject
           mapM_
-            ( ( \o -> do
-                  let bs = o ^. behaviours
-                      timeSinceBirth = dt - _birth o
-                      o' = foldr (\(Behaviour _ f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
-                      texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
-                  liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform modelUniform $=)
-                  uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
-                  drawBaseQuad
-              )
-                . _afObject
+            ( drawAsset modelUniform $ \timeSinceBirth ->
+                let texOffset = indexForGif delays (timeSinceBirth * (10 ^ (2 :: Int))) numOfImgs
+                 in uniform gifIndexUniform $= fromIntegral @Int @GLint (fromIntegral texOffset)
             )
-            gifsOfSameType
+            assetsOfSameType
         HortureImage _ _ imageTextureObject -> do
           imgProg <- asks (^. dynamicImageProg . imageProgram . shader)
           modelUniform <- asks (^. dynamicImageProg . imageProgram . modelUniform)
@@ -74,17 +67,18 @@ renderAssets dt m = do
           activeTexture $= imgTextureUnit
           currentProgram $= Just imgProg
           textureBinding Texture2D $= Just imageTextureObject
-          mapM_
-            ( ( \o -> do
-                  let bs = o ^. behaviours
-                      timeSinceBirth = dt - _birth o
-                      o' = foldr (\(Behaviour _ f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
-                  liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform modelUniform $=)
-                  drawBaseQuad
-              )
-                . _afObject
-            )
-            gifsOfSameType
+          mapM_ (drawAsset modelUniform noop) assetsOfSameType
+
+    drawAsset mu act a = do
+      let o = _afObject a
+          bs = o ^. behaviours
+          timeSinceBirth = dt - _birth o
+          o' = foldr (\(Behaviour _ f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
+      liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform mu $=)
+      _ <- act timeSinceBirth
+      drawBaseQuad
+
+    noop _ = return ()
 
 -- | indexForGif returns the index of the image for the associated GIF to be
 -- viewed at the time given since birth in 100th of a second. The index is
