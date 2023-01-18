@@ -441,6 +441,12 @@ runDebugCenter = do
   let buildVty = mkVty defaultConfig
   appChan <- newBChan 10
   initialVty <- buildVty
+  let dir = Horture.Config.assetDirectory def
+  assets <- makeAbsolute dir >>= loadDirectory
+  preloadedAssets <-
+    runPreloader (PLC dir) loadAssetsInMemory >>= \case
+      Left _ -> pure []
+      Right plg -> pure plg
   void $
     customMain
       initialVty
@@ -448,9 +454,9 @@ runDebugCenter = do
       (Just appChan)
       app
       def
-        { _ccAssets = [],
-          _ccAssetsList = list AssetPort [] 1,
-          _ccPreloadedAssets = [],
+        { _ccAssets = assets,
+          _ccAssetsList = list AssetPort assets 1,
+          _ccPreloadedAssets = preloadedAssets,
           _ccHortureUrl = Nothing,
           _ccUserId = "some_user_id",
           _ccControllerChans = Nothing,
@@ -462,11 +468,11 @@ runDebugCenter = do
 runCommandCenter :: Bool -> Config -> IO ()
 runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay) = do
   assets <- makeAbsolute dir >>= loadDirectory
+  appChan <- newBChan 10
   preloadedAssets <-
     runPreloader (PLC dir) loadAssetsInMemory >>= \case
       Left err -> print err >> exitFailure
-      Right plg -> return plg
-  appChan <- newBChan 10
+      Right pla -> pure pla
   (controllerChans, uid) <-
     if mockMode
       then return (Nothing, "")
