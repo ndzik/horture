@@ -17,7 +17,7 @@ import Control.Monad.State
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
 import Foreign
-import Graphics.GLUtil.Camera3D as Util
+import Graphics.GLUtil.Camera3D as Util hiding (orientation)
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale)
 import Horture.Asset
 import Horture.Audio
@@ -34,6 +34,9 @@ import Horture.State
 import Horture.WindowGrabber
 import Linear.Matrix
 import Linear.Projection
+import Linear.Quaternion
+import Linear.V3
+import Linear.Vector
 
 renderAssets :: (HortureLogger (Horture l hdl)) => Double -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
 renderAssets _ m | Map.null m = return ()
@@ -104,13 +107,13 @@ renderBackground dt = do
 
 -- | renderScene renders the captured application window. It is assumed that
 -- the horture texture was already initialized at this point.
-renderScene :: (HortureLogger (Horture l hdl), WindowPoller hdl (Horture l hdl)) => Double -> Scene -> Horture l hdl ()
+renderScene :: (HortureLogger (Horture l hdl), WindowPoller hdl (Horture l hdl)) => Double -> Scene -> Horture l hdl Scene
 renderScene t scene = do
   let s = scene ^. screen
   screenP <- asks (^. screenProg . shader)
   screenTexUnit <- asks (^. screenProg . textureUnit)
   sourceTexObject <- asks (^. screenProg . textureObject)
-  -- Bind texture which we read from.
+  -- Bind texture which we will read from.
   activeTexture $= screenTexUnit
   textureBinding Texture2D $= Just sourceTexObject
   -- Fetch the next frame.
@@ -121,8 +124,9 @@ renderScene t scene = do
   -- Final renderpass rendering scene.
   currentProgram $= Just screenP
   -- Apply behavioural effects to the scene itself.
-  applyScreenBehaviours fft t s >>= trackScreen t >>= projectScreen
+  s <- applyScreenBehaviours fft t s >>= trackScreen t >>= projectScreen
   drawBaseQuad
+  return $ scene {_screen = s}
 
 -- | Applies all shader effects in the current scene to the captured window.
 applySceneShaders :: (HortureLogger (Horture l hdl)) => FFTSnapshot -> Double -> Scene -> Horture l hdl ()
@@ -178,18 +182,24 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
 
 applyScreenBehaviours :: (HortureLogger (Horture l hdl)) => FFTSnapshot -> Double -> Object -> Horture l hdl Object
 applyScreenBehaviours fft t screen = do
-  dim <- gets (^. dim)
   let bs = screen ^. behaviours
-      s = screen & scale .~ scaleForAspectRatio dim
-      s' =
+      s =
         foldr
           ( \(Behaviour _ f, bt, lt) o -> case lt of
               Limited lt -> f fft ((t - bt) / lt) o
               Forever -> f fft t o
           )
-          s
+          screen
           bs
-  return s'
+  resetScreen s
+
+resetScreen :: Object -> Horture l hdl Object
+resetScreen s = do
+  dim <- gets (^. dim)
+  let s' = s & scale %~ \cs -> lerp 0.1 (scaleForAspectRatio dim) cs
+      s'' = s' & orientation %~ \og -> slerp og (Quaternion 1.0 (V3 0 0 0)) 0.1
+      s''' = s'' & pos %~ \op -> lerp 0.1 (V3 0 0 (-1)) op
+  return s'''
 
 trackScreen :: (HortureLogger (Horture l hdl)) => Double -> Object -> Horture l hdl Object
 trackScreen _ screen = do
@@ -201,7 +211,7 @@ trackScreen _ screen = do
   liftIO $ m44ToGLmatrix lookAtM >>= (uniform viewUniform $=)
   return s
 
-projectScreen :: (HortureLogger (Horture l hdl)) => Object -> Horture l hdl ()
+projectScreen :: (HortureLogger (Horture l hdl)) => Object -> Horture l hdl Object
 projectScreen s = do
   modelUniform <- asks (^. screenProg . modelUniform)
   projectionUniform <- asks (^. screenProg . projectionUniform)
@@ -209,3 +219,4 @@ projectScreen s = do
   let proj = projectionForAspectRatio (fromIntegral w, fromIntegral h)
   liftIO $ m44ToGLmatrix proj >>= (uniform projectionUniform $=)
   liftIO $ m44ToGLmatrix (model s) >>= (uniform modelUniform $=)
+  return s

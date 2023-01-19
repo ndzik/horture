@@ -76,7 +76,7 @@ playScene s = do
       dt <- deltaTime startTime
       clearView
       renderBackground dt
-      renderScene dt s
+      s <- renderScene dt s
       renderAssets dt . _assets $ s
       updateView
       s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
