@@ -498,7 +498,7 @@ uniform double time = 0;
 layout(location = 0) out vec4 frag_colour;
 
 vec4 drawBackground(vec2 uv, double time) {
-  vec4 rgba = vec4(255/217, 255/121, 255/206, 1);
+  vec4 rgba = vec4(0.1, 0.3, 0.2, 1);
   float dtoc = distance(uv, vec2(0.5, 0.5));
   return vec4(rgba.x * dtoc, rgba.y * dtoc, rgba.z * dtoc, 1);
 }
