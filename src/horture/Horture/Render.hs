@@ -197,7 +197,7 @@ resetScreen :: Object -> Horture l hdl Object
 resetScreen s = do
   dim <- gets (^. dim)
   let s' = s & scale %~ \cs -> lerp 0.1 (scaleForAspectRatio dim) cs
-      s'' = s' & orientation %~ \og -> slerp og (Quaternion 1.0 (V3 0 0 0)) 0.1
+      s'' = s' & orientation %~ \og -> slerp og (Quaternion 1.0 (V3 0 0 0)) 0.01
       s''' = s'' & pos %~ \op -> lerp 0.1 (V3 0 0 (-1)) op
   return s'''
 

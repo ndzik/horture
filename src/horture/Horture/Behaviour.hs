@@ -72,8 +72,8 @@ moveTo target = Behaviour BehaviourMoveTo $ \_ t o ->
   o & pos %~ lerp (realToFrac t) target
 
 rotate :: Float -> Behaviour
-rotate factor = Behaviour BehaviourRotate $ \_ t o ->
-  o & orientation %~ \oq -> axisAngle (V3 0 0 (-1)) (deg2rad (realToFrac t * factor)) * oq
+rotate factor = Behaviour BehaviourRotate $ \_ _ o ->
+  o & orientation %~ \oq -> axisAngle (V3 0 0 (-1)) (deg2rad factor) * oq
 
 audiophile :: Behaviour
 audiophile = Behaviour BehaviourAudiophile $ \(bass, _, _) _ o ->

@@ -260,7 +260,7 @@ newRandomConvolute :: (LastMember IO effs) => Eff effs Behaviour
 newRandomConvolute = return convolute
 
 newRandomRotate :: (LastMember IO effs) => Eff effs Behaviour
-newRandomRotate = rotate <$> randomRM' (-50) 50
+newRandomRotate = rotate <$> randomRM' (-1) 1
 
 newRandomMoveTo :: (LastMember IO effs) => Eff effs Behaviour
 newRandomMoveTo = moveTo <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM'))
