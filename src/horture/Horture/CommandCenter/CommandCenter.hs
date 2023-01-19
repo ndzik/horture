@@ -462,7 +462,7 @@ runDebugCenter = do
           _ccControllerChans = Nothing,
           _ccBrickEventChan = Just appChan,
           _ccEventBaseCost = 10,
-          _ccTimeout = 1000 * 1000
+          _ccTimeout = 1 * 1000 * 1000
         }
 
 runCommandCenter :: Bool -> Config -> IO ()
