@@ -8,6 +8,7 @@ module Horture.Shader.Shader
     mvpVertexShader,
     displayShader,
     imageFragmentShader,
+    fontFragmentShader,
     barrelShader,
     stitchShader,
     blurVShader,
@@ -78,6 +79,22 @@ void main() {
   frag_colour = texture(gifTexture, vec3(texCoord.x, texCoord.y, index));
 }
     |]
+
+fontFragmentShader :: ByteString
+fontFragmentShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+
+uniform sampler2D fontTexture;
+
+out vec4 frag_colour;
+
+void main() {
+  frag_colour = texture(fontTexture, vec2(texCoord.x, texCoord.y));
+}
+  |]
 
 imageFragmentShader :: ByteString
 imageFragmentShader =

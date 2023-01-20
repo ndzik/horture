@@ -6,7 +6,9 @@ module Horture.Program where
 import Control.Lens.TH
 import Data.Map.Strict
 import Graphics.Rendering.OpenGL
+import qualified Data.Map.Strict as Map
 import Horture.Effect
+import Horture.Character
 import Horture.Asset
 
 -- | HortureScreenProgram contains all OpenGL informations to handle the
@@ -55,6 +57,14 @@ data HortureImageProgram = HortureImageProgram
     _hortureImageProgramModelUniform :: !UniformLocation
   }
   deriving (Show)
+
+data HortureFontProgram = HortureFontProgram
+  { _hortureFontProgramShader :: !Program
+  , _hortureFontProgramTextureUnit :: !TextureUnit
+  , _hortureFontProgramTexUniform :: !UniformLocation
+  , _hortureFontProgramModelUniform :: !UniformLocation
+  , _hortureFontProgramChars :: !(Map.Map Char Character)
+  } deriving (Show)
 
 data HortureBackgroundProgram = HortureBackgroundProgram
   { _hortureBackgroundProgramShader :: !Program,

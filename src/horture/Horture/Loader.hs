@@ -1,6 +1,7 @@
 module Horture.Loader
   ( module TextureLoader,
-  module FilePreloader,
+    module FilePreloader,
+    module FontLoader,
     module Error,
     module Config,
     module State,
@@ -12,3 +13,4 @@ import Horture.Loader.FilePreloader as FilePreloader
 import Horture.Loader.Config as Config
 import Horture.Loader.Error as Error
 import Horture.Loader.State as State
+import Horture.Loader.FontLoader as FontLoader
