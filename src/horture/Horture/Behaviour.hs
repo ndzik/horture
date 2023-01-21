@@ -81,8 +81,8 @@ audiophile = Behaviour BehaviourAudiophile $ \(bass, _, _) _ o ->
    in o & scale
         %~ ( !*!
                V4
-                 (V4 (1 + amplifier * realToFrac bass) 0 0 0)
-                 (V4 0 (1 + amplifier * realToFrac bass) 0 0)
-                 (V4 0 0 (1 + amplifier * realToFrac bass) 0)
+                 (V4 (1 - amplifier * realToFrac bass) 0 0 0)
+                 (V4 0 (1 - amplifier * realToFrac bass) 0 0)
+                 (V4 0 0 (1 - amplifier * realToFrac bass) 0)
                  (V4 0 0 0 1)
            )
