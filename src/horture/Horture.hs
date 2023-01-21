@@ -78,6 +78,7 @@ playScene s = do
       renderBackground dt
       s <- renderScene dt s
       renderAssets dt . _assets $ s
+      renderActiveEffectText s
       updateView
       s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
       go startTime s'
@@ -324,13 +325,16 @@ initHortureFontProgram fp = do
   currentProgram $= Just fontProg
   chars <- runFontLoader fontTextureUnit fontTexUniform (loadFont fp)
   m44ToGLmatrix identityM44 >>= (uniform modelUniform $=)
-  return HortureFontProgram { _hortureFontProgramShader = fontProg
-                            , _hortureFontProgramTextureUnit = fontTextureUnit
-                            , _hortureFontProgramTexUniform = fontTexUniform
-                            , _hortureFontProgramModelUniform = modelUniform
-                            , _hortureFontProgramChars = chars
-                            }
-  where fontTextureUnit = TextureUnit 3
+  return
+    HortureFontProgram
+      { _hortureFontProgramShader = fontProg,
+        _hortureFontProgramTextureUnit = fontTextureUnit,
+        _hortureFontProgramTexUniform = fontTexUniform,
+        _hortureFontProgramModelUniform = modelUniform,
+        _hortureFontProgramChars = chars
+      }
+  where
+    fontTextureUnit = TextureUnit 3
 
 initHortureDynamicImageProgram :: [(FilePath, Asset)] -> IO HortureDynamicImageProgram
 initHortureDynamicImageProgram gifs = do

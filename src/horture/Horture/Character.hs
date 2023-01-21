@@ -18,5 +18,8 @@ data WordObject = WordObject { _wordObjectObject :: !Object
                              , _wordObjectLetters :: ![Character]
                              } deriving (Show)
 
+characterHeight :: Int
+characterHeight = 24
+
 makeFields ''Character
 makeFields ''WordObject

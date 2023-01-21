@@ -92,8 +92,9 @@ uniform sampler2D fontTexture;
 out vec4 frag_colour;
 
 void main() {
-  vec4 sampled = vec4(1.0, 1.0, 1.0, texture(fontTexture, texCoord).r);
-  frag_colour = vec4(1.0, 1.0, 1.0, 1.0) * sampled;
+  float inner = texture(fontTexture, texCoord).r;
+  float outline = texture(fontTexture, texCoord).g;
+  frag_colour = vec4(inner-outline, inner-outline, inner-outline, inner+outline);
 }
   |]
 

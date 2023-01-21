@@ -5,6 +5,7 @@ module Horture.Render
   ( renderAssets,
     renderBackground,
     renderText,
+    renderActiveEffectText,
     renderScene,
     indexForGif,
   )
@@ -12,12 +13,12 @@ where
 
 import Codec.Picture.Gif
 import Control.Lens
-import Control.Loop
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Bits
 import Data.Default
+import Data.Text (Text, unpack)
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
@@ -187,6 +188,30 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
     setLifetimeUniform (Limited s) uni = uniform uni $= s
     setLifetimeUniform Forever uni = uniform uni $= (0 :: Double)
 
+renderActiveEffectText :: Scene -> Horture l hdl ()
+renderActiveEffectText s = do
+  let bs = foldr (\(bh, _, _) -> incrementOrInsert (toTitle bh) []) [] $ s ^. screen . behaviours
+      ss = foldr (\(sh, _, _) -> incrementOrInsert (toTitle sh) []) [] $ s ^. shaders
+      effs = case ("RandomGifOrImage", Map.size (_assets s)) of
+               (_, 0) -> bs ++ ss
+               as -> as:bs ++ ss
+  renderEffectList effs
+    where incrementOrInsert :: Text -> [(Text, Int)] -> [(Text, Int)] -> [(Text, Int)]
+          incrementOrInsert sh ds [] = (sh, 1) : ds
+          incrementOrInsert sh  ds ((fs, c):r)
+                    | sh == fs = reverse r ++ (sh, c+1):ds
+                    | otherwise = incrementOrInsert sh ((fs, c):ds) r
+
+renderEffectList :: [(Text, Int)] -> Horture l hdl ()
+renderEffectList effs = do
+  (_, top) <- gets (^. dim)
+  let height = characterHeight + 10
+  go top height effs 0
+    where go _ _ [] _ = return ()
+          go top height ((eff, c):rs) l = do
+            renderText (show c ++ " x " ++ unpack eff) (20, top - 20 - height * l)
+            go top height rs (l+1)
+
 renderText :: String -> (Int, Int) -> Horture l hdl ()
 renderText txt posi = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject
@@ -204,7 +229,7 @@ renderText txt posi = do
       let renderCharacter :: Int -> Character -> Horture l hdl Int
           renderCharacter adv ch = do
             textureBinding Texture2D $= Just (ch ^. textureID)
-            dim@(_, screenH) <- gets (^. dim)
+            dim@(screenY, screenH) <- gets (^. dim)
             let xpos = adv + x + ch ^. bearing . _x
                 charSizeY = ch ^. size . _y
                 ypos = y - (charSizeY - ch ^. bearing . _y)
@@ -213,16 +238,17 @@ renderText txt posi = do
                 aspectRatio = fromIntegral w / fromIntegral h
                 (realX, realY) = toScreenCoordinates (xpos, ypos) dim
                 trans = mkTransformation @Float (word ^. object . orientation) (V3 realX realY 0)
-                scalingFactor = fromIntegral screenH / fromIntegral h
+                scalingFactorY = fromIntegral screenH / fromIntegral h
+                scalingFactorX = fromIntegral screenY / fromIntegral w
                 scale =
                   V4
-                    (V4 (aspectRatio / scalingFactor) 0 0 0)
-                    (V4 0 (1 / scalingFactor) 0 0)
+                    (V4 (aspectRatio / scalingFactorX) 0 0 0)
+                    (V4 0 (1 / scalingFactorY) 0 0)
                     (V4 0 0 1 0)
                     (V4 0 0 0 1)
             liftIO $ m44ToGLmatrix (trans !*! scale) >>= (uniform mu $=)
             drawBaseQuad
-            return $ adv + w + shiftR (ch ^. advance) 6
+            return $ adv + shiftR (ch ^. advance) 6
       foldM_ renderCharacter 0 $ word ^. letters
     toScreenCoordinates :: (Int, Int) -> (Int, Int) -> (Float, Float)
     toScreenCoordinates (x, y) (w, h) =
