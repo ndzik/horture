@@ -84,6 +84,7 @@ data HortureShaderProgram = HortureShaderProgram
 
 makeFields ''HortureScreenProgram
 makeFields ''HortureDynamicImageProgram
+makeFields ''HortureFontProgram
 makeFields ''HortureImageProgram
 makeFields ''HortureGifProgram
 makeFields ''HortureShaderProgram

@@ -11,17 +11,22 @@ import Foreign.Storable
 import qualified Data.Map.Strict as Map
 import Horture.Character
 
-newtype FontLoaderEnv = FontLoaderEnv { _fontLoaderEnvTextureUnit :: TextureUnit }
+data FontLoaderEnv = FontLoaderEnv { _fontLoaderEnvTextureUnit :: !TextureUnit
+                                   , _fontLoaderEnvTexUni :: !UniformLocation
+                                   }
 
 makeLenses ''FontLoaderEnv
 
 type FontLoader a = ReaderT FontLoaderEnv IO a
 
-runFontLoader :: TextureUnit -> FontLoader a -> IO a
-runFontLoader tu act = runReaderT act (FontLoaderEnv tu)
+runFontLoader :: TextureUnit -> UniformLocation -> FontLoader a -> IO a
+runFontLoader tu tuni act = runReaderT act (FontLoaderEnv tu tuni)
 
 loadFont :: FilePath -> FontLoader (Map.Map Char Character)
 loadFont fp = do
+  tu <- asks _fontLoaderEnvTextureUnit
+  fontTexUni <- asks _fontLoaderEnvTexUni
+  activeTexture $= tu
   liftIO $ ft_With_FreeType $ \lib ->
       ft_With_Face lib fp 0 $ \face -> do
         -- Set the pixel font size we'd like to extract. 0 width let's the
@@ -53,7 +58,8 @@ loadFont fp = do
               textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
               textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
               textureFilter Texture2D $= ((Linear', Nothing), Linear')
-              -- TODO: Might need genmipmap' here?
+              liftIO $ generateMipmap' Texture2D
+              uniform fontTexUni $= tu
               return (toEnum . fromIntegral $ char, Character {
                                       _characterTextureID = to
                                       , _characterSize = fromIntegral <$> V2 chWidth chHeight

@@ -173,7 +173,7 @@ shutdown win = do
 initResources ::
   (GLsizei, GLsizei) ->
   [(FilePath, Asset)] ->
-  IO (HortureScreenProgram, HortureDynamicImageProgram, HortureBackgroundProgram)
+  IO (HortureScreenProgram, HortureDynamicImageProgram, HortureBackgroundProgram, HortureFontProgram)
 initResources (w, h) gifs = do
   -- Initialize OpenGL primitives.
   initBaseQuad
@@ -182,12 +182,12 @@ initResources (w, h) gifs = do
   effs <- initShaderEffects
   hsp <- initHortureScreenProgram (w, h) effs
   dip <- initHortureDynamicImageProgram gifs
-  !ftp <- initHortureFontProgram "/home/omega/.local/share/fonts/Fantasque-Sans-Mono-Nerd-Font.ttf"
+  ftp <- initHortureFontProgram "/home/omega/.local/share/fonts/Fantasque-Sans-Mono-Nerd-Font.ttf"
   hbp <- initHortureBackgroundProgram
   -- Generic OpenGL configuration.
   blend $= Enabled
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
-  return (hsp, dip, hbp)
+  return (hsp, dip, hbp, ftp)
 
 initShaderEffects :: IO (Map.Map ShaderEffect [HortureShaderProgram])
 initShaderEffects = do
@@ -316,13 +316,13 @@ initBaseQuad = do
 
 initHortureFontProgram :: FilePath -> IO HortureFontProgram
 initHortureFontProgram fp = do
-  chars <- runFontLoader fontTextureUnit (loadFont fp)
   vpg <- loadShaderBS "fontvertex.shader" VertexShader gifVertexShader
   fpg <- loadShaderBS "fontfragment.shader" FragmentShader fontFragmentShader
   fontProg <- linkShaderProgram [vpg, fpg]
   modelUniform <- uniformLocation fontProg "model"
   fontTexUniform <- uniformLocation fontProg "fontTexture"
   currentProgram $= Just fontProg
+  chars <- runFontLoader fontTextureUnit fontTexUniform (loadFont fp)
   m44ToGLmatrix identityM44 >>= (uniform modelUniform $=)
   return HortureFontProgram { _hortureFontProgramShader = fontProg
                             , _hortureFontProgramTextureUnit = fontTextureUnit

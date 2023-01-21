@@ -4,6 +4,7 @@
 module Horture.Render
   ( renderAssets,
     renderBackground,
+    renderText,
     renderScene,
     indexForGif,
   )
@@ -11,17 +12,22 @@ where
 
 import Codec.Picture.Gif
 import Control.Lens
+import Control.Loop
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Bits
+import Data.Default
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
-import Foreign
+import Data.Maybe (mapMaybe)
+import Foreign hiding (void)
 import Graphics.GLUtil.Camera3D as Util hiding (orientation)
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale)
 import Horture.Asset
 import Horture.Audio
 import Horture.Audio.PipeWire ()
+import Horture.Character
 import Horture.Effect
 import Horture.Error (HortureError (HE))
 import Horture.GL
@@ -36,6 +42,7 @@ import Linear.Matrix
 import Linear.Projection
 import Linear.Quaternion
 import Linear.V3
+import Linear.V4
 import Linear.Vector
 
 renderAssets :: (HortureLogger (Horture l hdl)) => Double -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
@@ -179,6 +186,51 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
       return (w, r)
     setLifetimeUniform (Limited s) uni = uniform uni $= s
     setLifetimeUniform Forever uni = uniform uni $= (0 :: Double)
+
+renderText :: String -> (Int, Int) -> Horture l hdl ()
+renderText txt posi = do
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
+  fp <- asks (^. fontProg)
+  let mu = fp ^. modelUniform
+      tu = fp ^. textureUnit
+      chs = fp ^. chars
+  let word = WordObject def $ mapMaybe (`Map.lookup` chs) txt
+  activeTexture $= tu
+  currentProgram $= Just (fp ^. shader)
+  renderWord mu posi word
+  where
+    renderWord :: UniformLocation -> (Int, Int) -> WordObject -> Horture l hdl ()
+    renderWord mu (x, y) word = do
+      let renderCharacter :: Int -> Character -> Horture l hdl Int
+          renderCharacter adv ch = do
+            textureBinding Texture2D $= Just (ch ^. textureID)
+            dim@(_, screenH) <- gets (^. dim)
+            let xpos = adv + x + ch ^. bearing . _x
+                charSizeY = ch ^. size . _y
+                ypos = y - (charSizeY - ch ^. bearing . _y)
+                w = ch ^. size . _x
+                h = ch ^. size . _y
+                aspectRatio = fromIntegral w / fromIntegral h
+                (realX, realY) = toScreenCoordinates (xpos, ypos) dim
+                trans = mkTransformation @Float (word ^. object . orientation) (V3 realX realY 0)
+                scalingFactor = fromIntegral screenH / fromIntegral h
+                scale =
+                  V4
+                    (V4 (aspectRatio / scalingFactor) 0 0 0)
+                    (V4 0 (1 / scalingFactor) 0 0)
+                    (V4 0 0 1 0)
+                    (V4 0 0 0 1)
+            liftIO $ m44ToGLmatrix (trans !*! scale) >>= (uniform mu $=)
+            drawBaseQuad
+            return $ adv + w + shiftR (ch ^. advance) 6
+      foldM_ renderCharacter 0 $ word ^. letters
+    toScreenCoordinates :: (Int, Int) -> (Int, Int) -> (Float, Float)
+    toScreenCoordinates (x, y) (w, h) =
+      let halfW = fromIntegral w / 2
+          halfH = fromIntegral h / 2
+          realX = fromIntegral x
+          realY = fromIntegral y
+       in ((realX - halfW) / halfW, (realY - halfH) / halfH)
 
 applyScreenBehaviours :: (HortureLogger (Horture l hdl)) => FFTSnapshot -> Double -> Object -> Horture l hdl Object
 applyScreenBehaviours fft t screen = do

@@ -33,6 +33,7 @@ data Object = Object
     -- birth.
     _behaviours :: ![(Behaviour, Double, Lifetime)]
   }
+  deriving (Show)
 
 instance Default Object where
   def =
@@ -79,5 +80,8 @@ data BehaviourType
 -- decides how this object will be displayed during its lifetime depending on
 -- how long it already exists.
 data Behaviour = Behaviour !BehaviourType !(FFTSnapshot -> Double -> Object -> Object)
+
+instance Show Behaviour where
+  show (Behaviour bt _) = show bt
 
 makeLenses ''Object
