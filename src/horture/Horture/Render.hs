@@ -231,10 +231,9 @@ renderText txt posi = do
             textureBinding Texture2D $= Just (ch ^. textureID)
             dim@(screenY, screenH) <- gets (^. dim)
             let xpos = adv + x + ch ^. bearing . _x
-                charSizeY = ch ^. size . _y
-                ypos = y - (charSizeY - ch ^. bearing . _y)
                 w = ch ^. size . _x
                 h = ch ^. size . _y
+                ypos = y - (h - ch ^. bearing . _y)
                 aspectRatio = fromIntegral w / fromIntegral h
                 (realX, realY) = toScreenCoordinates (xpos, ypos) dim
                 trans = mkTransformation @Float (word ^. object . orientation) (V3 realX realY 0)
