@@ -192,7 +192,7 @@ renderActiveEffectText :: Scene -> Horture l hdl ()
 renderActiveEffectText s = do
   let bs = foldr (\(bh, _, _) -> incrementOrInsert (toTitle bh) []) [] $ s ^. screen . behaviours
       ss = foldr (\(sh, _, _) -> incrementOrInsert (toTitle sh) []) [] $ s ^. shaders
-      effs = case ("RandomGifOrImage", Map.size (_assets s)) of
+      effs = case ("RandomGifOrImage", sum $ Map.map length (_assets s)) of
                (_, 0) -> bs ++ ss
                as -> as:bs ++ ss
   renderEffectList effs
