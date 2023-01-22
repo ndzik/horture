@@ -32,7 +32,6 @@ effectToCost (AddScreenBehaviour _ [Behaviour BehaviourShake _]) = 3
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourRotate _]) = 4
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourMoveTo _]) = 5
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourCircle _]) = 5
-effectToCost (AddScreenBehaviour _ [Behaviour BehaviourConvolute _]) = 8
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourPulse _]) = 3
 effectToCost (AddScreenBehaviour _ _) = 2
 effectToCost AddShaderEffect {} = 4
@@ -80,7 +79,6 @@ instance Entitled BehaviourType where
   toTitle BehaviourRotate = "rotateIt"
   toTitle BehaviourMoveTo = "moveIt"
   toTitle BehaviourCircle = "circleIt"
-  toTitle BehaviourConvolute = "whoEvenKnowsIt"
   toTitle BehaviourPulse = "pulseIt"
 
 instance Entitled ShaderEffect where

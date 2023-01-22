@@ -72,7 +72,6 @@ data BehaviourType
   | BehaviourRotate
   | BehaviourMoveTo
   | BehaviourCircle
-  | BehaviourConvolute
   | BehaviourPulse
   deriving (Show, Enum, Bounded)
 

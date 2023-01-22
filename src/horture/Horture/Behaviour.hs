@@ -4,7 +4,6 @@
 -- object is displayed during its lifetime.
 module Horture.Behaviour
   ( pulse,
-    convolute,
     circle,
     shake,
     moveTo,
@@ -31,19 +30,6 @@ pulse min amplifier frequency = Behaviour BehaviourPulse $ \_ t o ->
              (V4 (min + amplifier * sin (frequency * realToFrac t)) 0 0 0)
              (V4 0 (min + amplifier * sin (frequency * realToFrac t)) 0 0)
              (V4 0 0 (min + amplifier * sin (frequency * realToFrac t)) 0)
-             (V4 0 0 0 1)
-       )
-
--- | convolute applies a convolution effect where an object appears to be
--- wrapping up into itself.
-convolute :: Behaviour
-convolute = Behaviour BehaviourConvolute $ \_ t o ->
-  o & scale
-    %~ ( !+!
-           V4
-             (V4 (0.5 * (sin . realToFrac $ t)) 0 0 0)
-             (V4 0 (0.5 * (cos . realToFrac $ t)) 0 0)
-             (V4 0 0 (0.5 * (sin . realToFrac $ t)) 0)
              (V4 0 0 0 1)
        )
 
