@@ -238,7 +238,8 @@ newRandomScreenBehaviours n = do
   moveTo' <- newRandomMoveToScreen
   pulse' <- newRandomPulseScreen
   rotate' <- newRandomRotate
-  take n . cycle <$> liftIO (shuffle [moveTo', shake', pulse', rotate', audiophile])
+  circle' <- newRandomCircleScreen
+  take n . cycle <$> liftIO (shuffle [moveTo', shake', pulse', rotate', circle', audiophile])
 
 newRandomMoveToScreen :: (LastMember IO effs) => Eff effs Behaviour
 newRandomMoveToScreen = moveTo . V3 0 0 <$> ((+ (-1)) . (/ 1) . negate <$> randomM')

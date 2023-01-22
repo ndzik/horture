@@ -16,15 +16,15 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.Bits
+import Data.Bits hiding (rotate)
 import Data.Default
 import Data.Text (Text, unpack)
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
-import Foreign hiding (void)
+import Foreign hiding (void, rotate)
 import Graphics.GLUtil.Camera3D as Util hiding (orientation)
-import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale)
+import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale, rotate)
 import Horture.Asset
 import Horture.Audio
 import Horture.Audio.PipeWire ()
@@ -283,9 +283,10 @@ trackScreen :: (HortureLogger (Horture l hdl)) => Double -> Object -> Horture l 
 trackScreen _ screen = do
   viewUniform <- asks (^. screenProg . viewUniform)
   let s = screen
-      (Camera _ up _ _ camPos) = Util.fpsCamera @Float
+      (Camera fwd up _ curOrientation camPos) = Util.fpsCamera @Float
       screenPos = s ^. pos
-      lookAtM = lookAt camPos screenPos up
+      curScreenPos = rotate curOrientation fwd
+      lookAtM = lookAt camPos (lerp 0.3 screenPos curScreenPos) up
   liftIO $ m44ToGLmatrix lookAtM >>= (uniform viewUniform $=)
   return s
 
