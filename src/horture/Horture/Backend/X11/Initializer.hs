@@ -110,7 +110,8 @@ initialize startScene gifs logChan evChan = do
   liftIO $ GLFW.setWindowSize glW (fromIntegral . wa_width $ attr) (fromIntegral . wa_height $ attr)
   liftIO $ GLFW.setWindowPos glW (fromIntegral . wa_x $ attr) (fromIntegral . wa_y $ attr)
 
-  (hsp, dip, hbp, ftp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) gifs
+  mFont <- asks (^. defaultFont)
+  (hsp, dip, hbp, ftp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) gifs mFont
   storage <- liftIO $ newTVarIO Nothing
   let scene = startScene {_assetCache = dip ^. assets}
       hs =

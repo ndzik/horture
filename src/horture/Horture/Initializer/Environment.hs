@@ -5,6 +5,7 @@ module Horture.Initializer.Environment
   ( HortureInitializerEnvironment (..),
     logChan,
     grabbedWin,
+    defaultFont,
   )
 where
 
@@ -15,7 +16,8 @@ import Data.Text
 
 data HortureInitializerEnvironment = HortureInitializerEnvironment
   { _hortureInitializerEnvironmentLogChan :: !(Chan Text),
-    _hortureInitializerEnvironmentGrabbedWin :: !(MVar (Maybe String))
+    _hortureInitializerEnvironmentGrabbedWin :: !(MVar (Maybe String)),
+    _hortureInitializerEnvironmentDefaultFont :: !(Maybe FilePath)
   }
 
 makeFields ''HortureInitializerEnvironment

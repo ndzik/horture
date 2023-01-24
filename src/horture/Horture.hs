@@ -174,8 +174,9 @@ shutdown win = do
 initResources ::
   (GLsizei, GLsizei) ->
   [(FilePath, Asset)] ->
+  Maybe FilePath ->
   IO (HortureScreenProgram, HortureDynamicImageProgram, HortureBackgroundProgram, HortureFontProgram)
-initResources (w, h) gifs = do
+initResources (w, h) gifs mFont = do
   -- Initialize OpenGL primitives.
   initBaseQuad
   -- Set color stuff.
@@ -183,7 +184,7 @@ initResources (w, h) gifs = do
   effs <- initShaderEffects
   hsp <- initHortureScreenProgram (w, h) effs
   dip <- initHortureDynamicImageProgram gifs
-  ftp <- initHortureFontProgram "/home/omega/.local/share/fonts/Fantasque-Sans-Mono-Nerd-Font.ttf"
+  ftp <- initHortureFontProgram mFont
   hbp <- initHortureBackgroundProgram
   -- Generic OpenGL configuration.
   blend $= Enabled
@@ -315,15 +316,17 @@ initBaseQuad = do
   bindBuffer ElementArrayBuffer $= Just veo
   withArray vertsElement $ \ptr -> bufferData ElementArrayBuffer $= (fromIntegral vertsElementSize, ptr, StaticDraw)
 
-initHortureFontProgram :: FilePath -> IO HortureFontProgram
-initHortureFontProgram fp = do
+initHortureFontProgram :: Maybe FilePath -> IO HortureFontProgram
+initHortureFontProgram mFont = do
   vpg <- loadShaderBS "fontvertex.shader" VertexShader gifVertexShader
   fpg <- loadShaderBS "fontfragment.shader" FragmentShader fontFragmentShader
   fontProg <- linkShaderProgram [vpg, fpg]
   modelUniform <- uniformLocation fontProg "model"
   fontTexUniform <- uniformLocation fontProg "fontTexture"
   currentProgram $= Just fontProg
-  chars <- runFontLoader fontTextureUnit fontTexUniform (loadFont fp)
+  glyphs <- case mFont of
+    Just font -> runFontLoader fontTextureUnit fontTexUniform (loadFont font)
+    Nothing -> return Map.empty
   m44ToGLmatrix identityM44 >>= (uniform modelUniform $=)
   return
     HortureFontProgram
@@ -331,7 +334,7 @@ initHortureFontProgram fp = do
         _hortureFontProgramTextureUnit = fontTextureUnit,
         _hortureFontProgramTexUniform = fontTexUniform,
         _hortureFontProgramModelUniform = modelUniform,
-        _hortureFontProgramChars = chars
+        _hortureFontProgramChars = glyphs
       }
   where
     fontTextureUnit = TextureUnit 3

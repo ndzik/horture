@@ -309,10 +309,12 @@ grabHorture = do
   -- Horture rendering thread. Does not have to be externally killed, because
   -- we will try to end it cooperatively by issuing an external exit command.
   mv <- liftIO newEmptyMVar
+  mDefaultFont <- gets (^. ccDefaultFont)
   let env =
         HortureInitializerEnvironment
           { _hortureInitializerEnvironmentLogChan = logChan,
-            _hortureInitializerEnvironmentGrabbedWin = mv
+            _hortureInitializerEnvironmentGrabbedWin = mv,
+            _hortureInitializerEnvironmentDefaultFont = mDefaultFont
           }
       logError = HL.withColog Colog.Error (logActionChan logChan)
   void . liftIO . forkOS $ do
@@ -466,7 +468,7 @@ runDebugCenter = do
         }
 
 runCommandCenter :: Bool -> Config -> IO ()
-runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay) = do
+runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay mDefaultFont) = do
   assets <- makeAbsolute dir >>= loadDirectory
   appChan <- newBChan 10
   preloadedAssets <-
@@ -497,6 +499,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
           _ccPreloadedAssets = preloadedAssets,
           _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
           _ccUserId = uid,
+          _ccDefaultFont = mDefaultFont,
           _ccControllerChans = controllerChans,
           _ccBrickEventChan = Just appChan,
           _ccEventBaseCost = baseC,
