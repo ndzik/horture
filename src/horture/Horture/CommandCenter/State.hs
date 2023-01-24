@@ -18,6 +18,7 @@ module Horture.CommandCenter.State
     ccEventBaseCost,
     ccCursorLocationName,
     ccEventSourceEnabled,
+    ccDefaultFont,
     Name (..),
   )
 where
@@ -55,6 +56,7 @@ data CommandCenterState = CCState
     _ccHortureUrl :: !(Maybe BaseUrl),
     _ccEventSourceEnabled :: !(Maybe (TVar Bool)),
     _ccUserId :: !Text,
+    _ccDefaultFont :: !(Maybe FilePath),
     _ccPreloadedAssets :: ![(FilePath, Asset)],
     _ccRegisteredEffects :: !(Map.Map Text (Text, Effect)),
     _ccTIDsToClean :: ![ThreadId],
@@ -73,6 +75,7 @@ instance Default CommandCenterState where
         _ccCapturedWin = Nothing,
         _ccControllerChans = Nothing,
         _ccHortureUrl = Nothing,
+        _ccDefaultFont = Nothing,
         _ccRegisteredEffects = Map.empty,
         _ccUserId = "",
         _ccEventSourceEnabled = Nothing,

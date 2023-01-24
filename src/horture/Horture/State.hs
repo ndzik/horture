@@ -16,6 +16,7 @@ data HortureStatic = HortureStatic
   { _screenProg :: !HortureScreenProgram,
     _dynamicImageProg :: !HortureDynamicImageProgram,
     _backgroundProg :: !HortureBackgroundProgram,
+    _fontProg :: !HortureFontProgram,
     _eventChan :: !(Chan Event),
     _logChan :: !(Maybe (Chan Text)),
     _glWin :: !GLFW.Window,

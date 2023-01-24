@@ -233,10 +233,8 @@ refreshEventSource Nothing = logInfo "No EventSource controller available"
 refreshEventSource (Just pipe) = do
   writeAndHandleResponse pipe InputPurgeAll
 
-  -- assets <- gets (^. ccPreloadedAssets)
   baseCost <- gets (^. ccEventBaseCost)
-  let -- assetEffs = map (\(fp, _) -> AddAsset fp Forever (V3 0 0 0) []) assets
-      shaderEffs = map (AddShaderEffect Forever) . enumFrom $ minBound
+  let shaderEffs = map (AddShaderEffect Forever) . enumFrom $ minBound
       behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> o)) . enumFrom $ minBound
       allEffs =
         behaviourEffs
@@ -309,10 +307,12 @@ grabHorture = do
   -- Horture rendering thread. Does not have to be externally killed, because
   -- we will try to end it cooperatively by issuing an external exit command.
   mv <- liftIO newEmptyMVar
+  mDefaultFont <- gets (^. ccDefaultFont)
   let env =
         HortureInitializerEnvironment
           { _hortureInitializerEnvironmentLogChan = logChan,
-            _hortureInitializerEnvironmentGrabbedWin = mv
+            _hortureInitializerEnvironmentGrabbedWin = mv,
+            _hortureInitializerEnvironmentDefaultFont = mDefaultFont
           }
       logError = HL.withColog Colog.Error (logActionChan logChan)
   void . liftIO . forkOS $ do
@@ -436,8 +436,8 @@ handleCCExceptions EventSourceUnavailable = logError "Source of horture events n
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
-runDebugCenter :: IO ()
-runDebugCenter = do
+runDebugCenter :: Maybe Config -> IO ()
+runDebugCenter mcfg = do
   let buildVty = mkVty defaultConfig
   appChan <- newBChan 10
   initialVty <- buildVty
@@ -447,6 +447,9 @@ runDebugCenter = do
     runPreloader (PLC dir) loadAssetsInMemory >>= \case
       Left _ -> pure []
       Right plg -> pure plg
+  mFont <- case mcfg of
+             Just cfg -> return $ Horture.Config.mDefaultFont cfg
+             Nothing -> return Nothing
   void $
     customMain
       initialVty
@@ -457,6 +460,7 @@ runDebugCenter = do
         { _ccAssets = assets,
           _ccAssetsList = list AssetPort assets 1,
           _ccPreloadedAssets = preloadedAssets,
+          _ccDefaultFont = mFont,
           _ccHortureUrl = Nothing,
           _ccUserId = "some_user_id",
           _ccControllerChans = Nothing,
@@ -466,7 +470,7 @@ runDebugCenter = do
         }
 
 runCommandCenter :: Bool -> Config -> IO ()
-runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay) = do
+runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay mDefaultFont) = do
   assets <- makeAbsolute dir >>= loadDirectory
   appChan <- newBChan 10
   preloadedAssets <-
@@ -497,6 +501,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
           _ccPreloadedAssets = preloadedAssets,
           _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
           _ccUserId = uid,
+          _ccDefaultFont = mDefaultFont,
           _ccControllerChans = controllerChans,
           _ccBrickEventChan = Just appChan,
           _ccEventBaseCost = baseC,

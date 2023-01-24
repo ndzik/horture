@@ -4,6 +4,8 @@
 module Horture.Render
   ( renderAssets,
     renderBackground,
+    renderText,
+    renderActiveEffectText,
     renderScene,
     indexForGif,
   )
@@ -14,14 +16,19 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Bits hiding (rotate)
+import Data.Default
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
-import Foreign
+import Data.Maybe (mapMaybe)
+import Data.Text (Text, unpack)
+import Foreign hiding (rotate, void)
 import Graphics.GLUtil.Camera3D as Util hiding (orientation)
-import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale)
+import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, rotate, scale)
 import Horture.Asset
 import Horture.Audio
 import Horture.Audio.PipeWire ()
+import Horture.Character
 import Horture.Effect
 import Horture.Error (HortureError (HE))
 import Horture.GL
@@ -32,10 +39,12 @@ import Horture.Program
 import Horture.Scene
 import Horture.State
 import Horture.WindowGrabber
+import System.Random.Stateful (randomM, globalStdGen)
 import Linear.Matrix
 import Linear.Projection
 import Linear.Quaternion
 import Linear.V3
+import Linear.V4
 import Linear.Vector
 
 renderAssets :: (HortureLogger (Horture l hdl)) => Double -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
@@ -171,6 +180,7 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
       setLifetimeUniform lt (prog ^. lifetimeUniform)
       liftIO . withArray [bass, mids, highs] $ uniformv (prog ^. frequenciesUniform) 3
       uniform (prog ^. dtUniform) $= t - birth
+      newRandomNumber >>= (uniform (prog ^. randomUniform) $=)
       drawBaseQuad
       genMipMap
       currentProgram $= Nothing
@@ -179,6 +189,87 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
       return (w, r)
     setLifetimeUniform (Limited s) uni = uniform uni $= s
     setLifetimeUniform Forever uni = uniform uni $= (0 :: Double)
+
+newRandomNumber :: Horture l hdl Double
+newRandomNumber = liftIO $ randomM globalStdGen
+
+renderActiveEffectText :: (HortureLogger (Horture l hdl)) => Scene -> Horture l hdl ()
+renderActiveEffectText s = do
+  let bs = foldr (\(bh, _, _) -> incrementOrInsert (toTitle bh) []) [] $ s ^. screen . behaviours
+      ss = foldr (\(sh, _, _) -> incrementOrInsert (toTitle sh) []) [] $ s ^. shaders
+      effs = case ("RandomGifOrImage", sum $ Map.map length (_assets s)) of
+        (_, 0) -> bs ++ ss
+        as -> as : bs ++ ss
+  renderEffectList effs
+  where
+    incrementOrInsert :: Text -> [(Text, Int)] -> [(Text, Int)] -> [(Text, Int)]
+    incrementOrInsert sh ds [] = (sh, 1) : ds
+    incrementOrInsert sh ds ((fs, c) : r)
+      | sh == fs = reverse r ++ (sh, c + 1) : ds
+      | otherwise = incrementOrInsert sh ((fs, c) : ds) r
+
+renderEffectList :: (HortureLogger (Horture l hdl)) => [(Text, Int)] -> Horture l hdl ()
+renderEffectList effs = do
+  (_, top) <- gets (^. dim)
+  let height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
+  go top height effs 0
+  where
+    go _ _ [] _ = return ()
+    go top height ((eff, c) : rs) l = do
+      renderText (show c ++ "x " ++ unpack eff) (x, top - height - height * l)
+      go top height rs (l + 1)
+    x = 10
+    lineSpacing = round $ 10 * baseScale
+
+renderText :: (HortureLogger (Horture l hdl)) => String -> (Int, Int) -> Horture l hdl ()
+renderText txt posi = do
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
+  fp <- asks (^. fontProg)
+  let mu = fp ^. modelUniform
+      tu = fp ^. textureUnit
+      chs = fp ^. chars
+  let word = WordObject def $ mapMaybe (`Map.lookup` chs) txt
+  activeTexture $= tu
+  currentProgram $= Just (fp ^. shader)
+  renderWord mu posi word
+  where
+    renderWord :: (HortureLogger (Horture l hdl)) => UniformLocation -> (Int, Int) -> WordObject -> Horture l hdl ()
+    renderWord mu (x, y) word = do
+      let renderCharacter :: (HortureLogger (Horture l hdl)) => Int -> Character -> Horture l hdl Int
+          renderCharacter adv ch = do
+            textureBinding Texture2D $= Just (ch ^. textureID)
+            (screenW, screenH) <- gets (^. dim)
+            let bearingX = fromIntegral (ch ^. bearing . _x) * baseScale
+                bearingY = round $ fromIntegral (ch ^. bearing . _y) * baseScale
+                w = round $ fromIntegral (ch ^. size . _x) * baseScale
+                h = round $ fromIntegral (ch ^. size . _y) * baseScale
+                xOffset = round bearingX
+                yOffset = fromIntegral (h - bearingY)
+                x' = adv + xOffset + (w `div` 2)
+                y' = y - yOffset + (h `div` 2)
+                (realX, realY) = toScreenCoordinates (x', y') (screenW, screenH)
+                trans = mkTransformation @Float (word ^. object . orientation) (V3 realX realY 0)
+                xScale = fromIntegral w / fromIntegral screenW
+                yScale = fromIntegral h / fromIntegral screenH
+                scale =
+                  V4
+                    (V4 xScale 0 0 0)
+                    (V4 0 yScale 0 0)
+                    (V4 0 0 1 0)
+                    (V4 0 0 0 1)
+            liftIO $ m44ToGLmatrix (trans !*! scale) >>= (uniform mu $=)
+            drawBaseQuad
+            return $ adv + round (fromIntegral (shiftR (ch ^. advance) 6) * baseScale)
+      foldM_ renderCharacter x $ word ^. letters
+    toScreenCoordinates :: (Int, Int) -> (Int, Int) -> (Float, Float)
+    toScreenCoordinates (x, y) (w, h) =
+      let halfW = fromIntegral w / 2
+          halfH = fromIntegral h / 2
+          wPerPixel = 2 / fromIntegral w
+          hPerPixel = 2 / fromIntegral h
+          pixelX = fromIntegral x
+          pixelY = fromIntegral y
+       in ((pixelX - halfW) * wPerPixel, (pixelY - halfH) * hPerPixel)
 
 applyScreenBehaviours :: (HortureLogger (Horture l hdl)) => FFTSnapshot -> Double -> Object -> Horture l hdl Object
 applyScreenBehaviours fft t screen = do
@@ -205,9 +296,10 @@ trackScreen :: (HortureLogger (Horture l hdl)) => Double -> Object -> Horture l 
 trackScreen _ screen = do
   viewUniform <- asks (^. screenProg . viewUniform)
   let s = screen
-      (Camera _ up _ _ camPos) = Util.fpsCamera @Float
+      (Camera fwd up _ curOrientation camPos) = Util.fpsCamera @Float
       screenPos = s ^. pos
-      lookAtM = lookAt camPos screenPos up
+      curScreenPos = rotate curOrientation fwd
+      lookAtM = lookAt camPos (lerp 0.3 screenPos curScreenPos) up
   liftIO $ m44ToGLmatrix lookAtM >>= (uniform viewUniform $=)
   return s
 

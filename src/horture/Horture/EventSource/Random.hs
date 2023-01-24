@@ -55,7 +55,6 @@ runStaticEffectRandomizer = interpret $ \case
   RandomizeEffect (AddAsset fp _ _ _) -> newRandomAssetWith fp
   RandomizeEffect (AddScreenBehaviour _ [Behaviour bht _]) -> case bht of
     BehaviourPulse -> mkRandomScreenEffect <*> ((: []) <$> newRandomPulseScreen)
-    BehaviourConvolute -> mkRandomScreenEffect <*> ((: []) <$> newRandomConvolute)
     BehaviourShake -> mkRandomScreenEffect <*> ((: []) <$> newRandomShake)
     BehaviourCircle -> mkRandomScreenEffect <*> ((: []) <$> newRandomCircleScreen)
     BehaviourMoveTo -> mkRandomScreenEffect <*> ((: []) <$> newRandomMoveToScreen)
@@ -125,9 +124,13 @@ randomizeShaderEffect Mirror = newRandomMirrorShader
 randomizeShaderEffect Invert = newRandomInvertShader
 randomizeShaderEffect Toonify = newRandomToonShader
 randomizeShaderEffect Audiophile = newRandomAudioShader
+randomizeShaderEffect BassRealityWarp = newRandomBassRealityWarpShader
 
 newRandomAudioShader :: (LastMember IO effs) => Eff effs Effect
 newRandomAudioShader = AddShaderEffect <$> (Limited <$> uniformRM' 26 36) <*> return Audiophile
+
+newRandomBassRealityWarpShader :: (LastMember IO effs) => Eff effs Effect
+newRandomBassRealityWarpShader = AddShaderEffect <$> (Limited <$> uniformRM' 26 36) <*> return BassRealityWarp
 
 newRandomToonShader :: (LastMember IO effs) => Eff effs Effect
 newRandomToonShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Toonify
@@ -237,9 +240,10 @@ newRandomScreenBehaviours :: (LastMember IO effs) => Int -> Eff effs [Behaviour]
 newRandomScreenBehaviours n = do
   shake' <- newRandomShake
   moveTo' <- newRandomMoveToScreen
-  pulse' <- newRandomPulse
+  pulse' <- newRandomPulseScreen
   rotate' <- newRandomRotate
-  take n . cycle <$> liftIO (shuffle [moveTo', shake', pulse', rotate', convolute, audiophile])
+  circle' <- newRandomCircleScreen
+  take n . cycle <$> liftIO (shuffle [moveTo', shake', pulse', rotate', circle', audiophile])
 
 newRandomMoveToScreen :: (LastMember IO effs) => Eff effs Behaviour
 newRandomMoveToScreen = moveTo . V3 0 0 <$> ((+ (-1)) . (/ 1) . negate <$> randomM')
@@ -251,13 +255,10 @@ newRandomBehaviours n = do
   pulse' <- newRandomPulse
   circle' <- newRandomCircle
   rotate' <- newRandomRotate
-  take n . cycle <$> liftIO (shuffle [shake', moveTo', pulse', rotate', circle', convolute, audiophile])
+  take n . cycle <$> liftIO (shuffle [shake', moveTo', pulse', rotate', circle', audiophile])
 
 newRandomShake :: (LastMember IO effs) => Eff effs Behaviour
 newRandomShake = shake <$> randomM' <*> uniformRM' 80 160 <*> randomM'
-
-newRandomConvolute :: (LastMember IO effs) => Eff effs Behaviour
-newRandomConvolute = return convolute
 
 newRandomRotate :: (LastMember IO effs) => Eff effs Behaviour
 newRandomRotate = rotate <$> randomRM' (-1) 1

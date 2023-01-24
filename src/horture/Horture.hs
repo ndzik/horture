@@ -78,6 +78,7 @@ playScene s = do
       renderBackground dt
       s <- renderScene dt s
       renderAssets dt . _assets $ s
+      renderActiveEffectText s
       updateView
       s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
       go startTime s'
@@ -173,8 +174,9 @@ shutdown win = do
 initResources ::
   (GLsizei, GLsizei) ->
   [(FilePath, Asset)] ->
-  IO (HortureScreenProgram, HortureDynamicImageProgram, HortureBackgroundProgram)
-initResources (w, h) gifs = do
+  Maybe FilePath ->
+  IO (HortureScreenProgram, HortureDynamicImageProgram, HortureBackgroundProgram, HortureFontProgram)
+initResources (w, h) gifs mFont = do
   -- Initialize OpenGL primitives.
   initBaseQuad
   -- Set color stuff.
@@ -182,11 +184,12 @@ initResources (w, h) gifs = do
   effs <- initShaderEffects
   hsp <- initHortureScreenProgram (w, h) effs
   dip <- initHortureDynamicImageProgram gifs
+  ftp <- initHortureFontProgram mFont
   hbp <- initHortureBackgroundProgram
   -- Generic OpenGL configuration.
   blend $= Enabled
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
-  return (hsp, dip, hbp)
+  return (hsp, dip, hbp, ftp)
 
 initShaderEffects :: IO (Map.Map ShaderEffect [HortureShaderProgram])
 initShaderEffects = do
@@ -203,19 +206,22 @@ initShaderEffects = do
               (Mirror, [mirrorShader]),
               (Invert, [invertShader]),
               (Toonify, [toonShader]),
-              (Audiophile, [audioShader])
+              (Audiophile, [audioShader]),
+              (BassRealityWarp, [bassRealityWarp])
             ]
           buildLinkAndUniform p = do
             hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])
             lifetimeUniform <- uniformLocation hsp "lifetime"
             dtUniform <- uniformLocation hsp "dt"
             dominatingFreqUniform <- uniformLocation hsp "frequencies"
+            randomUniform <- uniformLocation hsp "rng"
             return
               HortureShaderProgram
                 { _hortureShaderProgramShader = hsp,
                   _hortureShaderProgramLifetimeUniform = lifetimeUniform,
                   _hortureShaderProgramDtUniform = dtUniform,
-                  _hortureShaderProgramFrequenciesUniform = dominatingFreqUniform
+                  _hortureShaderProgramFrequenciesUniform = dominatingFreqUniform,
+                  _hortureShaderProgramRandomUniform = randomUniform
                 }
       Map.fromList <$> mapM (sequenceRight . second (sequence . (buildLinkAndUniform <$>))) shaderProgs
     sequenceRight :: (ShaderEffect, IO [HortureShaderProgram]) -> IO (ShaderEffect, [HortureShaderProgram])
@@ -230,6 +236,9 @@ initHortureScreenProgram (w, h) effs = do
   currentProgram $= Just prog
   -- Initialize source texture holding captured window image.
   backTexture <- genObjectName
+  textureWrapMode Texture2D S $= (Mirrored, Clamp)
+  textureWrapMode Texture2D T $= (Mirrored, Clamp)
+  textureFilter Texture2D $= ((Linear', Nothing), Linear')
   let !anyPixelData = PixelData BGRA UnsignedByte nullPtr
   textureBinding Texture2D $= Just backTexture
   texImage2D
@@ -240,8 +249,12 @@ initHortureScreenProgram (w, h) effs = do
     (TextureSize2D w h)
     0
     anyPixelData
+
   renderedTexture <- genObjectName
   textureBinding Texture2D $= Just renderedTexture
+  textureWrapMode Texture2D S $= (Mirrored, Clamp)
+  textureWrapMode Texture2D T $= (Mirrored, Clamp)
+  textureFilter Texture2D $= ((Linear', Nothing), Linear')
   texImage2D
     Texture2D
     NoProxy
@@ -312,6 +325,29 @@ initBaseQuad = do
   vertexAttribArray texAttributeLocation $= Enabled
   bindBuffer ElementArrayBuffer $= Just veo
   withArray vertsElement $ \ptr -> bufferData ElementArrayBuffer $= (fromIntegral vertsElementSize, ptr, StaticDraw)
+
+initHortureFontProgram :: Maybe FilePath -> IO HortureFontProgram
+initHortureFontProgram mFont = do
+  vpg <- loadShaderBS "fontvertex.shader" VertexShader gifVertexShader
+  fpg <- loadShaderBS "fontfragment.shader" FragmentShader fontFragmentShader
+  fontProg <- linkShaderProgram [vpg, fpg]
+  modelUniform <- uniformLocation fontProg "model"
+  fontTexUniform <- uniformLocation fontProg "fontTexture"
+  currentProgram $= Just fontProg
+  glyphs <- case mFont of
+    Just font -> runFontLoader fontTextureUnit fontTexUniform (loadFont font)
+    Nothing -> return Map.empty
+  m44ToGLmatrix identityM44 >>= (uniform modelUniform $=)
+  return
+    HortureFontProgram
+      { _hortureFontProgramShader = fontProg,
+        _hortureFontProgramTextureUnit = fontTextureUnit,
+        _hortureFontProgramTexUniform = fontTexUniform,
+        _hortureFontProgramModelUniform = modelUniform,
+        _hortureFontProgramChars = glyphs
+      }
+  where
+    fontTextureUnit = TextureUnit 3
 
 initHortureDynamicImageProgram :: [(FilePath, Asset)] -> IO HortureDynamicImageProgram
 initHortureDynamicImageProgram gifs = do

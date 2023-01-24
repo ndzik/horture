@@ -8,6 +8,7 @@ module Horture.Shader.Shader
     mvpVertexShader,
     displayShader,
     imageFragmentShader,
+    fontFragmentShader,
     barrelShader,
     stitchShader,
     blurVShader,
@@ -22,6 +23,7 @@ module Horture.Shader.Shader
     toonShader,
     backgroundShader,
     audioShader,
+    bassRealityWarp,
   )
 where
 
@@ -78,6 +80,24 @@ void main() {
   frag_colour = texture(gifTexture, vec3(texCoord.x, texCoord.y, index));
 }
     |]
+
+fontFragmentShader :: ByteString
+fontFragmentShader =
+  [r|
+#version 410
+
+in vec2 texCoord;
+
+uniform sampler2D fontTexture;
+
+out vec4 frag_colour;
+
+void main() {
+  float color = texture(fontTexture, texCoord).r;
+  float alpha = texture(fontTexture, texCoord).g;
+  frag_colour = vec4(color, color, color, alpha);
+}
+  |]
 
 imageFragmentShader :: ByteString
 imageFragmentShader =
@@ -509,3 +529,36 @@ void main()
   frag_colour = drawBackground(uv, time);
 }
     |]
+
+bassRealityWarp :: ByteString
+bassRealityWarp =
+  [r|
+#version 410
+
+in vec2 texCoord;
+uniform sampler2D texture1;
+uniform double lifetime = 0;
+uniform double dt = 0;
+uniform double frequencies[3] = double[3](0, 0, 0);
+uniform double rng;
+
+layout(location = 0) out vec4 frag_colour;
+
+vec4 applyVisualization(sampler2D tex, vec2 uv, double lifetime, double dt, double freq[3]) {
+  double ceil = 350;
+  float factor = 0.00001;
+  double fr = freq[0]*2;
+  double fb = clamp(fr-1, 0, ceil)/ceil;
+  vec2 tuv = vec2(fr*factor*sin(float(fb*dt*rng)) + uv.x, fr*factor*cos(float(fb*dt*rng)*2) + uv.y);
+  vec4 orgba = texture2D(tex, uv);
+  vec4 rgba1 = texture2D(tex, tuv);
+  tuv = vec2(fr*factor*cos(float(fb*dt*rng)) + uv.x, fr*factor*sin(float(fb*dt*rng)*2) + uv.y);
+  vec4 rgba2 = texture2D(tex, tuv);
+  return mix(mix(orgba, rgba1, float(fb)*0.9), rgba2, float(fb)*0.3);
+}
+
+void main() {
+  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
+  frag_colour = applyVisualization(texture1, uv, lifetime, dt, frequencies);
+}
+  |]

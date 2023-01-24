@@ -26,7 +26,8 @@ data Config = Config
     hortureWsEndpoint :: !(Maybe BaseUrl),
     hortureCost :: !Int,
     assetDirectory :: !FilePath,
-    debugDelayMs :: !Int
+    debugDelayMs :: !Int,
+    mDefaultFont :: !(Maybe FilePath)
   }
   deriving (Show)
 
@@ -48,7 +49,8 @@ instance Default Config where
         mockUserId = Nothing,
         hortureCost = defaultHortureCost,
         assetDirectory = "./assets",
-        debugDelayMs = defaultDebugDelay
+        debugDelayMs = defaultDebugDelay,
+        mDefaultFont = Nothing
       }
 
 parseHortureClientConfig :: FilePath -> IO (Maybe Config)
@@ -83,5 +85,6 @@ instance FromJSON Config where
               Just v -> return v
               _otherwise -> return defaultDebugDelay
           )
+      <*> o .:? "default_font"
 
 $(deriveToJSON defaultOptions {fieldLabelModifier = camelTo2 '_', omitNothingFields = True} ''Config)

@@ -56,6 +56,7 @@ library horture-lib
                             , Horture.Loader
                             , Horture.Effect
                             , Horture.Asset
+                            , Horture.Character
 
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
@@ -76,6 +77,7 @@ library horture-lib
                             , Horture.Loader.Asset
                             , Horture.Loader.State
                             , Horture.Loader.Config
+                            , Horture.Loader.FontLoader
                             , Horture.Loader.TextureLoader
                             , Horture.Loader.FilePreloader
                             , Horture.Debug
@@ -104,10 +106,10 @@ library horture-lib
                             , http-types
                             , async
                             , freer-simple
-                            , loop
                             , vector
                             , synchronous-channels
                             , OpenGL
+                            , OpenGLRaw
                             , lens
                             , JuicyPixels
                             , async
@@ -127,6 +129,7 @@ library horture-lib
                             , wuss
                             , GLFW-b
                             , GLUtil
+                            , freetype2
     c-sources:
                             cbits/record.c
     pkgconfig-depends:
