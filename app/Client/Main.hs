@@ -73,11 +73,10 @@ cmdParser =
       )
 
 handleParams :: HortureParams -> IO ()
-handleParams (HortureParams _ _ _ True) = runDebugCenter
-handleParams (HortureParams fp mockMode wantAuth _) =
+handleParams (HortureParams fp mockMode wantAuth isDebug) =
   resolvePath fp >>= parseHortureClientConfig >>= \case
-    Nothing -> print "invalid horture client config" >> exitFailure
+    Nothing -> if isDebug then runDebugCenter Nothing else print "invalid horture client config" >> exitFailure
     Just cfg -> do
       if wantAuth
         then authorize mockMode cfg
-        else runCommandCenter mockMode cfg
+        else if isDebug then runDebugCenter (Just cfg) else runCommandCenter mockMode cfg

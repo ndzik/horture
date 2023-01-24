@@ -438,8 +438,8 @@ handleCCExceptions EventSourceUnavailable = logError "Source of horture events n
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
-runDebugCenter :: IO ()
-runDebugCenter = do
+runDebugCenter :: Maybe Config -> IO ()
+runDebugCenter mcfg = do
   let buildVty = mkVty defaultConfig
   appChan <- newBChan 10
   initialVty <- buildVty
@@ -449,6 +449,9 @@ runDebugCenter = do
     runPreloader (PLC dir) loadAssetsInMemory >>= \case
       Left _ -> pure []
       Right plg -> pure plg
+  mFont <- case mcfg of
+             Just cfg -> return $ Horture.Config.mDefaultFont cfg
+             Nothing -> return Nothing
   void $
     customMain
       initialVty
@@ -459,6 +462,7 @@ runDebugCenter = do
         { _ccAssets = assets,
           _ccAssetsList = list AssetPort assets 1,
           _ccPreloadedAssets = preloadedAssets,
+          _ccDefaultFont = mFont,
           _ccHortureUrl = Nothing,
           _ccUserId = "some_user_id",
           _ccControllerChans = Nothing,
