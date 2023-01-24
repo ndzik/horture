@@ -546,7 +546,7 @@ layout(location = 0) out vec4 frag_colour;
 
 vec4 applyVisualization(sampler2D tex, vec2 uv, double lifetime, double dt, double freq[3]) {
   double ceil = 350;
-  float factor = 0.0001;
+  float factor = 0.00001;
   double fr = freq[0]*2;
   double fb = clamp(fr-1, 0, ceil)/ceil;
   vec2 tuv = vec2(fr*factor*sin(float(fb*dt*rng)) + uv.x, fr*factor*cos(float(fb*dt*rng)*2) + uv.y);
