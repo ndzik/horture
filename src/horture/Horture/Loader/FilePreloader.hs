@@ -14,6 +14,7 @@ import Codec.Picture.Gif
 import Control.Lens
 import Control.Loop
 import Control.Monad.Except
+import Data.Foldable (foldrM)
 import Control.Monad.Reader
 import Data.ByteString (readFile)
 import Data.Vector.Storable (Vector, unsafeWith)
@@ -34,7 +35,10 @@ runPreloader lc = flip runReaderT lc . runExceptT
 loadAssetsInMemory :: FilePreloader [(FilePath, Asset)]
 loadAssetsInMemory = do
   dirContent <- asks (^. assetDirectory) >>= liftIO . makeAbsolute >>= liftIO . loadDirectory
-  mapM readAssets dirContent
+  let loadAssetsIgnoreInvalidExt asset loaded = ((: loaded) <$> readAssets asset) `catchError` \case
+        LoaderUnsupportedAssetType _ -> return loaded
+        err -> throwError err
+  foldrM loadAssetsIgnoreInvalidExt [] dirContent
 
 loadDirectory :: FilePath -> IO [FilePath]
 loadDirectory fp = listDirectory fp <&> map ((fp ++ "/") ++)
