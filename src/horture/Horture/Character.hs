@@ -11,6 +11,7 @@ data Character = Character { _characterTextureID :: !TextureObject
                            , _characterSize :: !(V2 Int)
                            , _characterBearing :: !(V2 Int)
                            , _characterAdvance :: !Int
+                           , _characterLetter :: !Char
                            } deriving (Show)
 
 -- | A WordObject is a renderable unit of possibly multiple Characters.
@@ -19,7 +20,10 @@ data WordObject = WordObject { _wordObjectObject :: !Object
                              } deriving (Show)
 
 characterHeight :: Int
-characterHeight = 24
+characterHeight = 64
+
+baseScale :: Float
+baseScale = 1/3
 
 makeFields ''Character
 makeFields ''WordObject

@@ -50,52 +50,59 @@ loadFont fp = do
                   chLeft = gsrBitmap_left glyphSlot
                   chTop = gsrBitmap_top glyphSlot
                   chAdvance = vX . gsrAdvance $ glyphSlot
-              outlinedBuf <- outlineTexture (chWidth, chHeight) $ bBuffer glyphBitmap
-              let pixelData = PixelData RG UnsignedByte outlinedBuf
-              texImage2D
-                Texture2D
-                NoProxy
-                0
-                RG8
-                (TextureSize2D (fromIntegral chWidth) (fromIntegral chHeight))
-                0
-                pixelData
-              textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
-              textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
-              textureFilter Texture2D $= ((Linear', Nothing), Linear')
-              liftIO $ generateMipmap' Texture2D
-              free outlinedBuf
-              uniform fontTexUni $= tu
-              return
-                ( toEnum . fromIntegral $ char,
-                  Character
-                    { _characterTextureID = to,
-                      _characterSize = fromIntegral <$> V2 chWidth chHeight,
-                      _characterBearing = fromIntegral <$> V2 chLeft chTop,
-                      _characterAdvance = fromIntegral chAdvance
-                    }
-                )
-        Map.fromList <$> mapM loadCharacter [0 .. 128]
+              withOutlineTexture (chWidth, chHeight) (bBuffer glyphBitmap) $ \buf -> do
+                let pixelData = PixelData RG UnsignedByte buf
+                texImage2D
+                  Texture2D
+                  NoProxy
+                  0
+                  RG8
+                  (TextureSize2D (fromIntegral chWidth) (fromIntegral chHeight))
+                  0
+                  pixelData
+                textureWrapMode Texture2D S $= (Repeated, ClampToBorder)
+                textureWrapMode Texture2D T $= (Repeated, ClampToBorder)
+                textureFilter Texture2D $= ((Linear', Nothing), Linear')
+                uniform fontTexUni $= tu
+                return
+                  ( toEnum . fromIntegral $ char,
+                    Character
+                      { _characterTextureID = to,
+                        _characterSize = fromIntegral <$> V2 chWidth chHeight,
+                        _characterBearing = fromIntegral <$> V2 chLeft chTop,
+                        _characterAdvance = fromIntegral chAdvance,
+                        _characterLetter = toEnum . fromIntegral $ char
+                      }
+                  )
+        Map.fromList <$> mapM loadCharacter [32 .. 127]
+
+withOutlineTexture :: (Word32, Word32) -> Ptr Word8 -> (Ptr Word8 -> IO b) -> IO b
+withOutlineTexture dim src action = do
+  buf <- outlineTexture dim src
+  res <- action buf
+  free buf
+  return res
 
 outlineTexture :: (Word32, Word32) -> Ptr Word8 -> IO (Ptr Word8)
 outlineTexture (w, h) buf = do
-  mallocBytes (fromIntegral $ w*h*2) >>= \newBuf -> do
+  mallocBytes (fromIntegral $ w * h * 2) >>= \newBuf -> do
     numLoop 0 (fromIntegral w - 1) $ \x -> do
       numLoop 0 (fromIntegral h - 1) $ \y -> do
         let i = x + y * fromIntegral w
         alpha <- peekByteOff @Word8 buf i
         case alpha of
           0x00 -> do
-                  ns <- mapM (\(nx, ny) -> peekByteOff @Word8 buf (nx + ny * fromIntegral w)) $ neighbors (x,y) (fromIntegral w, fromIntegral h)
-                  if any (/= 0x00) ns then do
-                                pokeByteOff @Word8 newBuf (i*2) 0x00
-                                pokeByteOff @Word8 newBuf (i*2+1) 0xFF
-                                else do
-                                pokeByteOff @Word8 newBuf (i*2) 0x00
-                                pokeByteOff @Word8 newBuf (i*2+1) 0x00
-
+            ns <- mapM (\(nx, ny) -> peekByteOff @Word8 buf (nx + ny * fromIntegral w)) $ neighbors (x, y) (fromIntegral w, fromIntegral h)
+            if any (/= 0x00) ns
+              then do
+                pokeByteOff @Word8 newBuf (i * 2) 0x00
+                pokeByteOff @Word8 newBuf (i * 2 + 1) 0xFF
+              else do
+                pokeByteOff @Word8 newBuf (i * 2) 0x00
+                pokeByteOff @Word8 newBuf (i * 2 + 1) 0x00
           a -> do
-            pokeByteOff @Word8 newBuf (i*2) a
-            pokeByteOff @Word8 newBuf (i*2+1) 0x00
+            pokeByteOff @Word8 newBuf (i * 2) a
+            pokeByteOff @Word8 newBuf (i * 2 + 1) 0xFF
     return newBuf
-      where neighbors (x, y) (maxX, maxY) = [(x',y') | x' <- [x-1..x+1], y' <- [y-1..y+1], x' >= 0 && y' >= 0 && x' < maxX && y' < maxY ]
+  where
+    neighbors (x, y) (maxX, maxY) = [(x', y') | x' <- [x -1 .. x + 1], y' <- [y -1 .. y + 1], (x' /= x || y' /= y) &&  x' >= 0 && y' >= 0 && x' < maxX && y' < maxY]

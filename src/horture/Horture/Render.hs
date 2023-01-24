@@ -18,13 +18,13 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Bits hiding (rotate)
 import Data.Default
-import Data.Text (Text, unpack)
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
-import Foreign hiding (void, rotate)
+import Data.Text (Text, unpack)
+import Foreign hiding (rotate, void)
 import Graphics.GLUtil.Camera3D as Util hiding (orientation)
-import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale, rotate)
+import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, rotate, scale)
 import Horture.Asset
 import Horture.Audio
 import Horture.Audio.PipeWire ()
@@ -188,31 +188,35 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
     setLifetimeUniform (Limited s) uni = uniform uni $= s
     setLifetimeUniform Forever uni = uniform uni $= (0 :: Double)
 
-renderActiveEffectText :: Scene -> Horture l hdl ()
+renderActiveEffectText :: (HortureLogger (Horture l hdl)) => Scene -> Horture l hdl ()
 renderActiveEffectText s = do
   let bs = foldr (\(bh, _, _) -> incrementOrInsert (toTitle bh) []) [] $ s ^. screen . behaviours
       ss = foldr (\(sh, _, _) -> incrementOrInsert (toTitle sh) []) [] $ s ^. shaders
       effs = case ("RandomGifOrImage", sum $ Map.map length (_assets s)) of
-               (_, 0) -> bs ++ ss
-               as -> as:bs ++ ss
+        (_, 0) -> bs ++ ss
+        as -> as : bs ++ ss
   renderEffectList effs
-    where incrementOrInsert :: Text -> [(Text, Int)] -> [(Text, Int)] -> [(Text, Int)]
-          incrementOrInsert sh ds [] = (sh, 1) : ds
-          incrementOrInsert sh  ds ((fs, c):r)
-                    | sh == fs = reverse r ++ (sh, c+1):ds
-                    | otherwise = incrementOrInsert sh ((fs, c):ds) r
+  where
+    incrementOrInsert :: Text -> [(Text, Int)] -> [(Text, Int)] -> [(Text, Int)]
+    incrementOrInsert sh ds [] = (sh, 1) : ds
+    incrementOrInsert sh ds ((fs, c) : r)
+      | sh == fs = reverse r ++ (sh, c + 1) : ds
+      | otherwise = incrementOrInsert sh ((fs, c) : ds) r
 
-renderEffectList :: [(Text, Int)] -> Horture l hdl ()
+renderEffectList :: (HortureLogger (Horture l hdl)) => [(Text, Int)] -> Horture l hdl ()
 renderEffectList effs = do
   (_, top) <- gets (^. dim)
-  let height = characterHeight + 10
+  let height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
   go top height effs 0
-    where go _ _ [] _ = return ()
-          go top height ((eff, c):rs) l = do
-            renderText (show c ++ " x " ++ unpack eff) (20, top - 20 - height * l)
-            go top height rs (l+1)
+  where
+    go _ _ [] _ = return ()
+    go top height ((eff, c) : rs) l = do
+      renderText (show c ++ "x " ++ unpack eff) (x, top - height - height * l)
+      go top height rs (l + 1)
+    x = 10
+    lineSpacing = round $ 10 * baseScale
 
-renderText :: String -> (Int, Int) -> Horture l hdl ()
+renderText :: (HortureLogger (Horture l hdl)) => String -> (Int, Int) -> Horture l hdl ()
 renderText txt posi = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject
   fp <- asks (^. fontProg)
@@ -224,38 +228,43 @@ renderText txt posi = do
   currentProgram $= Just (fp ^. shader)
   renderWord mu posi word
   where
-    renderWord :: UniformLocation -> (Int, Int) -> WordObject -> Horture l hdl ()
+    renderWord :: (HortureLogger (Horture l hdl)) => UniformLocation -> (Int, Int) -> WordObject -> Horture l hdl ()
     renderWord mu (x, y) word = do
-      let renderCharacter :: Int -> Character -> Horture l hdl Int
+      let renderCharacter :: (HortureLogger (Horture l hdl)) => Int -> Character -> Horture l hdl Int
           renderCharacter adv ch = do
             textureBinding Texture2D $= Just (ch ^. textureID)
-            dim@(screenY, screenH) <- gets (^. dim)
-            let xpos = adv + x + ch ^. bearing . _x
-                w = ch ^. size . _x
-                h = ch ^. size . _y
-                ypos = y - (h - ch ^. bearing . _y)
-                aspectRatio = fromIntegral w / fromIntegral h
-                (realX, realY) = toScreenCoordinates (xpos, ypos) dim
+            (screenW, screenH) <- gets (^. dim)
+            let bearingX = fromIntegral (ch ^. bearing . _x) * baseScale
+                bearingY = round $ fromIntegral (ch ^. bearing . _y) * baseScale
+                w = round $ fromIntegral (ch ^. size . _x) * baseScale
+                h = round $ fromIntegral (ch ^. size . _y) * baseScale
+                xOffset = round bearingX
+                yOffset = fromIntegral (h - bearingY)
+                x' = adv + xOffset + (w `div` 2)
+                y' = y - yOffset + (h `div` 2)
+                (realX, realY) = toScreenCoordinates (x', y') (screenW, screenH)
                 trans = mkTransformation @Float (word ^. object . orientation) (V3 realX realY 0)
-                scalingFactorY = fromIntegral screenH / fromIntegral h
-                scalingFactorX = fromIntegral screenY / fromIntegral w
+                xScale = fromIntegral w / fromIntegral screenW
+                yScale = fromIntegral h / fromIntegral screenH
                 scale =
                   V4
-                    (V4 (aspectRatio / scalingFactorX) 0 0 0)
-                    (V4 0 (1 / scalingFactorY) 0 0)
+                    (V4 xScale 0 0 0)
+                    (V4 0 yScale 0 0)
                     (V4 0 0 1 0)
                     (V4 0 0 0 1)
             liftIO $ m44ToGLmatrix (trans !*! scale) >>= (uniform mu $=)
             drawBaseQuad
-            return $ adv + shiftR (ch ^. advance) 6
-      foldM_ renderCharacter 0 $ word ^. letters
+            return $ adv + round (fromIntegral (shiftR (ch ^. advance) 6) * baseScale)
+      foldM_ renderCharacter x $ word ^. letters
     toScreenCoordinates :: (Int, Int) -> (Int, Int) -> (Float, Float)
     toScreenCoordinates (x, y) (w, h) =
       let halfW = fromIntegral w / 2
           halfH = fromIntegral h / 2
-          realX = fromIntegral x
-          realY = fromIntegral y
-       in ((realX - halfW) / halfW, (realY - halfH) / halfH)
+          wPerPixel = 2 / fromIntegral w
+          hPerPixel = 2 / fromIntegral h
+          pixelX = fromIntegral x
+          pixelY = fromIntegral y
+       in ((pixelX - halfW) * wPerPixel, (pixelY - halfH) * hPerPixel)
 
 applyScreenBehaviours :: (HortureLogger (Horture l hdl)) => FFTSnapshot -> Double -> Object -> Horture l hdl Object
 applyScreenBehaviours fft t screen = do
