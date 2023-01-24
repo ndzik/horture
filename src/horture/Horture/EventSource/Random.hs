@@ -124,9 +124,13 @@ randomizeShaderEffect Mirror = newRandomMirrorShader
 randomizeShaderEffect Invert = newRandomInvertShader
 randomizeShaderEffect Toonify = newRandomToonShader
 randomizeShaderEffect Audiophile = newRandomAudioShader
+randomizeShaderEffect BassRealityWarp = newRandomBassRealityWarpShader
 
 newRandomAudioShader :: (LastMember IO effs) => Eff effs Effect
 newRandomAudioShader = AddShaderEffect <$> (Limited <$> uniformRM' 26 36) <*> return Audiophile
+
+newRandomBassRealityWarpShader :: (LastMember IO effs) => Eff effs Effect
+newRandomBassRealityWarpShader = AddShaderEffect <$> (Limited <$> uniformRM' 26 36) <*> return BassRealityWarp
 
 newRandomToonShader :: (LastMember IO effs) => Eff effs Effect
 newRandomToonShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Toonify

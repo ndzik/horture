@@ -206,19 +206,22 @@ initShaderEffects = do
               (Mirror, [mirrorShader]),
               (Invert, [invertShader]),
               (Toonify, [toonShader]),
-              (Audiophile, [audioShader])
+              (Audiophile, [audioShader]),
+              (BassRealityWarp, [bassRealityWarp])
             ]
           buildLinkAndUniform p = do
             hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])
             lifetimeUniform <- uniformLocation hsp "lifetime"
             dtUniform <- uniformLocation hsp "dt"
             dominatingFreqUniform <- uniformLocation hsp "frequencies"
+            randomUniform <- uniformLocation hsp "rng"
             return
               HortureShaderProgram
                 { _hortureShaderProgramShader = hsp,
                   _hortureShaderProgramLifetimeUniform = lifetimeUniform,
                   _hortureShaderProgramDtUniform = dtUniform,
-                  _hortureShaderProgramFrequenciesUniform = dominatingFreqUniform
+                  _hortureShaderProgramFrequenciesUniform = dominatingFreqUniform,
+                  _hortureShaderProgramRandomUniform = randomUniform
                 }
       Map.fromList <$> mapM (sequenceRight . second (sequence . (buildLinkAndUniform <$>))) shaderProgs
     sequenceRight :: (ShaderEffect, IO [HortureShaderProgram]) -> IO (ShaderEffect, [HortureShaderProgram])
@@ -233,6 +236,9 @@ initHortureScreenProgram (w, h) effs = do
   currentProgram $= Just prog
   -- Initialize source texture holding captured window image.
   backTexture <- genObjectName
+  textureWrapMode Texture2D S $= (Mirrored, Clamp)
+  textureWrapMode Texture2D T $= (Mirrored, Clamp)
+  textureFilter Texture2D $= ((Linear', Nothing), Linear')
   let !anyPixelData = PixelData BGRA UnsignedByte nullPtr
   textureBinding Texture2D $= Just backTexture
   texImage2D
@@ -243,8 +249,12 @@ initHortureScreenProgram (w, h) effs = do
     (TextureSize2D w h)
     0
     anyPixelData
+
   renderedTexture <- genObjectName
   textureBinding Texture2D $= Just renderedTexture
+  textureWrapMode Texture2D S $= (Mirrored, Clamp)
+  textureWrapMode Texture2D T $= (Mirrored, Clamp)
+  textureFilter Texture2D $= ((Linear', Nothing), Linear')
   texImage2D
     Texture2D
     NoProxy

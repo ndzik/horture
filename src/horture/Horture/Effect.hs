@@ -49,6 +49,7 @@ data ShaderEffect
   | Invert
   | Toonify
   | Audiophile
+  | BassRealityWarp
   deriving (Eq, Ord, Show, Enum, Bounded)
 
 instance Show Effect where
@@ -92,6 +93,7 @@ instance Entitled ShaderEffect where
   toTitle Invert = "InvertColors"
   toTitle Toonify = "Toonify"
   toTitle Audiophile = "Audiophile"
+  toTitle BassRealityWarp = "BassRealityWarp"
 
 class FromText d where
   fromText :: Text -> d

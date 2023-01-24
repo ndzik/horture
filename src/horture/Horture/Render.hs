@@ -39,6 +39,7 @@ import Horture.Program
 import Horture.Scene
 import Horture.State
 import Horture.WindowGrabber
+import System.Random.Stateful (randomM, globalStdGen)
 import Linear.Matrix
 import Linear.Projection
 import Linear.Quaternion
@@ -179,6 +180,7 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
       setLifetimeUniform lt (prog ^. lifetimeUniform)
       liftIO . withArray [bass, mids, highs] $ uniformv (prog ^. frequenciesUniform) 3
       uniform (prog ^. dtUniform) $= t - birth
+      newRandomNumber >>= (uniform (prog ^. randomUniform) $=)
       drawBaseQuad
       genMipMap
       currentProgram $= Nothing
@@ -187,6 +189,9 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
       return (w, r)
     setLifetimeUniform (Limited s) uni = uniform uni $= s
     setLifetimeUniform Forever uni = uniform uni $= (0 :: Double)
+
+newRandomNumber :: Horture l hdl Double
+newRandomNumber = liftIO $ randomM globalStdGen
 
 renderActiveEffectText :: (HortureLogger (Horture l hdl)) => Scene -> Horture l hdl ()
 renderActiveEffectText s = do

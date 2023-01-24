@@ -78,7 +78,8 @@ data HortureShaderProgram = HortureShaderProgram
   { _hortureShaderProgramShader :: !Program,
     _hortureShaderProgramLifetimeUniform :: !UniformLocation,
     _hortureShaderProgramDtUniform :: !UniformLocation,
-    _hortureShaderProgramFrequenciesUniform :: !UniformLocation
+    _hortureShaderProgramFrequenciesUniform :: !UniformLocation,
+    _hortureShaderProgramRandomUniform :: !UniformLocation
   }
   deriving (Show)
 
