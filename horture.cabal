@@ -101,6 +101,7 @@ library horture-lib
                             , http-client
                             , http-client-tls
                             , random
+                            , proteaaudio
                             , warp
                             , wai
                             , http-types
