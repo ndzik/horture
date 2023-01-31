@@ -31,6 +31,7 @@ library horture-lib
                             , Horture.Authorize
                             , Horture.Path
                             , Horture.Audio
+                            , Horture.Audio.Player
                             , Horture.Audio.PipeWire
                             , Horture.CommandCenter.CommandCenter
                             , Horture.CommandCenter.Event
@@ -61,6 +62,10 @@ library horture-lib
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
                             , Horture.Audio.Recorder
+                            , Horture.Audio.Player.Player
+                            , Horture.Audio.Player.Protea
+                            , Horture.Audio.Player.Effects
+                            , Horture.Audio.Player.Horture
                             , Horture.Backend.X11.LinuxX11
                             , Horture.Backend.X11.X11
                             , Horture.Backend.X11.Initializer
