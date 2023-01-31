@@ -22,6 +22,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Horture.Behaviour
 import Horture.Effect
+import Horture.Audio.Player
 import Horture.EventSource.EventSource
 import Horture.Object
 import Linear.V3
@@ -167,7 +168,9 @@ newRandomStitchShader =
     <$> (Limited <$> uniformRM' 6 12) <*> return Stitch <*> return []
 
 newRandomFlashbangShader :: (LastMember IO effs) => Eff effs Effect
-newRandomFlashbangShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang
+newRandomFlashbangShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang <*> return [StaticSound FlashbangSFX]
 
 newRandomCycleShader :: (LastMember IO effs) => Eff effs Effect
 newRandomCycleShader =
