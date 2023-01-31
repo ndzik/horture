@@ -13,6 +13,7 @@ import Data.Text (Text, pack)
 import Horture.Object
 import Linear.V3
 import System.FilePath.Posix
+import Horture.Audio.Player
 
 type AssetIndex = FilePath
 
@@ -21,7 +22,7 @@ type Position = V3 Float
 data Effect
   = AddAsset !AssetIndex !Lifetime !Position ![Behaviour]
   | AddScreenBehaviour !Lifetime ![Behaviour]
-  | AddShaderEffect !Lifetime !ShaderEffect
+  | AddShaderEffect !Lifetime !ShaderEffect ![Sound StaticSoundEffect]
   | AddRapidFire ![Effect]
   | Noop
 
@@ -55,7 +56,7 @@ data ShaderEffect
 instance Show Effect where
   show (AddAsset fp lt pos _) = unwords ["AddImage", takeFileName fp, show lt, show pos]
   show (AddScreenBehaviour _ _) = "AddScreenBehaviour"
-  show (AddShaderEffect lt eff) = unwords ["AddShaderEffect", show lt, show eff]
+  show (AddShaderEffect lt eff _) = unwords ["AddShaderEffect", show lt, show eff]
   show (AddRapidFire effs) = unwords ("AddRapidFire" : map show effs)
   show Noop = "Noop"
 
@@ -67,7 +68,7 @@ instance Entitled Effect where
   toTitle (AddAsset n _ _ _) = pack . takeFileName $ n
   toTitle (AddScreenBehaviour _ [behaviour]) = toTitle behaviour
   toTitle (AddScreenBehaviour _ _) = "RandomScreenEffect"
-  toTitle (AddShaderEffect _ eff) = toTitle eff
+  toTitle (AddShaderEffect _ eff _) = toTitle eff
   toTitle (AddRapidFire _) = "RATATATATA"
   toTitle Noop = "Nothing"
 
