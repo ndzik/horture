@@ -236,9 +236,6 @@ initHortureScreenProgram (w, h) effs = do
   currentProgram $= Just prog
   -- Initialize source texture holding captured window image.
   backTexture <- genObjectName
-  textureWrapMode Texture2D S $= (Mirrored, Clamp)
-  textureWrapMode Texture2D T $= (Mirrored, Clamp)
-  textureFilter Texture2D $= ((Linear', Nothing), Linear')
   let !anyPixelData = PixelData BGRA UnsignedByte nullPtr
   textureBinding Texture2D $= Just backTexture
   texImage2D
@@ -252,9 +249,6 @@ initHortureScreenProgram (w, h) effs = do
 
   renderedTexture <- genObjectName
   textureBinding Texture2D $= Just renderedTexture
-  textureWrapMode Texture2D S $= (Mirrored, Clamp)
-  textureWrapMode Texture2D T $= (Mirrored, Clamp)
-  textureFilter Texture2D $= ((Linear', Nothing), Linear')
   texImage2D
     Texture2D
     NoProxy
