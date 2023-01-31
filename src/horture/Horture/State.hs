@@ -10,6 +10,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
 import Horture.Audio.Recorder
 import Horture.Event
+import Horture.Audio.Player.Protea
 import Horture.Program
 
 data HortureStatic = HortureStatic
@@ -17,6 +18,7 @@ data HortureStatic = HortureStatic
     _dynamicImageProg :: !HortureDynamicImageProgram,
     _backgroundProg :: !HortureBackgroundProgram,
     _fontProg :: !HortureFontProgram,
+    _audioEnv :: !AudioPlayerEnv,
     _eventChan :: !(Chan Event),
     _logChan :: !(Maybe (Chan Text)),
     _glWin :: !GLFW.Window,
@@ -27,6 +29,7 @@ data HortureState hdl = HortureState
   { _envHandle :: !hdl,
     _audioRecording :: !(Maybe (MVar ())),
     _audioStorage :: !(TVar (Maybe FFTSnapshot)),
+    _audioState :: !AudioPlayerState,
     _mvgAvg :: ![FFTSnapshot],
     _capture :: !(Maybe Drawable),
     _dim :: !(Int, Int)
