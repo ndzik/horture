@@ -33,6 +33,7 @@ import Graphics.X11.Xlib.Extras hiding (Event)
 import Horture
 import Horture.Backend.X11.LinuxX11 (CaptureHandle)
 import Horture.Error
+import Data.Default
 import Horture.Event
 import Horture.Horture
 import Horture.Initializer
@@ -120,6 +121,7 @@ initialize startScene gifs logChan evChan = do
             _capture = Just pm,
             _audioRecording = Nothing,
             _audioStorage = storage,
+            _audioState = def,
             _mvgAvg = [],
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr)
           }
@@ -129,6 +131,7 @@ initialize startScene gifs logChan evChan = do
             _dynamicImageProg = dip,
             _backgroundProg = hbp,
             _fontProg = ftp,
+            _audioEnv = def,
             _eventChan = evChan,
             _logChan = logChan,
             _glWin = glW,
