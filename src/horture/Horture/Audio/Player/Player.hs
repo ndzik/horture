@@ -25,5 +25,10 @@ data Sound k
   | DynamicSound !FilePath
   | GeneratedSound !String !PCM
 
+instance (Show k) => Show (Sound k) where
+  show (StaticSound k) = show k
+  show (DynamicSound fp) = unwords ["SoundFile:", fp]
+  show (GeneratedSound name _) = name
+
 -- | PCM describes a PCM stream which can be used to play a sound.
 data PCM = PCM !ByteString !Int !Int !Int
