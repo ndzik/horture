@@ -20,9 +20,9 @@ import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Array.IO
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import Horture.Audio.Player
 import Horture.Behaviour
 import Horture.Effect
-import Horture.Audio.Player
 import Horture.EventSource.EventSource
 import Horture.Object
 import Linear.V3
@@ -170,7 +170,11 @@ newRandomStitchShader =
 newRandomFlashbangShader :: (LastMember IO effs) => Eff effs Effect
 newRandomFlashbangShader =
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang <*> return [StaticSound FlashbangSFX]
+    <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang
+      <*> return
+        [ StaticSound 0.2 FlashbangPeep,
+          StaticSound 1.0 FlashbangBang
+        ]
 
 newRandomCycleShader :: (LastMember IO effs) => Eff effs Effect
 newRandomCycleShader =
