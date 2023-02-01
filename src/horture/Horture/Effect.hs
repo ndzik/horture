@@ -10,10 +10,10 @@ module Horture.Effect
 where
 
 import Data.Text (Text, pack)
+import Horture.Audio.Player
 import Horture.Object
 import Linear.V3
 import System.FilePath.Posix
-import Horture.Audio.Player
 
 type AssetIndex = FilePath
 
@@ -35,7 +35,17 @@ effectToCost (AddScreenBehaviour _ [Behaviour BehaviourMoveTo _]) = 5
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourCircle _]) = 5
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourPulse _]) = 3
 effectToCost (AddScreenBehaviour _ _) = 2
-effectToCost AddShaderEffect {} = 4
+effectToCost (AddShaderEffect _ Barrel _) = 4
+effectToCost (AddShaderEffect _ Blur _) = 3
+effectToCost (AddShaderEffect _ Stitch _) = 6
+effectToCost (AddShaderEffect _ Flashbang _) = 4
+effectToCost (AddShaderEffect _ Cycle _) = 6
+effectToCost (AddShaderEffect _ Blink _) = 2
+effectToCost (AddShaderEffect _ Mirror _) = 5
+effectToCost (AddShaderEffect _ Invert _) = 3
+effectToCost (AddShaderEffect _ Toonify _) = 3
+effectToCost (AddShaderEffect _ Audiophile _) = 4
+effectToCost (AddShaderEffect _ BassRealityWarp _) = 3
 effectToCost AddRapidFire {} = 6
 effectToCost Noop {} = 0
 
