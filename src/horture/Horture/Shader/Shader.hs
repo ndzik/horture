@@ -219,9 +219,9 @@ vec4 stitchIt(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec2 blpos = tlpos;
   blpos.y += (size - 1.0);
   if ((remx == remy) || (((int(cpos.x) - int(blpos.x)) == (int(blpos.y) - int(cpos.y))))) {
-    c = texture2D(tex, tlpos * vec2(1.0/rtW, 1.0/rtH)) * 1.4;
+    c = texture2D(tex, tlpos * vec2(1.0/rtW, 1.0/rtH)) * 0.8;
   } else {
-    c = vec4(0.2, 0.15, 0.05, 1.0);
+    c = vec4(0.2, 0.15, 0.05, 0.5);
   }
   return c;
 }
