@@ -7,7 +7,7 @@ import Horture.Audio.Player.Effects
 -- environment.
 class Monad m => AudioPlayer m where
   -- | init initializes the audioplayer sink.
-  initAudio :: m Bool
+  initAudio :: m ()
 
   -- | play outputs the given Sound to the environment. It can either be
   -- statically known, generated or dynamically read sounddata.
