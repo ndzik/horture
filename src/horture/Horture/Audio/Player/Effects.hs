@@ -1,3 +1,5 @@
 module Horture.Audio.Player.Effects where
 
-data StaticSoundEffect = FlashbangSFX deriving (Show, Eq, Ord)
+data StaticSoundEffect = FlashbangPeep
+                       | FlashbangBang
+  deriving (Show, Eq, Ord)

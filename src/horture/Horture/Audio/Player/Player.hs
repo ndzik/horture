@@ -31,4 +31,14 @@ instance (Show k) => Show (Sound k) where
   show (GeneratedSound name _) = name
 
 -- | PCM describes a PCM stream which can be used to play a sound.
-data PCM = PCM !ByteString !Int !Int !Int
+data PCM = PCM !ByteString !Int !Int !Int !Float
+
+flashbangPeep :: PCM
+flashbangPeep =
+  let samples = pack [round $ (1 - i / sampleNum) * 124 * sin i | i <- [0 .. sampleNum]]
+      sampleNum = 3 * fromIntegral @_ @Double sampleRate
+      chans = 2
+      sampleRate = 44100
+      bitsPerSample = 8
+      volume = 0.001
+   in PCM samples chans sampleRate bitsPerSample volume
