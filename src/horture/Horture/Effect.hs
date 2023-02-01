@@ -30,9 +30,9 @@ effectToCost :: Effect -> Int
 effectToCost AddAsset {} = 1
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourAudiophile _]) = 4
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourShake _]) = 3
-effectToCost (AddScreenBehaviour _ [Behaviour BehaviourRotate _]) = 4
+effectToCost (AddScreenBehaviour _ [Behaviour BehaviourRotate _]) = 6
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourMoveTo _]) = 5
-effectToCost (AddScreenBehaviour _ [Behaviour BehaviourCircle _]) = 5
+effectToCost (AddScreenBehaviour _ [Behaviour BehaviourCircle _]) = 6
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourPulse _]) = 3
 effectToCost (AddScreenBehaviour _ _) = 2
 effectToCost (AddShaderEffect _ Barrel _) = 4
