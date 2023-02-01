@@ -43,16 +43,17 @@ runProteaPlayer env s = flip runReaderT env . flip runStateT s . runExceptT . un
 
 data AudioPlayerState = AudioPlayerState
   { generatedSounds :: !(Map.Map String Sample),
-    dynamicSounds :: !(Map.Map FilePath Sample)
+    dynamicSounds :: !(Map.Map FilePath Sample),
+    staticSounds :: !(Map.Map StaticSoundEffect Sample)
   }
 
 instance Default AudioPlayerState where
-  def = AudioPlayerState Map.empty Map.empty
+  def = AudioPlayerState Map.empty Map.empty Map.empty
 
 data AudioPlayerError = StaticAudioSampleNotFoundErr deriving (Show)
 
 newtype AudioPlayerEnv = AudioPlayerEnv
-  { staticSounds :: Map.Map StaticSoundEffect Sample
+  { staticSoundFiles :: Map.Map StaticSoundEffect FilePath
   }
 
 instance Default AudioPlayerEnv where
@@ -81,12 +82,12 @@ playProteaAudio ::
   ) =>
   Sound StaticSoundEffect ->
   m ()
-playProteaAudio (StaticSound FlashbangSFX) = do
+playProteaAudio (StaticSound pitch sfx) = do
   sample <-
-    asks (Map.lookup FlashbangSFX . staticSounds) >>= \case
+    gets (Map.lookup sfx . staticSounds) >>= \case
       Nothing -> throwError StaticAudioSampleNotFoundErr
       Just s -> return s
-  void . liftIO $ soundPlay sample 1.0 1.0 0 1.0
+  void . liftIO $ soundPlay sample 1.0 1.0 0 pitch
 playProteaAudio (GeneratedSound name pcm) = do
   sample <-
     gets (Map.lookup name . generatedSounds) >>= \case
@@ -120,7 +121,11 @@ generateSample ::
   String ->
   PCM ->
   m Sample
-generateSample name (PCM bs chans sampleRate bitsPerSample) = do
-  sample <- liftIO (sampleFromMemoryPcm bs chans sampleRate bitsPerSample 1.0)
+generateSample name pcm = do
+  sample <- generateSampleFromPCM pcm
   modify (\pas -> pas {generatedSounds = Map.insert name sample (generatedSounds pas)})
   return sample
+
+generateSampleFromPCM :: MonadIO m => PCM -> m Sample
+generateSampleFromPCM (PCM bs chans sampleRate bitsPerSample volume) =
+  liftIO (sampleFromMemoryPcm bs chans sampleRate bitsPerSample volume)
