@@ -11,6 +11,7 @@ import qualified Data.Map.Strict as Map
 import Horture.Audio.Player.Effects
 import Data.Default
 import Horture.Audio.Player.Player
+import Horture.Audio.Player.Error
 import Sound.ProteaAudio.SDL as Protea
   ( Sample,
     finishAudio,
@@ -50,8 +51,6 @@ data AudioPlayerState = AudioPlayerState
 instance Default AudioPlayerState where
   def = AudioPlayerState Map.empty Map.empty Map.empty
 
-data AudioPlayerError = StaticAudioSampleNotFoundErr deriving (Show)
-
 newtype AudioPlayerEnv = AudioPlayerEnv
   { staticSoundFiles :: Map.Map StaticSoundEffect FilePath
   }
@@ -65,8 +64,10 @@ instance AudioPlayer ProteaAudioPlayer where
   clearAudio = clearProteaAudio
   deinitAudio = liftIO finishAudio
 
-initProteaAudio :: ( MonadIO m) => m Bool
-initProteaAudio = liftIO $ Protea.initAudio 64 44100 1024
+initProteaAudio :: (MonadError AudioPlayerError m, MonadIO m) => m ()
+initProteaAudio = do
+  res <- liftIO $ Protea.initAudio 64 44100 1024
+  unless res $ throwError AudioPlayerSinkUnavailableErr
 
 deinitProteaAudio :: ( MonadIO m) => m ()
 deinitProteaAudio = liftIO finishAudio

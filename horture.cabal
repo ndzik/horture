@@ -63,6 +63,7 @@ library horture-lib
     other-modules:          Horture.EventSource.EventSource
                             , Horture.Audio.Recorder
                             , Horture.Audio.Player.Player
+                            , Horture.Audio.Player.Error
                             , Horture.Audio.Player.Protea
                             , Horture.Audio.Player.Effects
                             , Horture.Audio.Player.Horture

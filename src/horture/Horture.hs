@@ -67,8 +67,7 @@ type HortureEffects hdl l =
 playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
-  res <- initAudio
-  unless res $ throwError AudioSinkUnavailableErr
+  initAudio
   startRecording
   go 0 (Just s)
   where
@@ -93,8 +92,9 @@ playScene s = do
     handleHortureError (HE err) = logError . pack $ err
     handleHortureError (WindowEnvironmentInitializationErr err) = logError . pack $ err
     handleHortureError WindowEnvironmentQueryHortureErr = logError . pack . show $ WindowEnvironmentQueryHortureErr
-    handleHortureError AudioSourceUnavailableErr = logError . pack . show $ AudioSourceUnavailableErr
-    handleHortureError AudioSinkUnavailableErr = logError . pack . show $ AudioSinkUnavailableErr
+    handleHortureError ase@(AudioSinkUnavailableErr _) = logError . pack . show $ ase
+    handleHortureError asi@AudioSinkInitializationErr = logError . pack . show $ asi
+    handleHortureError asp@(AudioSinkPlayErr _) = logError . pack . show $ asp
 
 processAudio :: HortureEffects hdl l => Maybe Scene -> Horture l hdl (Maybe Scene)
 processAudio Nothing = return Nothing

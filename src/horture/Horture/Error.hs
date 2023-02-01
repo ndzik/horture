@@ -1,9 +1,12 @@
 module Horture.Error (HortureError (..)) where
 
+import Horture.Audio.Player.Error
+
 data HortureError
   = HE !String
-  | AudioSourceUnavailableErr
-  | AudioSinkUnavailableErr
+  | AudioSinkUnavailableErr !String
+  | AudioSinkInitializationErr
+  | AudioSinkPlayErr !AudioPlayerError
   | WindowEnvironmentInitializationErr !String
   | WindowEnvironmentQueryHortureErr
   deriving (Show)
