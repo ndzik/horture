@@ -21,12 +21,12 @@ class Monad m => AudioPlayer m where
 
 -- | Sound is an abstraction for sounddata used by the AudioPlayer.
 data Sound k
-  = StaticSound !k
+  = StaticSound !Float !k
   | DynamicSound !FilePath
   | GeneratedSound !String !PCM
 
 instance (Show k) => Show (Sound k) where
-  show (StaticSound k) = show k
+  show (StaticSound _ k) = show k
   show (DynamicSound fp) = unwords ["SoundFile:", fp]
   show (GeneratedSound name _) = name
 
