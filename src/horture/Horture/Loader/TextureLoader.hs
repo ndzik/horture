@@ -7,6 +7,7 @@ where
 
 import Control.Lens
 import Control.Monad.Except
+import Data.Maybe
 import Control.Monad.Reader
 import Control.Monad.State
 import qualified Data.Map.Merge.Strict as Map
@@ -64,7 +65,7 @@ loadGifTextures = do
   iu <- asks (^. imageTextureUnit)
   imgProg <- asks (^. imageProg)
   gifProg <- asks (^. gifProg)
-  asks (^. preloadedAssets)
+  mAssets <- asks (^. preloadedAssets)
     >>= mapM
       ( \(fp, asset) -> case asset of
           AssetGif w h n imgType ds dptr -> withProgram gifProg $ do
@@ -87,7 +88,7 @@ loadGifTextures = do
                 generateMipmap' Texture2DArray
             gifTexUni <- asks (^. gifTexUniform)
             uniform gifTexUni $= nu
-            return $ HortureGif fp (takeBaseName fp) gifTexObject n ds
+            return . Just $ HortureGif fp (takeBaseName fp) gifTexObject n ds
           AssetImage w h imgType dptr -> withProgram imgProg $ do
             activeTexture $= iu
             imageTexObject <- genObjectName @TextureObject
@@ -108,8 +109,10 @@ loadGifTextures = do
                 generateMipmap' Texture2D
             imageTexUni <- asks (^. imageTexUniform)
             uniform imageTexUni $= iu
-            return $ HortureImage fp (takeBaseName fp) imageTexObject
+            return . Just $ HortureImage fp (takeBaseName fp) imageTexObject
+          _otherwise -> return Nothing
       )
+  return $ catMaybes mAssets
 
 resolveImgType :: Asset.ImageType -> (PixelInternalFormat, PixelFormat, DataType)
 resolveImgType Asset.RGB8 = (RGB8, RGB, UnsignedByte)
