@@ -38,6 +38,7 @@ import Graphics.Rendering.OpenGL as GL hiding (Color, Invert, flush)
 import qualified Graphics.UI.GLFW as GLFW
 import Horture.Audio
 import Horture.Audio.PipeWire ()
+import Horture.Audio.Player.Horture ()
 import Horture.Effect
 import Horture.Error
 import Horture.Events
@@ -51,7 +52,6 @@ import Horture.Render
 import Horture.Scene
 import Horture.Shader.Shader
 import Horture.State
-import Horture.Audio.Player.Horture ()
 import Horture.WindowGrabber
 import System.Exit
 
@@ -83,9 +83,8 @@ playScene s = do
       s <- renderScene dt s
       renderAssets dt . _assets $ s
       renderActiveEffectText s
-      processAudio s
       updateView
-      s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
+      s' <- getTime >>= \timeNow -> pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
       go startTime s'
         `catchError` ( \err -> do
                          handleHortureError err
@@ -97,8 +96,11 @@ playScene s = do
     handleHortureError AudioSourceUnavailableErr = logError . pack . show $ AudioSourceUnavailableErr
     handleHortureError AudioSinkUnavailableErr = logError . pack . show $ AudioSinkUnavailableErr
 
-processAudio :: Scene -> Horture l hdl ()
-processAudio s = mapM_ playAudio $ s ^. audio
+processAudio :: HortureEffects hdl l => Maybe Scene -> Horture l hdl (Maybe Scene)
+processAudio Nothing = return Nothing
+processAudio (Just s) = do
+  mapM_ playAudio $ s ^. audio
+  return $ Just s
 
 clearView :: Horture l hdl ()
 clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
