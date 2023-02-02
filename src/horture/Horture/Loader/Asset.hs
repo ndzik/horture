@@ -28,8 +28,7 @@ data Asset
         _assetImageData :: !(ForeignPtr Word8)
       }
   | AudioEffect
-      { _assetFilePath :: !FilePath
-      , _assetEffect :: !StaticSoundEffect
+      { _assetEffect :: !StaticSoundEffect
       , _assetAudioType :: !AudioType
       }
 

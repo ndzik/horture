@@ -21,9 +21,10 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Bits
+import Data.Default
 import Data.Foldable
-import Data.Text (Text, pack)
 import qualified Data.Map.Strict as Map
+import Data.Text (Text, pack)
 import Foreign.C.String
 import Foreign.Marshal.Alloc
 import Foreign.Storable
@@ -32,10 +33,9 @@ import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
 import Graphics.X11.Xlib.Extras hiding (Event)
 import Horture
-import Horture.Backend.X11.LinuxX11 (CaptureHandle)
 import Horture.Audio.Player.Protea
+import Horture.Backend.X11.LinuxX11 (CaptureHandle)
 import Horture.Error
-import Data.Default
 import Horture.Event
 import Horture.Horture
 import Horture.Initializer
@@ -116,7 +116,7 @@ initialize startScene loadedAssets logChan evChan = do
   mFont <- asks (^. defaultFont)
   (hsp, dip, hbp, ftp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) loadedAssets mFont
   storage <- liftIO $ newTVarIO Nothing
-  let audioFromAssets = Map.fromList . map (\(_, AudioEffect fp eff _) -> (eff, fp)) . filter onlyAudio $ loadedAssets
+  let audioFromAssets = Map.fromList . map (\(fp, AudioEffect eff _) -> (eff, fp)) . filter onlyAudio $ loadedAssets
       onlyAudio (_, AudioEffect {}) = True
       onlyAudio _ = False
   let scene = startScene {_assetCache = dip ^. assets}
@@ -136,7 +136,7 @@ initialize startScene loadedAssets logChan evChan = do
             _dynamicImageProg = dip,
             _backgroundProg = hbp,
             _fontProg = ftp,
-            _audioEnv = def { staticSoundFiles = audioFromAssets },
+            _audioEnv = def {staticSoundFiles = audioFromAssets},
             _eventChan = evChan,
             _logChan = logChan,
             _glWin = glW,
