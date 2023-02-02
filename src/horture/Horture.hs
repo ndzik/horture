@@ -76,18 +76,21 @@ playScene s = do
       stopRecording
       logInfo "horture stopped"
     go startTime (Just s) = do
-      dt <- deltaTime startTime
-      clearView
-      renderBackground dt
-      s <- renderScene dt s
-      renderAssets dt . _assets $ s
-      renderActiveEffectText s
-      updateView
-      s' <- getTime >>= \timeNow -> pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
-      go startTime s'
+      let action = do
+            dt <- deltaTime startTime
+            clearView
+            renderBackground dt
+            s <- renderScene dt s
+            renderAssets dt . _assets $ s
+            renderActiveEffectText s
+            updateView
+            s' <- getTime >>= \timeNow -> pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
+            go startTime s'
+      action
         `catchError` ( \err -> do
                          handleHortureError err
-                         go startTime (Just s)
+                         logWarn "resetting scene & continuing..."
+                         go startTime $ Just s
                      )
     handleHortureError (HE err) = logError . pack $ err
     handleHortureError (WindowEnvironmentInitializationErr err) = logError . pack $ err
