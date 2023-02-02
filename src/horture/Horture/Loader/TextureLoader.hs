@@ -65,7 +65,7 @@ loadGifTextures = do
   iu <- asks (^. imageTextureUnit)
   imgProg <- asks (^. imageProg)
   gifProg <- asks (^. gifProg)
-  mAssets <- asks (^. preloadedAssets)
+  mAssets <- asks (^. preloadedImages)
     >>= mapM
       ( \(fp, asset) -> case asset of
           AssetGif w h n imgType ds dptr -> withProgram gifProg $ do

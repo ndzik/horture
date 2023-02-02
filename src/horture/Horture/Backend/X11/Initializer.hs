@@ -23,7 +23,7 @@ import Control.Monad.Reader
 import Data.Bits
 import Data.Default
 import Data.Foldable
-import qualified Data.Map.Strict as Map
+import qualified Data.Map as Map
 import Data.Text (Text, pack)
 import Foreign.C.String
 import Foreign.Marshal.Alloc
@@ -68,10 +68,11 @@ initialize ::
   (CaptureHandle ~ hdl, HortureLogger (HortureInitializer l hdl)) =>
   Scene ->
   [(FilePath, Asset)] ->
+  [(FilePath, Asset)] ->
   Maybe (Chan Text) ->
   Chan Event ->
   HortureInitializer l hdl ()
-initialize startScene loadedAssets logChan evChan = do
+initialize startScene loadedImages loadedSounds logChan evChan = do
   glW <- liftIO initGLFW
   (dp, w, isMapped) <- grabAnyWindow
 
@@ -114,11 +115,8 @@ initialize startScene loadedAssets logChan evChan = do
   liftIO $ GLFW.setWindowPos glW (fromIntegral . wa_x $ attr) (fromIntegral . wa_y $ attr)
 
   mFont <- asks (^. defaultFont)
-  (hsp, dip, hbp, ftp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) loadedAssets mFont
+  (hsp, dip, hbp, ftp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) loadedImages mFont
   storage <- liftIO $ newTVarIO Nothing
-  let audioFromAssets = Map.fromList . map (\(fp, AudioEffect eff _) -> (eff, fp)) . filter onlyAudio $ loadedAssets
-      onlyAudio (_, AudioEffect {}) = True
-      onlyAudio _ = False
   let scene = startScene {_assetCache = dip ^. assets}
       hs =
         HortureState
@@ -130,13 +128,14 @@ initialize startScene loadedAssets logChan evChan = do
             _mvgAvg = [],
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr)
           }
-  let hc =
+  let ssf = Map.fromList $ map (\(fp, AudioEffect eff _) -> (eff, fp)) loadedSounds
+      hc =
         HortureStatic
           { _screenProg = hsp,
             _dynamicImageProg = dip,
             _backgroundProg = hbp,
             _fontProg = ftp,
-            _audioEnv = def {staticSoundFiles = audioFromAssets},
+            _audioEnv = def {staticSoundFiles = ssf},
             _eventChan = evChan,
             _logChan = logChan,
             _glWin = glW,

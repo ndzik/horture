@@ -292,7 +292,8 @@ grabHorture = do
     Nothing -> return ()
     Just _ -> throwM AlreadyCapturingWindow
 
-  plg <- gets _ccPreloadedAssets
+  pli <- gets _ccPreloadedImages
+  pls <- gets _ccPreloadedSounds
   hurl <- gets _ccHortureUrl
   brickChan <-
     gets (^. ccBrickEventChan) >>= \case
@@ -321,7 +322,7 @@ grabHorture = do
             { _screen = def,
               _shaders = []
             }
-        action = initialize @'Channel startScene plg (Just logChan) evChan
+        action = initialize @'Channel startScene pli pls (Just logChan) evChan
     runHortureInitializer env action >>= \case
       Left err -> logError . pack . show $ err
       Right _ -> return ()
@@ -436,20 +437,30 @@ handleCCExceptions EventSourceUnavailable = logError "Source of horture events n
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
+imagesDir :: String
+imagesDir = "/images"
+
+soundsDir :: String
+soundsDir = "/sounds"
+
 runDebugCenter :: Maybe Config -> IO ()
 runDebugCenter mcfg = do
   let buildVty = mkVty defaultConfig
   appChan <- newBChan 10
   initialVty <- buildVty
   let dir = Horture.Config.assetDirectory def
-  assets <- makeAbsolute dir >>= loadDirectory
-  preloadedAssets <-
-    runPreloader (PLC dir) loadAssetsInMemory >>= \case
+  assets <- makeAbsolute (dir <> imagesDir) >>= loadDirectory
+  preloadedImages <-
+    runPreloader (PLC $ dir <> imagesDir) loadAssetsInMemory >>= \case
       Left _ -> pure []
-      Right plg -> pure plg
+      Right pli -> pure pli
+  preloadedSounds <-
+    runPreloader (PLC $ dir <> soundsDir) loadAssetsInMemory >>= \case
+      Left _ -> pure []
+      Right pls -> pure pls
   mFont <- case mcfg of
-             Just cfg -> return $ Horture.Config.mDefaultFont cfg
-             Nothing -> return Nothing
+    Just cfg -> return $ Horture.Config.mDefaultFont cfg
+    Nothing -> return Nothing
   void $
     customMain
       initialVty
@@ -459,7 +470,8 @@ runDebugCenter mcfg = do
       def
         { _ccAssets = assets,
           _ccAssetsList = list AssetPort assets 1,
-          _ccPreloadedAssets = preloadedAssets,
+          _ccPreloadedImages = preloadedImages,
+          _ccPreloadedSounds = preloadedSounds,
           _ccDefaultFont = mFont,
           _ccHortureUrl = Nothing,
           _ccUserId = "some_user_id",
@@ -471,12 +483,16 @@ runDebugCenter mcfg = do
 
 runCommandCenter :: Bool -> Config -> IO ()
 runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay mDefaultFont) = do
-  assets <- makeAbsolute dir >>= loadDirectory
+  assets <- makeAbsolute (dir <> imagesDir) >>= loadDirectory
   appChan <- newBChan 10
-  preloadedAssets <-
-    runPreloader (PLC dir) loadAssetsInMemory >>= \case
+  preloadedImages <-
+    runPreloader (PLC $ dir <> imagesDir) loadAssetsInMemory >>= \case
       Left err -> print err >> exitFailure
-      Right pla -> pure pla
+      Right pli -> pure pli
+  preloadedSounds <-
+    runPreloader (PLC $ dir <> soundsDir) loadAssetsInMemory >>= \case
+      Left err -> print err >> exitFailure
+      Right pls -> pure pls
   (controllerChans, uid) <-
     if mockMode
       then return (Nothing, "")
@@ -498,7 +514,8 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
       def
         { _ccAssets = assets,
           _ccAssetsList = list AssetPort assets 1,
-          _ccPreloadedAssets = preloadedAssets,
+          _ccPreloadedImages = preloadedImages,
+          _ccPreloadedSounds = preloadedSounds,
           _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
           _ccUserId = uid,
           _ccDefaultFont = mDefaultFont,

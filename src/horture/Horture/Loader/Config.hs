@@ -9,7 +9,7 @@ import Horture.Loader.Asset
 
 data LoaderConfig = LC
   { -- | Directory where gif files are presumably stored.
-    _loaderConfigPreloadedAssets :: ![(FilePath, Asset)],
+    _loaderConfigPreloadedImages :: ![(FilePath, Asset)],
     -- | Shaderprogram to load when binding textures for dynamic gifs.
     _loaderConfigGifProg :: !Program,
     -- | Location for sampler2DArray in fragment shader.

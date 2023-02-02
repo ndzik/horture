@@ -190,14 +190,14 @@ initResources ::
   [(FilePath, Asset)] ->
   Maybe FilePath ->
   IO (HortureScreenProgram, HortureDynamicImageProgram, HortureBackgroundProgram, HortureFontProgram)
-initResources (w, h) gifs mFont = do
+initResources (w, h) images mFont = do
   -- Initialize OpenGL primitives.
   initBaseQuad
   -- Set color stuff.
   GL.clearColor $= Color4 0.1 0.1 0.1 1
   effs <- initShaderEffects
   hsp <- initHortureScreenProgram (w, h) effs
-  dip <- initHortureDynamicImageProgram gifs
+  dip <- initHortureDynamicImageProgram images
   ftp <- initHortureFontProgram mFont
   hbp <- initHortureBackgroundProgram
   -- Generic OpenGL configuration.
@@ -358,7 +358,7 @@ initHortureFontProgram mFont = do
     fontTextureUnit = TextureUnit 3
 
 initHortureDynamicImageProgram :: [(FilePath, Asset)] -> IO HortureDynamicImageProgram
-initHortureDynamicImageProgram gifs = do
+initHortureDynamicImageProgram images = do
   vspg <- loadShaderBS "gifvertex.shader" VertexShader gifVertexShader
   fspg <- loadShaderBS "giffragment.shader" FragmentShader gifFragmentShader
   gifProg <- linkShaderProgram [vspg, fspg]
@@ -378,7 +378,7 @@ initHortureDynamicImageProgram gifs = do
   (loaderResult, loaderState) <-
     runTextureLoader
       ( LC
-          { _loaderConfigPreloadedAssets = gifs,
+          { _loaderConfigPreloadedImages = images,
             _loaderConfigGifProg = gifProg,
             _loaderConfigGifTexUniform = gifTexUni,
             _loaderConfigGifTextureUnit = gifTextureUnit,
