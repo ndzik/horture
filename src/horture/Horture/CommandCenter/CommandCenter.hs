@@ -236,7 +236,7 @@ refreshEventSource (Just pipe) = do
   baseCost <- gets (^. ccEventBaseCost)
   let shaderEffs = map (\v -> AddShaderEffect Forever v []) . enumFrom $ minBound
       behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> o)) . enumFrom $ minBound
-      counterEffs = [RemoveScreenBehaviour, RemoveShaderEffect]
+      counterEffs = [RemoveScreenBehaviour 0, RemoveShaderEffect 0]
       allEffs =
         behaviourEffs
           ++ [AddAsset "" Forever (V3 0 0 0) [], AddScreenBehaviour Forever [], AddRapidFire []]
