@@ -5,6 +5,7 @@ module Horture.Events (pollHortureEvents) where
 import Control.Concurrent.Chan.Synchronous
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.State
 import Horture.Command
 import Horture.Effect
 import Horture.Error
@@ -12,7 +13,9 @@ import Horture.Event
 import Horture.Horture
 import Horture.Logging
 import Horture.Scene
+import Control.Lens
 import Horture.State
+import RingBuffers.Lifted
 
 pollHortureEvents :: (HortureLogger (Horture l hdl)) => Double -> Double -> Scene -> Horture l hdl (Maybe Scene)
 pollHortureEvents timeNow dt s = do
@@ -25,7 +28,9 @@ pollHortureEvents timeNow dt s = do
         return (Just s)
 
 handleHortureEvent :: Double -> Double -> Event -> Scene -> Horture l hdl (Maybe Scene)
-handleHortureEvent timeNow dt (EventEffect eff) s = Just <$> applyEffect timeNow dt s eff
+handleHortureEvent timeNow dt (EventEffect n eff) s = do
+  gets (^. eventList) >>= liftIO . append (PastEvent n eff)
+  Just <$> applyEffect timeNow dt s eff
 handleHortureEvent _ _ (EventCommand Exit) _ = return Nothing
 handleHortureEvent _ _ (EventCommand _cmd) _ = throwError $ HE "unimplemented"
 

@@ -12,6 +12,7 @@ import Horture.Audio.Recorder
 import Horture.Event
 import Horture.Audio.Player.Protea
 import Horture.Program
+import RingBuffers.Lifted
 
 data HortureStatic = HortureStatic
   { _screenProg :: !HortureScreenProgram,
@@ -32,7 +33,8 @@ data HortureState hdl = HortureState
     _audioState :: !AudioPlayerState,
     _mvgAvg :: ![FFTSnapshot],
     _capture :: !(Maybe Drawable),
-    _dim :: !(Int, Int)
+    _dim :: !(Int, Int),
+    _eventList :: !(RingBuffer PastEvent)
   }
 
 makeLenses ''HortureStatic
