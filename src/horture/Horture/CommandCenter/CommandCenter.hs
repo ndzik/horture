@@ -236,10 +236,12 @@ refreshEventSource (Just pipe) = do
   baseCost <- gets (^. ccEventBaseCost)
   let shaderEffs = map (\v -> AddShaderEffect Forever v []) . enumFrom $ minBound
       behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> o)) . enumFrom $ minBound
+      counterEffs = [RemoveScreenBehaviour, RemoveShaderEffect]
       allEffs =
         behaviourEffs
           ++ [AddAsset "" Forever (V3 0 0 0) [], AddScreenBehaviour Forever [], AddRapidFire []]
           ++ shaderEffs
+          ++ counterEffs
 
   writeAndHandleResponse pipe . InputEnable . map (\eff -> (toTitle eff, eff, baseCost * effectToCost eff)) $ allEffs
 
