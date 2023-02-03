@@ -64,6 +64,8 @@ runStaticEffectRandomizer = interpret $ \case
   RandomizeEffect AddScreenBehaviour {} -> newRandomScreenEffect
   RandomizeEffect (AddShaderEffect _ se _) -> randomizeShaderEffect se
   RandomizeEffect AddRapidFire {} -> newRapidFireEffect
+  RandomizeEffect RemoveShaderEffect -> return RemoveShaderEffect
+  RandomizeEffect RemoveScreenBehaviour -> return RemoveScreenBehaviour
   RandomizeEffect Noop -> return Noop
 
 newRapidFireEffect ::
