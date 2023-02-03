@@ -6,6 +6,7 @@ module Horture.Render
     renderBackground,
     renderText,
     renderActiveEffectText,
+    renderEventList,
     renderScene,
     indexForGif,
   )
@@ -39,13 +40,14 @@ import Horture.Program
 import Horture.Scene
 import Horture.State
 import Horture.WindowGrabber
-import System.Random.Stateful (randomM, globalStdGen)
 import Linear.Matrix
 import Linear.Projection
 import Linear.Quaternion
 import Linear.V3
 import Linear.V4
 import Linear.Vector
+import qualified RingBuffers.Lifted as RingBuffer
+import System.Random.Stateful (globalStdGen, randomM)
 
 renderAssets :: (HortureLogger (Horture l hdl)) => Double -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
 renderAssets _ m | Map.null m = return ()
@@ -192,6 +194,20 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
 
 newRandomNumber :: Horture l hdl Double
 newRandomNumber = liftIO $ randomM globalStdGen
+
+renderEventList :: (HortureLogger (Horture l hdl)) => Horture l hdl ()
+renderEventList = do
+  gets (^. eventList) >>= liftIO . RingBuffer.toList >>= \evs -> do
+    let numOfLines = length evs
+    go numOfLines 0 $ map show evs
+  where
+    height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
+    lineSpacing = round $ 10 * baseScale
+    go :: (HortureLogger (Horture l hdl)) => Int -> Int -> [String] -> Horture l hdl ()
+    go _ _ [] = return ()
+    go numOfLines i (l : ls) = do
+      renderText l (lineSpacing, numOfLines * height - height * i)
+      go numOfLines (i + 1) ls
 
 renderActiveEffectText :: (HortureLogger (Horture l hdl)) => Scene -> Horture l hdl ()
 renderActiveEffectText s = do

@@ -1,8 +1,8 @@
 module Horture.Event (Event (..), PastEvent (..)) where
 
+import Data.Text (Text, unpack)
 import Horture.Command
 import Horture.Effect
-import Data.Text (Text)
 
 data Event
   = EventEffect !Text !Effect
@@ -11,3 +11,6 @@ data Event
 
 data PastEvent
   = PastEvent !Text !Effect
+
+instance Show PastEvent where
+  show (PastEvent name eff) = unwords [unpack $ name <> ":", unpack . toTitle $ eff]
