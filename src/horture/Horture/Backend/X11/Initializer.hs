@@ -21,7 +21,9 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Bits
+import Data.Default
 import Data.Foldable
+import qualified Data.Map as Map
 import Data.Text (Text, pack)
 import Foreign.C.String
 import Foreign.Marshal.Alloc
@@ -31,6 +33,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
 import Graphics.X11.Xlib.Extras hiding (Event)
 import Horture
+import Horture.Audio.Player.Protea
 import Horture.Backend.X11.LinuxX11 (CaptureHandle)
 import Horture.Error
 import Horture.Event
@@ -65,10 +68,11 @@ initialize ::
   (CaptureHandle ~ hdl, HortureLogger (HortureInitializer l hdl)) =>
   Scene ->
   [(FilePath, Asset)] ->
+  [(FilePath, Asset)] ->
   Maybe (Chan Text) ->
   Chan Event ->
   HortureInitializer l hdl ()
-initialize startScene gifs logChan evChan = do
+initialize startScene loadedImages loadedSounds logChan evChan = do
   glW <- liftIO initGLFW
   (dp, w, isMapped) <- grabAnyWindow
 
@@ -111,7 +115,7 @@ initialize startScene gifs logChan evChan = do
   liftIO $ GLFW.setWindowPos glW (fromIntegral . wa_x $ attr) (fromIntegral . wa_y $ attr)
 
   mFont <- asks (^. defaultFont)
-  (hsp, dip, hbp, ftp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) gifs mFont
+  (hsp, dip, hbp, ftp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) loadedImages mFont
   storage <- liftIO $ newTVarIO Nothing
   let scene = startScene {_assetCache = dip ^. assets}
       hs =
@@ -120,15 +124,18 @@ initialize startScene gifs logChan evChan = do
             _capture = Just pm,
             _audioRecording = Nothing,
             _audioStorage = storage,
+            _audioState = def,
             _mvgAvg = [],
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr)
           }
-  let hc =
+  let ssf = Map.fromList $ map (\(fp, AudioEffect eff _) -> (eff, fp)) loadedSounds
+      hc =
         HortureStatic
           { _screenProg = hsp,
             _dynamicImageProg = dip,
             _backgroundProg = hbp,
             _fontProg = ftp,
+            _audioEnv = def {staticSoundFiles = ssf},
             _eventChan = evChan,
             _logChan = logChan,
             _glWin = glW,

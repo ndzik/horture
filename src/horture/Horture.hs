@@ -38,6 +38,7 @@ import Graphics.Rendering.OpenGL as GL hiding (Color, Invert, flush)
 import qualified Graphics.UI.GLFW as GLFW
 import Horture.Audio
 import Horture.Audio.PipeWire ()
+import Horture.Audio.Player.Horture ()
 import Horture.Effect
 import Horture.Error
 import Horture.Events
@@ -66,30 +67,43 @@ type HortureEffects hdl l =
 playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
+  initAudio
   startRecording
   go 0 (Just s)
   where
     go _ Nothing = do
+      deinitAudio
       stopRecording
       logInfo "horture stopped"
     go startTime (Just s) = do
-      dt <- deltaTime startTime
-      clearView
-      renderBackground dt
-      s <- renderScene dt s
-      renderAssets dt . _assets $ s
-      renderActiveEffectText s
-      updateView
-      s' <- getTime >>= \timeNow -> pollEvents s timeNow dt <&> (purge timeNow <$>)
-      go startTime s'
+      let action = do
+            dt <- deltaTime startTime
+            clearView
+            renderBackground dt
+            s <- renderScene dt s
+            renderAssets dt . _assets $ s
+            renderActiveEffectText s
+            updateView
+            s' <- getTime >>= \timeNow -> pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
+            go startTime s'
+      action
         `catchError` ( \err -> do
                          handleHortureError err
-                         go startTime (Just s)
+                         logWarn "resetting scene & continuing..."
+                         go startTime $ Just s
                      )
     handleHortureError (HE err) = logError . pack $ err
     handleHortureError (WindowEnvironmentInitializationErr err) = logError . pack $ err
     handleHortureError WindowEnvironmentQueryHortureErr = logError . pack . show $ WindowEnvironmentQueryHortureErr
-    handleHortureError AudioSourceUnavailableErr = logError . pack . show $ AudioSourceUnavailableErr
+    handleHortureError ase@(AudioSinkUnavailableErr _) = logError . pack . show $ ase
+    handleHortureError asi@AudioSinkInitializationErr = logError . pack . show $ asi
+    handleHortureError asp@(AudioSinkPlayErr _) = logError . pack . show $ asp
+
+processAudio :: HortureEffects hdl l => Maybe Scene -> Horture l hdl (Maybe Scene)
+processAudio Nothing = return Nothing
+processAudio (Just s) = do
+  mapM_ playAudio $ s ^. audio
+  return $ Just s
 
 clearView :: Horture l hdl ()
 clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
@@ -176,14 +190,14 @@ initResources ::
   [(FilePath, Asset)] ->
   Maybe FilePath ->
   IO (HortureScreenProgram, HortureDynamicImageProgram, HortureBackgroundProgram, HortureFontProgram)
-initResources (w, h) gifs mFont = do
+initResources (w, h) images mFont = do
   -- Initialize OpenGL primitives.
   initBaseQuad
   -- Set color stuff.
   GL.clearColor $= Color4 0.1 0.1 0.1 1
   effs <- initShaderEffects
   hsp <- initHortureScreenProgram (w, h) effs
-  dip <- initHortureDynamicImageProgram gifs
+  dip <- initHortureDynamicImageProgram images
   ftp <- initHortureFontProgram mFont
   hbp <- initHortureBackgroundProgram
   -- Generic OpenGL configuration.
@@ -236,9 +250,6 @@ initHortureScreenProgram (w, h) effs = do
   currentProgram $= Just prog
   -- Initialize source texture holding captured window image.
   backTexture <- genObjectName
-  textureWrapMode Texture2D S $= (Mirrored, Clamp)
-  textureWrapMode Texture2D T $= (Mirrored, Clamp)
-  textureFilter Texture2D $= ((Linear', Nothing), Linear')
   let !anyPixelData = PixelData BGRA UnsignedByte nullPtr
   textureBinding Texture2D $= Just backTexture
   texImage2D
@@ -252,9 +263,6 @@ initHortureScreenProgram (w, h) effs = do
 
   renderedTexture <- genObjectName
   textureBinding Texture2D $= Just renderedTexture
-  textureWrapMode Texture2D S $= (Mirrored, Clamp)
-  textureWrapMode Texture2D T $= (Mirrored, Clamp)
-  textureFilter Texture2D $= ((Linear', Nothing), Linear')
   texImage2D
     Texture2D
     NoProxy
@@ -350,7 +358,7 @@ initHortureFontProgram mFont = do
     fontTextureUnit = TextureUnit 3
 
 initHortureDynamicImageProgram :: [(FilePath, Asset)] -> IO HortureDynamicImageProgram
-initHortureDynamicImageProgram gifs = do
+initHortureDynamicImageProgram images = do
   vspg <- loadShaderBS "gifvertex.shader" VertexShader gifVertexShader
   fspg <- loadShaderBS "giffragment.shader" FragmentShader gifFragmentShader
   gifProg <- linkShaderProgram [vspg, fspg]
@@ -370,7 +378,7 @@ initHortureDynamicImageProgram gifs = do
   (loaderResult, loaderState) <-
     runTextureLoader
       ( LC
-          { _loaderConfigPreloadedAssets = gifs,
+          { _loaderConfigPreloadedImages = images,
             _loaderConfigGifProg = gifProg,
             _loaderConfigGifTexUniform = gifTexUni,
             _loaderConfigGifTextureUnit = gifTextureUnit,

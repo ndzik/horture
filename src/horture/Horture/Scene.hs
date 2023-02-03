@@ -7,6 +7,7 @@ import qualified Data.Map.Strict as Map
 import Horture.Effect
 import Horture.Asset
 import Horture.Object
+import Horture.Audio.Player
 import Linear.V3
 import Linear.V4
 
@@ -17,7 +18,8 @@ data Scene = Scene
   { _screen :: !Object,
     _assets :: !(Map.Map AssetIndex [ActiveAsset]),
     _assetCache :: !(Map.Map FilePath HortureAsset),
-    _shaders :: ![(ShaderEffect, Double, Lifetime)]
+    _shaders :: ![(ShaderEffect, Double, Lifetime)],
+    _audio :: ![Sound StaticSoundEffect]
   }
 
 instance Default Scene where
@@ -26,7 +28,8 @@ instance Default Scene where
       { _screen = def,
         _assets = Map.empty,
         _assetCache = Map.empty,
-        _shaders = []
+        _shaders = [],
+        _audio = []
       }
 
 -- ActiveAsset is an Asset which is about to be or currently acting in a scene.
@@ -44,8 +47,11 @@ apply :: Double -> Double -> Effect -> Scene -> Scene
 apply _timeNow _dt Noop s = s
 apply timeNow _dt (AddAsset i lt pos bs) s = addGif i timeNow lt (zip3 bs (repeat timeNow) (repeat lt)) pos s
 apply timeNow _dt (AddScreenBehaviour lt bs) s = addScreenBehaviour timeNow lt (zip3 bs (repeat timeNow) (repeat lt)) s
-apply timeNow _dt (AddShaderEffect lt eff) s = addShaderEffect timeNow lt eff s
+apply timeNow _dt (AddShaderEffect lt eff audio) s = addAudio audio . addShaderEffect timeNow lt eff $ s
 apply timeNow dt (AddRapidFire effs) s = foldr' (apply timeNow dt) s effs
+
+addAudio :: [Sound StaticSoundEffect] -> Scene -> Scene
+addAudio audioL s = s & audio %~ (++audioL)
 
 -- applyAll composes all given effects at the given time using the time
 -- since the last frame as a progression point.
@@ -90,4 +96,5 @@ purge timeNow scene =
   let s = scene & assets %~ Map.map (filter (\(ActiveAsset _ o) -> isStillAlive timeNow (o ^. lifetime) (o ^. birth)))
       s' = s & screen . behaviours %~ filter (\(_, tob, lt) -> isStillAlive timeNow lt tob)
       s'' = s' & shaders %~ filter (\(_, tob, lt) -> isStillAlive timeNow lt tob)
-   in s''
+      s''' = s'' & audio .~ []
+   in s'''

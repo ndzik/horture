@@ -20,6 +20,7 @@ import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Array.IO
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import Horture.Audio.Player
 import Horture.Behaviour
 import Horture.Effect
 import Horture.EventSource.EventSource
@@ -61,7 +62,7 @@ runStaticEffectRandomizer = interpret $ \case
     BehaviourRotate -> mkRandomScreenEffect <*> ((: []) <$> newRandomRotate)
     BehaviourAudiophile -> mkRandomScreenEffect <*> ((: []) <$> newRandomAudiophile)
   RandomizeEffect AddScreenBehaviour {} -> newRandomScreenEffect
-  RandomizeEffect (AddShaderEffect _ se) -> randomizeShaderEffect se
+  RandomizeEffect (AddShaderEffect _ se _) -> randomizeShaderEffect se
   RandomizeEffect AddRapidFire {} -> newRapidFireEffect
   RandomizeEffect Noop -> return Noop
 
@@ -127,37 +128,63 @@ randomizeShaderEffect Audiophile = newRandomAudioShader
 randomizeShaderEffect BassRealityWarp = newRandomBassRealityWarpShader
 
 newRandomAudioShader :: (LastMember IO effs) => Eff effs Effect
-newRandomAudioShader = AddShaderEffect <$> (Limited <$> uniformRM' 26 36) <*> return Audiophile
+newRandomAudioShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 26 36) <*> return Audiophile <*> return []
 
 newRandomBassRealityWarpShader :: (LastMember IO effs) => Eff effs Effect
-newRandomBassRealityWarpShader = AddShaderEffect <$> (Limited <$> uniformRM' 26 36) <*> return BassRealityWarp
+newRandomBassRealityWarpShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 26 36) <*> return BassRealityWarp <*> return []
 
 newRandomToonShader :: (LastMember IO effs) => Eff effs Effect
-newRandomToonShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Toonify
+newRandomToonShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 6 12) <*> return Toonify <*> return []
 
 newRandomInvertShader :: (LastMember IO effs) => Eff effs Effect
-newRandomInvertShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Invert
+newRandomInvertShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 6 12) <*> return Invert <*> return []
 
 newRandomMirrorShader :: (LastMember IO effs) => Eff effs Effect
-newRandomMirrorShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Mirror
+newRandomMirrorShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 6 12) <*> return Mirror <*> return []
 
 newRandomBarrelShader :: (LastMember IO effs) => Eff effs Effect
-newRandomBarrelShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Barrel
+newRandomBarrelShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 6 12) <*> return Barrel <*> return []
 
 newRandomBlurShader :: (LastMember IO effs) => Eff effs Effect
-newRandomBlurShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Blur
+newRandomBlurShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 6 12) <*> return Blur <*> return []
 
 newRandomStitchShader :: (LastMember IO effs) => Eff effs Effect
-newRandomStitchShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Stitch
+newRandomStitchShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 6 12) <*> return Stitch <*> return []
 
 newRandomFlashbangShader :: (LastMember IO effs) => Eff effs Effect
-newRandomFlashbangShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang
+newRandomFlashbangShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang
+      <*> return
+        [ StaticSound 0.2 FlashbangPeep,
+          StaticSound 1.0 FlashbangBang
+        ]
 
 newRandomCycleShader :: (LastMember IO effs) => Eff effs Effect
-newRandomCycleShader = AddShaderEffect <$> (Limited <$> uniformRM' 6 12) <*> return Cycle
+newRandomCycleShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 6 12) <*> return Cycle <*> return []
 
 newRandomBlinkShader :: (LastMember IO effs) => Eff effs Effect
-newRandomBlinkShader = AddShaderEffect <$> (Limited <$> uniformRM' 1 3) <*> return Blink
+newRandomBlinkShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 1 3) <*> return Blink <*> return []
 
 -- | Generate a random value uniformly distributed over the given range.
 uniformRM' :: (UniformRange a, LastMember IO effs) => a -> a -> Eff effs a
@@ -203,7 +230,7 @@ newRandomRapidFireEffect = do
   return $ AddRapidFire gfs
 
 newRandomShaderEffect :: (LastMember IO effs) => Eff effs Effect
-newRandomShaderEffect = AddShaderEffect <$> (Limited <$> uniformRM' 2 6) <*> newRandomShader
+newRandomShaderEffect = AddShaderEffect <$> (Limited <$> uniformRM' 2 6) <*> newRandomShader <*> return []
 
 newRandomShader :: (LastMember IO effs) => Eff effs ShaderEffect
 newRandomShader = uniformRM' 0 (length effs - 1) <&> (effs !!)

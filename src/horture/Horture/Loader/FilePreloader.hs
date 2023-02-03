@@ -24,8 +24,9 @@ import Horture.Loader.Asset
 import Horture.Loader.Config
 import Horture.Loader.Error
 import System.Directory (listDirectory, makeAbsolute)
-import System.FilePath (takeExtension)
+import System.FilePath (takeExtension, takeBaseName)
 import Prelude hiding (readFile)
+import Horture.Audio.Player.Effects
 
 type FilePreloader a = ExceptT LoaderError (ReaderT PreloaderConfig IO) a
 
@@ -43,11 +44,20 @@ loadAssetsInMemory = do
 loadDirectory :: FilePath -> IO [FilePath]
 loadDirectory fp = listDirectory fp <&> map ((fp ++ "/") ++)
 
+-- TODO: Properly handle audio files in own directory?
 readAssets :: FilePath -> FilePreloader (FilePath, Asset)
 readAssets fp = case takeExtension fp of
   ".gif" -> readImagesAndMetadata fp
   ".png" -> readPngImage fp
+  ".wav" -> readAudioAsset fp
+  ".mp3" -> readAudioAsset fp
   _else -> throwError . LoaderUnsupportedAssetType $ fp
+
+readAudioAsset :: FilePath -> FilePreloader (FilePath, Asset)
+readAudioAsset fp = do
+  case takeBaseName fp of
+    "flashbang" -> return (fp, AudioEffect FlashbangBang WAV)
+    _ -> throwError . LoaderUnsupportedAssetType $ fp
 
 readPngImage :: FilePath -> FilePreloader (FilePath, Asset)
 readPngImage png = do

@@ -87,7 +87,7 @@ drawUI cs =
                       withBorderStyle unicode $
                         borderWithLabel
                           (str "Assets")
-                          (availableAssetsUI . _ccAssetsList $ cs),
+                          (availableAssetsUI . _ccImagesList $ cs),
                 vBox
                   [ let mkAttr =
                           if selectedName == LogPort
@@ -161,12 +161,12 @@ appEvent (VtyEvent (EvKey (KChar '\t') [])) =
 appEvent (VtyEvent (EvKey (KChar 'j') [])) = do
   gets (^. ccCursorLocationName) >>= \case
     LogPort -> vScrollBy scrollLogPort (-1)
-    AssetPort -> ccAssetsList %= listMoveDown
+    AssetPort -> ccImagesList %= listMoveDown
     _otherwise -> return ()
 appEvent (VtyEvent (EvKey (KChar 'k') [])) = do
   gets (^. ccCursorLocationName) >>= \case
     LogPort -> vScrollBy scrollLogPort 1
-    AssetPort -> ccAssetsList %= listMoveUp
+    AssetPort -> ccImagesList %= listMoveUp
     _otherwise -> return ()
 appEvent (VtyEvent (EvKey (KChar 's') [])) = gets _ccEventSourceEnabled >>= toggleEventSource
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
@@ -234,7 +234,7 @@ refreshEventSource (Just pipe) = do
   writeAndHandleResponse pipe InputPurgeAll
 
   baseCost <- gets (^. ccEventBaseCost)
-  let shaderEffs = map (AddShaderEffect Forever) . enumFrom $ minBound
+  let shaderEffs = map (\v -> AddShaderEffect Forever v []) . enumFrom $ minBound
       behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> o)) . enumFrom $ minBound
       allEffs =
         behaviourEffs
@@ -292,7 +292,8 @@ grabHorture = do
     Nothing -> return ()
     Just _ -> throwM AlreadyCapturingWindow
 
-  plg <- gets _ccPreloadedAssets
+  pli <- gets _ccPreloadedImages
+  pls <- gets _ccPreloadedSounds
   hurl <- gets _ccHortureUrl
   brickChan <-
     gets (^. ccBrickEventChan) >>= \case
@@ -321,7 +322,7 @@ grabHorture = do
             { _screen = def,
               _shaders = []
             }
-        action = initialize @'Channel startScene plg (Just logChan) evChan
+        action = initialize @'Channel startScene pli pls (Just logChan) evChan
     runHortureInitializer env action >>= \case
       Left err -> logError . pack . show $ err
       Right _ -> return ()
@@ -358,12 +359,12 @@ fetchOrCreateEventSourceTVar = do
 spawnEventSource :: Maybe BaseUrl -> Chan Event -> Chan Text -> EventM Name CommandCenterState ThreadId
 spawnEventSource Nothing evChan _ = do
   timeout <- gets (^. ccTimeout)
-  assets <- gets (^. ccAssets)
+  images <- gets (^. ccImages)
   enabledTVar <- fetchOrCreateEventSourceTVar
-  liftIO . forkIO $ hortureLocalEventSource timeout evChan assets enabledTVar
+  liftIO . forkIO $ hortureLocalEventSource timeout evChan images enabledTVar
 spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
   registeredEffs <- gets (^. ccRegisteredEffects)
-  assetEffs <- gets (^. ccAssets)
+  assetEffs <- gets (^. ccImages)
   uid <- gets (^. ccUserId)
   enabledTVar <- fetchOrCreateEventSourceTVar
   let env =
@@ -436,20 +437,30 @@ handleCCExceptions EventSourceUnavailable = logError "Source of horture events n
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
 
+imagesDir :: String
+imagesDir = "/images"
+
+soundsDir :: String
+soundsDir = "/sounds"
+
 runDebugCenter :: Maybe Config -> IO ()
 runDebugCenter mcfg = do
   let buildVty = mkVty defaultConfig
   appChan <- newBChan 10
   initialVty <- buildVty
   let dir = Horture.Config.assetDirectory def
-  assets <- makeAbsolute dir >>= loadDirectory
-  preloadedAssets <-
-    runPreloader (PLC dir) loadAssetsInMemory >>= \case
+  images <- makeAbsolute (dir <> imagesDir) >>= loadDirectory
+  preloadedImages <-
+    runPreloader (PLC $ dir <> imagesDir) loadAssetsInMemory >>= \case
       Left _ -> pure []
-      Right plg -> pure plg
+      Right pli -> pure pli
+  preloadedSounds <-
+    runPreloader (PLC $ dir <> soundsDir) loadAssetsInMemory >>= \case
+      Left _ -> pure []
+      Right pls -> pure pls
   mFont <- case mcfg of
-             Just cfg -> return $ Horture.Config.mDefaultFont cfg
-             Nothing -> return Nothing
+    Just cfg -> return $ Horture.Config.mDefaultFont cfg
+    Nothing -> return Nothing
   void $
     customMain
       initialVty
@@ -457,9 +468,10 @@ runDebugCenter mcfg = do
       (Just appChan)
       app
       def
-        { _ccAssets = assets,
-          _ccAssetsList = list AssetPort assets 1,
-          _ccPreloadedAssets = preloadedAssets,
+        { _ccImages = images,
+          _ccImagesList = list AssetPort images 1,
+          _ccPreloadedImages = preloadedImages,
+          _ccPreloadedSounds = preloadedSounds,
           _ccDefaultFont = mFont,
           _ccHortureUrl = Nothing,
           _ccUserId = "some_user_id",
@@ -471,12 +483,16 @@ runDebugCenter mcfg = do
 
 runCommandCenter :: Bool -> Config -> IO ()
 runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay mDefaultFont) = do
-  assets <- makeAbsolute dir >>= loadDirectory
+  images <- makeAbsolute (dir <> imagesDir) >>= loadDirectory
   appChan <- newBChan 10
-  preloadedAssets <-
-    runPreloader (PLC dir) loadAssetsInMemory >>= \case
+  preloadedImages <-
+    runPreloader (PLC $ dir <> imagesDir) loadAssetsInMemory >>= \case
       Left err -> print err >> exitFailure
-      Right pla -> pure pla
+      Right pli -> pure pli
+  preloadedSounds <-
+    runPreloader (PLC $ dir <> soundsDir) loadAssetsInMemory >>= \case
+      Left err -> print err >> exitFailure
+      Right pls -> pure pls
   (controllerChans, uid) <-
     if mockMode
       then return (Nothing, "")
@@ -496,9 +512,10 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
       (Just appChan)
       app
       def
-        { _ccAssets = assets,
-          _ccAssetsList = list AssetPort assets 1,
-          _ccPreloadedAssets = preloadedAssets,
+        { _ccImages = images,
+          _ccImagesList = list AssetPort images 1,
+          _ccPreloadedImages = preloadedImages,
+          _ccPreloadedSounds = preloadedSounds,
           _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
           _ccUserId = uid,
           _ccDefaultFont = mDefaultFont,

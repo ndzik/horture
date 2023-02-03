@@ -10,6 +10,7 @@ module Horture.Effect
 where
 
 import Data.Text (Text, pack)
+import Horture.Audio.Player
 import Horture.Object
 import Linear.V3
 import System.FilePath.Posix
@@ -21,7 +22,7 @@ type Position = V3 Float
 data Effect
   = AddAsset !AssetIndex !Lifetime !Position ![Behaviour]
   | AddScreenBehaviour !Lifetime ![Behaviour]
-  | AddShaderEffect !Lifetime !ShaderEffect
+  | AddShaderEffect !Lifetime !ShaderEffect ![Sound StaticSoundEffect]
   | AddRapidFire ![Effect]
   | Noop
 
@@ -29,12 +30,22 @@ effectToCost :: Effect -> Int
 effectToCost AddAsset {} = 1
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourAudiophile _]) = 4
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourShake _]) = 3
-effectToCost (AddScreenBehaviour _ [Behaviour BehaviourRotate _]) = 4
+effectToCost (AddScreenBehaviour _ [Behaviour BehaviourRotate _]) = 6
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourMoveTo _]) = 5
-effectToCost (AddScreenBehaviour _ [Behaviour BehaviourCircle _]) = 5
+effectToCost (AddScreenBehaviour _ [Behaviour BehaviourCircle _]) = 6
 effectToCost (AddScreenBehaviour _ [Behaviour BehaviourPulse _]) = 3
 effectToCost (AddScreenBehaviour _ _) = 2
-effectToCost AddShaderEffect {} = 4
+effectToCost (AddShaderEffect _ Barrel _) = 4
+effectToCost (AddShaderEffect _ Blur _) = 3
+effectToCost (AddShaderEffect _ Stitch _) = 6
+effectToCost (AddShaderEffect _ Flashbang _) = 4
+effectToCost (AddShaderEffect _ Cycle _) = 6
+effectToCost (AddShaderEffect _ Blink _) = 2
+effectToCost (AddShaderEffect _ Mirror _) = 5
+effectToCost (AddShaderEffect _ Invert _) = 3
+effectToCost (AddShaderEffect _ Toonify _) = 3
+effectToCost (AddShaderEffect _ Audiophile _) = 4
+effectToCost (AddShaderEffect _ BassRealityWarp _) = 3
 effectToCost AddRapidFire {} = 6
 effectToCost Noop {} = 0
 
@@ -55,7 +66,7 @@ data ShaderEffect
 instance Show Effect where
   show (AddAsset fp lt pos _) = unwords ["AddImage", takeFileName fp, show lt, show pos]
   show (AddScreenBehaviour _ _) = "AddScreenBehaviour"
-  show (AddShaderEffect lt eff) = unwords ["AddShaderEffect", show lt, show eff]
+  show (AddShaderEffect lt eff _) = unwords ["AddShaderEffect", show lt, show eff]
   show (AddRapidFire effs) = unwords ("AddRapidFire" : map show effs)
   show Noop = "Noop"
 
@@ -67,7 +78,7 @@ instance Entitled Effect where
   toTitle (AddAsset n _ _ _) = pack . takeFileName $ n
   toTitle (AddScreenBehaviour _ [behaviour]) = toTitle behaviour
   toTitle (AddScreenBehaviour _ _) = "RandomScreenEffect"
-  toTitle (AddShaderEffect _ eff) = toTitle eff
+  toTitle (AddShaderEffect _ eff _) = toTitle eff
   toTitle (AddRapidFire _) = "RATATATATA"
   toTitle Noop = "Nothing"
 
