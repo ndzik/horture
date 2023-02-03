@@ -108,7 +108,8 @@ library horture-lib
                             , http-client-tls
                             , random
                             , ring-buffers
-                            , contiguous ==0.5.2 -- Enforce correct version for `ring-buffers` to work.
+                            -- Enforce correct version for `ring-buffers` to work.
+                            , contiguous ==0.5.2
                             , proteaaudio-sdl
                             , warp
                             , wai
