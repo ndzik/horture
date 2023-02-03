@@ -83,7 +83,7 @@ playScene s = do
             s <- renderScene dt s
             renderAssets dt . _assets $ s
             renderActiveEffectText s
-            renderEventList
+            renderEventList dt
             updateView
             s' <- getTime >>= \timeNow -> pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
             go startTime s'

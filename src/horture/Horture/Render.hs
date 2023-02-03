@@ -32,6 +32,7 @@ import Horture.Audio.PipeWire ()
 import Horture.Character
 import Horture.Effect
 import Horture.Error (HortureError (HE))
+import Horture.Event
 import Horture.GL
 import Horture.Horture
 import Horture.Logging
@@ -195,18 +196,19 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
 newRandomNumber :: Horture l hdl Double
 newRandomNumber = liftIO $ randomM globalStdGen
 
-renderEventList :: (HortureLogger (Horture l hdl)) => Horture l hdl ()
-renderEventList = do
+renderEventList :: (HortureLogger (Horture l hdl)) => Double -> Horture l hdl ()
+renderEventList timeNow = do
   gets (^. eventList) >>= liftIO . RingBuffer.toList >>= \evs -> do
-    let numOfLines = length evs
-    go numOfLines 0 $ map show evs
+    let numOfLines = length evs - 1
+    go numOfLines 0 $ map (\pe@(PastEvent bt _ _) -> (bt, show pe)) evs
   where
     height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
+    showTime = 8
     lineSpacing = round $ 10 * baseScale
-    go :: (HortureLogger (Horture l hdl)) => Int -> Int -> [String] -> Horture l hdl ()
+    go :: (HortureLogger (Horture l hdl)) => Int -> Int -> [(Double, String)] -> Horture l hdl ()
     go _ _ [] = return ()
-    go numOfLines i (l : ls) = do
-      renderText l (lineSpacing, numOfLines * height - height * i)
+    go numOfLines i ((bt, l) : ls) = do
+      renderText l (lineSpacing, lineSpacing + numOfLines * height - height * i) . realToFrac $ 1 - ((timeNow - bt) / showTime)
       go numOfLines (i + 1) ls
 
 renderActiveEffectText :: (HortureLogger (Horture l hdl)) => Scene -> Horture l hdl ()
@@ -232,21 +234,23 @@ renderEffectList effs = do
   where
     go _ _ [] _ = return ()
     go top height ((eff, c) : rs) l = do
-      renderText (show c ++ "x " ++ unpack eff) (x, top - height - height * l)
+      renderText (show c ++ "x " ++ unpack eff) (x, top - height - height * l) 1.0
       go top height rs (l + 1)
     x = 10
     lineSpacing = round $ 10 * baseScale
 
-renderText :: (HortureLogger (Horture l hdl)) => String -> (Int, Int) -> Horture l hdl ()
-renderText txt posi = do
+renderText :: (HortureLogger (Horture l hdl)) => String -> (Int, Int) -> Float -> Horture l hdl ()
+renderText txt posi opacity = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject
   fp <- asks (^. fontProg)
   let mu = fp ^. modelUniform
       tu = fp ^. textureUnit
+      ou = fp ^. opacityUniform
       chs = fp ^. chars
   let word = WordObject def $ mapMaybe (`Map.lookup` chs) txt
   activeTexture $= tu
   currentProgram $= Just (fp ^. shader)
+  uniform ou $= opacity
   renderWord mu posi word
   where
     renderWord :: (HortureLogger (Horture l hdl)) => UniformLocation -> (Int, Int) -> WordObject -> Horture l hdl ()
