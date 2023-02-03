@@ -1,9 +1,13 @@
-module Horture.Event (Event (..)) where
+module Horture.Event (Event (..), PastEvent (..)) where
 
 import Horture.Command
 import Horture.Effect
+import Data.Text (Text)
 
 data Event
-  = EventEffect !Effect
+  = EventEffect !Text !Effect
   | EventCommand !Command
   deriving (Show)
+
+data PastEvent
+  = PastEvent !Text !Effect
