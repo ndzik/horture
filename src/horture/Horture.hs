@@ -342,6 +342,7 @@ initHortureFontProgram mFont = do
   fontProg <- linkShaderProgram [vpg, fpg]
   modelUniform <- uniformLocation fontProg "model"
   fontTexUniform <- uniformLocation fontProg "fontTexture"
+  opacityUniform <- uniformLocation fontProg "opacity"
   currentProgram $= Just fontProg
   glyphs <- case mFont of
     Just font -> runFontLoader fontTextureUnit fontTexUniform (loadFont font)
@@ -353,6 +354,7 @@ initHortureFontProgram mFont = do
         _hortureFontProgramTextureUnit = fontTextureUnit,
         _hortureFontProgramTexUniform = fontTexUniform,
         _hortureFontProgramModelUniform = modelUniform,
+        _hortureFontProgramOpacityUniform = opacityUniform,
         _hortureFontProgramChars = glyphs
       }
   where
