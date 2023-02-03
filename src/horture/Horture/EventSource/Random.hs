@@ -64,6 +64,8 @@ runStaticEffectRandomizer = interpret $ \case
   RandomizeEffect AddScreenBehaviour {} -> newRandomScreenEffect
   RandomizeEffect (AddShaderEffect _ se _) -> randomizeShaderEffect se
   RandomizeEffect AddRapidFire {} -> newRapidFireEffect
+  RandomizeEffect (RemoveShaderEffect _) -> RemoveShaderEffect <$> randomM'
+  RandomizeEffect (RemoveScreenBehaviour _) -> RemoveScreenBehaviour <$> randomM'
   RandomizeEffect Noop -> return Noop
 
 newRapidFireEffect ::
@@ -219,7 +221,16 @@ newRandomEffect =
           else
             if r < 0.8
               then newRandomShaderEffect
-              else newRandomRapidFireEffect
+              else if r < 0.5
+                then newRandomPurgeEffect
+                else newRandomRapidFireEffect
+
+newRandomPurgeEffect ::
+  (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
+  Eff effs Effect
+newRandomPurgeEffect = do
+  randomM' @_ @Float >>= \r -> if r < 0.5 then RemoveScreenBehaviour <$> randomM'
+                                          else RemoveShaderEffect <$> randomM'
 
 newRandomRapidFireEffect ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>

@@ -23,6 +23,8 @@ data Effect
   = AddAsset !AssetIndex !Lifetime !Position ![Behaviour]
   | AddScreenBehaviour !Lifetime ![Behaviour]
   | AddShaderEffect !Lifetime !ShaderEffect ![Sound StaticSoundEffect]
+  | RemoveScreenBehaviour !Int
+  | RemoveShaderEffect !Int
   | AddRapidFire ![Effect]
   | Noop
 
@@ -46,6 +48,8 @@ effectToCost (AddShaderEffect _ Invert _) = 3
 effectToCost (AddShaderEffect _ Toonify _) = 3
 effectToCost (AddShaderEffect _ Audiophile _) = 4
 effectToCost (AddShaderEffect _ BassRealityWarp _) = 3
+effectToCost (RemoveScreenBehaviour _) = 3
+effectToCost (RemoveShaderEffect _) = 2
 effectToCost AddRapidFire {} = 6
 effectToCost Noop {} = 0
 
@@ -68,6 +72,8 @@ instance Show Effect where
   show (AddScreenBehaviour _ _) = "AddScreenBehaviour"
   show (AddShaderEffect lt eff _) = unwords ["AddShaderEffect", show lt, show eff]
   show (AddRapidFire effs) = unwords ("AddRapidFire" : map show effs)
+  show (RemoveScreenBehaviour _) = "RemoveScreenBehaviour"
+  show (RemoveShaderEffect _) = "RemoveShaderEffect"
   show Noop = "Noop"
 
 class Entitled d where
@@ -80,6 +86,8 @@ instance Entitled Effect where
   toTitle (AddScreenBehaviour _ _) = "RandomScreenEffect"
   toTitle (AddShaderEffect _ eff _) = toTitle eff
   toTitle (AddRapidFire _) = "RATATATATA"
+  toTitle (RemoveScreenBehaviour _) = "PurgeEffect"
+  toTitle (RemoveShaderEffect _) = "PurgeShader"
   toTitle Noop = "Nothing"
 
 instance Entitled Behaviour where
@@ -113,4 +121,6 @@ instance FromText Effect where
   fromText "AddImage" = AddAsset "" (Limited 8) (V3 0 0 0) []
   fromText "AddScreenBehaviour" = AddScreenBehaviour (Limited 8) []
   fromText "AddRapidFire" = AddRapidFire []
+  fromText "RemoveShaderEffect" = RemoveShaderEffect 0
+  fromText "RemoveScreenBehaviour" = RemoveScreenBehaviour 0
   fromText _ = Noop

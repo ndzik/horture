@@ -4,12 +4,13 @@ import Control.Lens
 import Data.Default
 import Data.Foldable (Foldable (foldr'))
 import qualified Data.Map.Strict as Map
-import Horture.Effect
 import Horture.Asset
-import Horture.Object
 import Horture.Audio.Player
+import Horture.Effect
+import Horture.Object
 import Linear.V3
 import Linear.V4
+import System.Random
 
 -- Scene is the horture scene. It consists of the background plane, which is
 -- the screen being hortured as well as transient multiple objects in an
@@ -49,9 +50,32 @@ apply timeNow _dt (AddAsset i lt pos bs) s = addGif i timeNow lt (zip3 bs (repea
 apply timeNow _dt (AddScreenBehaviour lt bs) s = addScreenBehaviour timeNow lt (zip3 bs (repeat timeNow) (repeat lt)) s
 apply timeNow _dt (AddShaderEffect lt eff audio) s = addAudio audio . addShaderEffect timeNow lt eff $ s
 apply timeNow dt (AddRapidFire effs) s = foldr' (apply timeNow dt) s effs
+apply _timeNow _dt (RemoveScreenBehaviour seed) s = removeScreenBehaviour seed s
+apply _timeNow _dt (RemoveShaderEffect seed) s = removeShaderEffect seed s
+
+removeScreenBehaviour :: Int -> Scene -> Scene
+removeScreenBehaviour seed s =
+  s & screen . behaviours %~ \bs ->
+    let g = mkStdGen seed
+        (i, _) = uniformR (0, length bs - 1) g
+     in dropIndex i bs
+
+removeShaderEffect :: Int -> Scene -> Scene
+removeShaderEffect seed s =
+  s & shaders %~ \ss ->
+    let g = mkStdGen seed
+        (i, _) = uniformR (0, length ss - 1) g
+     in dropIndex i ss
+
+dropIndex :: Int -> [a] -> [a]
+dropIndex i xs = go i xs []
+  where
+    go _ [] rs = reverse rs
+    go 0 (_ : xs) rs = reverse rs ++ xs
+    go i (x : xs) rs = go (i -1) xs (x : rs)
 
 addAudio :: [Sound StaticSoundEffect] -> Scene -> Scene
-addAudio audioL s = s & audio %~ (++audioL)
+addAudio audioL s = s & audio %~ (++ audioL)
 
 -- applyAll composes all given effects at the given time using the time
 -- since the last frame as a progression point.
