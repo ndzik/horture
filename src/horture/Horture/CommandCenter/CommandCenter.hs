@@ -87,7 +87,7 @@ drawUI cs =
                       withBorderStyle unicode $
                         borderWithLabel
                           (str "Assets")
-                          (availableAssetsUI . _ccAssetsList $ cs),
+                          (availableAssetsUI . _ccImagesList $ cs),
                 vBox
                   [ let mkAttr =
                           if selectedName == LogPort
@@ -161,12 +161,12 @@ appEvent (VtyEvent (EvKey (KChar '\t') [])) =
 appEvent (VtyEvent (EvKey (KChar 'j') [])) = do
   gets (^. ccCursorLocationName) >>= \case
     LogPort -> vScrollBy scrollLogPort (-1)
-    AssetPort -> ccAssetsList %= listMoveDown
+    AssetPort -> ccImagesList %= listMoveDown
     _otherwise -> return ()
 appEvent (VtyEvent (EvKey (KChar 'k') [])) = do
   gets (^. ccCursorLocationName) >>= \case
     LogPort -> vScrollBy scrollLogPort 1
-    AssetPort -> ccAssetsList %= listMoveUp
+    AssetPort -> ccImagesList %= listMoveUp
     _otherwise -> return ()
 appEvent (VtyEvent (EvKey (KChar 's') [])) = gets _ccEventSourceEnabled >>= toggleEventSource
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
@@ -359,12 +359,12 @@ fetchOrCreateEventSourceTVar = do
 spawnEventSource :: Maybe BaseUrl -> Chan Event -> Chan Text -> EventM Name CommandCenterState ThreadId
 spawnEventSource Nothing evChan _ = do
   timeout <- gets (^. ccTimeout)
-  assets <- gets (^. ccAssets)
+  images <- gets (^. ccImages)
   enabledTVar <- fetchOrCreateEventSourceTVar
-  liftIO . forkIO $ hortureLocalEventSource timeout evChan assets enabledTVar
+  liftIO . forkIO $ hortureLocalEventSource timeout evChan images enabledTVar
 spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
   registeredEffs <- gets (^. ccRegisteredEffects)
-  assetEffs <- gets (^. ccAssets)
+  assetEffs <- gets (^. ccImages)
   uid <- gets (^. ccUserId)
   enabledTVar <- fetchOrCreateEventSourceTVar
   let env =
@@ -449,7 +449,7 @@ runDebugCenter mcfg = do
   appChan <- newBChan 10
   initialVty <- buildVty
   let dir = Horture.Config.assetDirectory def
-  assets <- makeAbsolute (dir <> imagesDir) >>= loadDirectory
+  images <- makeAbsolute (dir <> imagesDir) >>= loadDirectory
   preloadedImages <-
     runPreloader (PLC $ dir <> imagesDir) loadAssetsInMemory >>= \case
       Left _ -> pure []
@@ -468,8 +468,8 @@ runDebugCenter mcfg = do
       (Just appChan)
       app
       def
-        { _ccAssets = assets,
-          _ccAssetsList = list AssetPort assets 1,
+        { _ccImages = images,
+          _ccImagesList = list AssetPort images 1,
           _ccPreloadedImages = preloadedImages,
           _ccPreloadedSounds = preloadedSounds,
           _ccDefaultFont = mFont,
@@ -483,7 +483,7 @@ runDebugCenter mcfg = do
 
 runCommandCenter :: Bool -> Config -> IO ()
 runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay mDefaultFont) = do
-  assets <- makeAbsolute (dir <> imagesDir) >>= loadDirectory
+  images <- makeAbsolute (dir <> imagesDir) >>= loadDirectory
   appChan <- newBChan 10
   preloadedImages <-
     runPreloader (PLC $ dir <> imagesDir) loadAssetsInMemory >>= \case
@@ -512,8 +512,8 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
       (Just appChan)
       app
       def
-        { _ccAssets = assets,
-          _ccAssetsList = list AssetPort assets 1,
+        { _ccImages = images,
+          _ccImagesList = list AssetPort images 1,
           _ccPreloadedImages = preloadedImages,
           _ccPreloadedSounds = preloadedSounds,
           _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
