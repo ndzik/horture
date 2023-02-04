@@ -119,6 +119,7 @@ library horture-lib
                             , vector
                             , synchronous-channels
                             , OpenGL
+                            , unliftio
                             , OpenGLRaw
                             , lens
                             , JuicyPixels
