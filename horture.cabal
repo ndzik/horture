@@ -57,6 +57,7 @@ library horture-lib
                             , Horture.Loader
                             , Horture.Effect
                             , Horture.Asset
+                            , Horture.Constraints
                             , Horture.Character
 
     -- Modules included in this library but not exported.

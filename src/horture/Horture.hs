@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
@@ -39,6 +39,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import Horture.Audio
 import Horture.Audio.PipeWire ()
 import Horture.Audio.Player.Horture ()
+import Horture.Constraints
 import Horture.Effect
 import Horture.Error
 import Horture.Events
@@ -57,11 +58,6 @@ import System.Exit
 
 hortureName :: String
 hortureName = "horture"
-
-type HortureEffects hdl l =
-  ( HortureLogger (Horture l hdl),
-    WindowPoller hdl (Horture l hdl)
-  )
 
 -- | playScene plays the given scene in a Horture context.
 playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
