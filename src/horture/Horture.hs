@@ -63,13 +63,9 @@ hortureName = "horture"
 playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
-  initAudio
-  startRecording
-  go 0 (Just s)
+  void . withAudio . withRecording . go 0 . Just $ s
   where
     go _ Nothing = do
-      deinitAudio
-      stopRecording
       logInfo "horture stopped"
     go startTime (Just s) = do
       let action = do
