@@ -7,11 +7,11 @@ module Horture.Audio.Player.Protea where
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Default
 import qualified Data.Map.Strict as Map
 import Horture.Audio.Player.Effects
-import Data.Default
-import Horture.Audio.Player.Player
 import Horture.Audio.Player.Error
+import Horture.Audio.Player.Player
 import Sound.ProteaAudio.SDL as Protea
   ( Sample,
     finishAudio,
@@ -21,6 +21,7 @@ import Sound.ProteaAudio.SDL as Protea
     soundPlay,
     soundStopAll,
   )
+import UnliftIO.Exception (bracket)
 
 newtype ProteaAudioPlayer a = ProteaAudioPlayer
   { unAudio :: ExceptT AudioPlayerError (StateT AudioPlayerState (ReaderT AudioPlayerEnv IO)) a
@@ -63,13 +64,23 @@ instance AudioPlayer ProteaAudioPlayer where
   playAudio = playProteaAudio
   clearAudio = clearProteaAudio
   deinitAudio = liftIO finishAudio
+  withAudio = withProteaAudio
+
+withProteaAudio :: ProteaAudioPlayer a -> ProteaAudioPlayer ()
+withProteaAudio action = do
+  env <- ask
+  s <- get
+  let acquire = runProteaPlayer env s initProteaAudio
+      action' (_, s') = runProteaPlayer env s' action
+      release _ = liftIO finishAudio
+  void . liftIO $ bracket acquire action' release
 
 initProteaAudio :: (MonadError AudioPlayerError m, MonadIO m) => m ()
 initProteaAudio = do
   res <- liftIO $ Protea.initAudio 64 44100 1024
   unless res $ throwError AudioPlayerSinkUnavailableErr
 
-deinitProteaAudio :: ( MonadIO m) => m ()
+deinitProteaAudio :: (MonadIO m) => m ()
 deinitProteaAudio = liftIO finishAudio
 
 clearProteaAudio :: (MonadIO m) => m ()
