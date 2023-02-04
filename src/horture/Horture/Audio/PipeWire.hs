@@ -1,4 +1,7 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -17,6 +20,7 @@ import Control.Lens
 import Control.Loop
 import Control.Monad
 import Control.Monad.Except
+import Control.Monad.Reader
 import Control.Monad.State
 import Data.Array.CArray.Base
 import Data.Maybe
@@ -30,6 +34,7 @@ import Horture.Logging
 import Horture.State
 import Math.FFT
 import Math.FFT.Base
+import UnliftIO.Exception
 
 deriving instance FFTWReal CFloat
 
@@ -55,6 +60,7 @@ instance (HortureLogger (Horture l hdl)) => AudioRecorder (Horture l hdl) where
       Just res -> do
         mvgAvg %= take 10 . (res :)
         gets (^. mvgAvg) >>= \l -> takeAvg (fromIntegral . length $ l) l
+  withRecording = withHortureRecording
 
 takeAvg :: Int -> [(Double, Double, Double)] -> Horture l hdl (Double, Double, Double)
 takeAvg n ffts = do
@@ -69,6 +75,15 @@ foreign import ccall "wrapper"
 
 foreign import ccall "record.c run"
   runPipeWire :: FunPtr AudioCallback -> IO ()
+
+withHortureRecording :: forall hdl l a. (HortureLogger (Horture l hdl)) => Horture l hdl a -> Horture l hdl ()
+withHortureRecording action = do
+  s <- get
+  env <- ask
+  let acquire = evalHorture s env (startRecording @(Horture l hdl))
+      action' (_, s') = runHorture s' env action
+      release (_, s') = runHorture s' env (stopRecording @(Horture l hdl))
+  void . liftIO $ bracket acquire action' release
 
 -- | onProcessAudio is the audio callback passed to pipewire when a new audio
 -- sample is ready to be processed. It is parameterized on an MVar signal

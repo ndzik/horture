@@ -15,3 +15,7 @@ class Monad m => AudioRecorder m where
   -- | currentPeak returns a triple of
   -- (SamplingRate, Dominating Frequency, Amplitude).
   currentFFTPeak :: m FFTSnapshot
+
+  -- | withRecording allows to safely acquire the audio recorder resource and
+  -- guarantee a release for blocked resources in async exception cases.
+  withRecording :: m a -> m ()
