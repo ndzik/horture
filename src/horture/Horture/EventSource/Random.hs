@@ -167,7 +167,7 @@ newRandomStitchShader =
 newRandomFlashbangShader :: (LastMember IO effs) => Eff effs Effect
 newRandomFlashbangShader = do
   pitchPeep <- randomRM' 0.1 0.6
-  pitchBang <- randomRM' 0.2 1.0
+  pitchBang <- randomRM' 0.7 1.2
   AddShaderEffect
     <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang
       <*> return
