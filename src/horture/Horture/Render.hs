@@ -203,7 +203,7 @@ renderEventList timeNow = do
     go numOfLines 0 $ map (\pe@(PastEvent bt _ _) -> (bt, show pe)) evs
   where
     height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
-    showTime = 8
+    showTime = 16
     lineSpacing = round $ 10 * baseScale
     go :: (HortureLogger (Horture l hdl)) => Int -> Int -> [(Double, String)] -> Horture l hdl ()
     go _ _ [] = return ()
