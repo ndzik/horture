@@ -11,6 +11,7 @@ module Horture.CommandCenter.State
     ccHortureUrl,
     ccUserId,
     ccPreloadedSounds,
+    ccLogList,
     ccPreloadedImages,
     ccRegisteredEffects,
     ccTIDsToClean,
@@ -39,6 +40,7 @@ import Horture.Event
 import Horture.EventSource.Controller
 import Horture.Loader.Asset
 import Servant.Client (BaseUrl)
+import RingBuffers.Lifted
 
 data Name
   = MetaPort
@@ -51,7 +53,8 @@ data CommandCenterState = CCState
     _ccBrickEventChan :: !(Maybe (BChan CommandCenterEvent)),
     _ccCapturedWin :: !(Maybe String),
     _ccControllerChans :: !(Maybe (Chan EventControllerInput, Chan EventControllerResponse)),
-    _ccLog :: ![Text],
+    _ccLog :: !(Maybe (RingBuffer Text)),
+    _ccLogList :: ![Text],
     _ccImages :: ![FilePath],
     _ccImagesList :: !(GenericList Name [] FilePath),
     _ccHortureUrl :: !(Maybe BaseUrl),
@@ -81,7 +84,8 @@ instance Default CommandCenterState where
         _ccRegisteredEffects = Map.empty,
         _ccUserId = "",
         _ccEventSourceEnabled = Nothing,
-        _ccLog = [],
+        _ccLog = Nothing,
+        _ccLogList = [],
         _ccImages = [],
         _ccImagesList = list AssetPort [] 1,
         _ccPreloadedImages = [],
