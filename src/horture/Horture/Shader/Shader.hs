@@ -89,13 +89,14 @@ fontFragmentShader =
 in vec2 texCoord;
 
 uniform sampler2D fontTexture;
+uniform float opacity = 1.0;
 
 out vec4 frag_colour;
 
 void main() {
   float color = texture(fontTexture, texCoord).r;
   float alpha = texture(fontTexture, texCoord).g;
-  frag_colour = vec4(color, color, color, alpha);
+  frag_colour = vec4(color, color, color, alpha*opacity);
 }
   |]
 

@@ -63,6 +63,7 @@ data HortureFontProgram = HortureFontProgram
   , _hortureFontProgramTextureUnit :: !TextureUnit
   , _hortureFontProgramTexUniform :: !UniformLocation
   , _hortureFontProgramModelUniform :: !UniformLocation
+  , _hortureFontProgramOpacityUniform :: !UniformLocation
   , _hortureFontProgramChars :: !(Map.Map Char Character)
   } deriving (Show)
 

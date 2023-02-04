@@ -41,13 +41,13 @@ resolveServerMessageToEvent ::
   (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs) =>
   HortureServerMessage ->
   Eff effs Event
-resolveServerMessageToEvent HortureServerGarbage = return $ EventEffect Noop
+resolveServerMessageToEvent HortureServerGarbage = return $ EventEffect "" Noop
 resolveServerMessageToEvent (HortureEventSub ev) = resolveToEvent ev
   where
     resolveToEvent (TEvent.EventNotification _ TEvent.ChannelPointsCustomRewardRedemptionAdd {..}) = do
       let TEvent.Reward {..} = eventReward
-      EventEffect <$> (effectFromTitle rrewardTitle >>= randomizeEffect)
-    resolveToEvent _ = return $ EventEffect Noop
+      EventEffect eventUserName <$> (effectFromTitle rrewardTitle >>= randomizeEffect)
+    resolveToEvent _ = return $ EventEffect "" Noop
 
 effectFromTitle ::
   (Members '[Reader StaticEffectRandomizerEnv] effs) =>

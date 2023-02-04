@@ -28,7 +28,7 @@ runLocalEventSource ::
   Eff effs x
 runLocalEventSource timeout evChan = interpret $ do
   \case
-    SourceEvent -> EventEffect <$> randomizeEffect Noop <* liftIO (threadDelay timeout)
+    SourceEvent -> EventEffect "DebugUser" <$> randomizeEffect Noop <* liftIO (threadDelay timeout)
     SinkEvent ev -> liftIO $ writeChan evChan ev
 
 hortureLocalEventSource :: Int -> Chan Event -> [FilePath] -> TVar Bool -> IO ()

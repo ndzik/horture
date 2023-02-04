@@ -50,6 +50,7 @@ import Linear.V3
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client.TLS
 import Network.WebSockets (ConnectionException (..), runClient)
+import qualified RingBuffers.Lifted as RingBuffer
 import Servant.Client (mkClientEnv, runClientM)
 import Servant.Client.Core.BaseUrl
 import System.Directory
@@ -97,7 +98,7 @@ drawUI cs =
                           withBorderStyle unicode $
                             borderWithLabel
                               (str "Log")
-                              (viewport LogPort Vertical . vLimitPercent 100 . runningLogUI . _ccLog $ cs),
+                              (viewport LogPort Vertical . vLimitPercent 100 . runningLogUI . _ccLogList $ cs),
                     withBorderStyle unicode $
                       borderWithLabel
                         (str "Metainformation")
@@ -186,7 +187,7 @@ toggleEventSource (Just tv) = do
   logInfo "EventSource toggled"
 
 handleCCEvent :: CommandCenterEvent -> EventM Name CommandCenterState ()
-handleCCEvent (CCLog msg) = modify (\cs -> cs {_ccLog = msg : _ccLog cs})
+handleCCEvent (CCLog msg) = constructLogFromBuffer msg
 
 stopApplication :: EventM Name CommandCenterState ()
 stopApplication = do
@@ -277,7 +278,17 @@ logError :: Text -> EventM Name CommandCenterState ()
 logError = HL.withColog Colog.Error logActionCC
 
 logActionCC :: Colog.LogAction (EventM Name CommandCenterState) Text
-logActionCC = Colog.LogAction $ \msg -> ccLog %= (msg :)
+logActionCC = Colog.LogAction constructLogFromBuffer
+
+constructLogFromBuffer :: Text -> EventM Name CommandCenterState ()
+constructLogFromBuffer msg = do
+  log <-
+    gets (^. ccLog) >>= \case
+      Nothing -> return []
+      Just rb -> do
+        liftIO $ RingBuffer.append msg rb
+        liftIO $ RingBuffer.toList rb
+  ccLogList .= log
 
 data CCException
   = InvalidBrickConfiguration
@@ -463,6 +474,7 @@ runDebugCenter mcfg = do
   mFont <- case mcfg of
     Just cfg -> return $ Horture.Config.mDefaultFont cfg
     Nothing -> return Nothing
+  logBuf <- liftIO $ RingBuffer.new 200
   void $
     customMain
       initialVty
@@ -478,6 +490,7 @@ runDebugCenter mcfg = do
           _ccHortureUrl = Nothing,
           _ccUserId = "some_user_id",
           _ccControllerChans = Nothing,
+          _ccLog = Just logBuf,
           _ccBrickEventChan = Just appChan,
           _ccEventBaseCost = 10,
           _ccTimeout = 1 * 1000 * 1000
@@ -507,6 +520,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
         return (Just cs, uid)
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
+  logBuf <- liftIO $ RingBuffer.new 200
   void $
     customMain
       initialVty
@@ -520,6 +534,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
           _ccPreloadedSounds = preloadedSounds,
           _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
           _ccUserId = uid,
+          _ccLog = Just logBuf,
           _ccDefaultFont = mDefaultFont,
           _ccControllerChans = controllerChans,
           _ccBrickEventChan = Just appChan,

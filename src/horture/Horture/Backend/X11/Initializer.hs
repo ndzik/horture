@@ -35,6 +35,7 @@ import Graphics.X11.Xlib.Extras hiding (Event)
 import Horture
 import Horture.Audio.Player.Protea
 import Horture.Backend.X11.LinuxX11 (CaptureHandle)
+import qualified RingBuffers.Lifted as RingBuffer
 import Horture.Error
 import Horture.Event
 import Horture.Horture
@@ -117,6 +118,7 @@ initialize startScene loadedImages loadedSounds logChan evChan = do
   mFont <- asks (^. defaultFont)
   (hsp, dip, hbp, ftp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) loadedImages mFont
   storage <- liftIO $ newTVarIO Nothing
+  ringBuf <- liftIO $ RingBuffer.new 4
   let scene = startScene {_assetCache = dip ^. assets}
       hs =
         HortureState
@@ -126,7 +128,8 @@ initialize startScene loadedImages loadedSounds logChan evChan = do
             _audioStorage = storage,
             _audioState = def,
             _mvgAvg = [],
-            _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr)
+            _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr),
+            _eventList = ringBuf
           }
   let ssf = Map.fromList $ map (\(fp, AudioEffect eff _) -> (eff, fp)) loadedSounds
       hc =
