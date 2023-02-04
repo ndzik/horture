@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 module Horture.Events (pollHortureEvents) where
 
 import Control.Concurrent.Chan.Synchronous

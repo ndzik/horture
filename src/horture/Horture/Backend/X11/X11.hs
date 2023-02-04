@@ -1,5 +1,3 @@
-{-# LANGUAGE TypeApplications #-}
-
 module Horture.Backend.X11.X11
   ( imgPtr,
     ximageData,

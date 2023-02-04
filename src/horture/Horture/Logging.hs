@@ -1,6 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleInstances #-}
-
 module Horture.Logging
   ( logDummy,
     logChannel,

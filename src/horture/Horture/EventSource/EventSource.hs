@@ -1,7 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-
 module Horture.EventSource.EventSource
   ( EventSource (..),
     RandomizeEffect (..),

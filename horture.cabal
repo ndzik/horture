@@ -27,6 +27,14 @@ library horture-lib
                             , TypeOperators
                             , OverloadedStrings
                             , LambdaCase
+                            , DataKinds
+                            , GADTs
+                            , FlexibleContexts
+                            , FlexibleInstances
+                            , ScopedTypeVariables
+                            , TypeFamilies
+                            , FunctionalDependencies
+                            , NumericUnderscores
     exposed-modules:        Horture
                             , Horture.Authorize
                             , Horture.Path
@@ -160,6 +168,8 @@ library horture-server-lib
                             , TypeOperators
                             , OverloadedStrings
                             , LambdaCase
+                            , NumericUnderscores
+                            , ScopedTypeVariables
     hs-source-dirs:     src/server
     default-language:   Haskell2010
     ghc-options:

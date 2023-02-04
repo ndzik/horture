@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-
 -- | This module defines some behaviours which can be used to modify how an
 -- object is displayed during its lifetime.
 module Horture.Behaviour

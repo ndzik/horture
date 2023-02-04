@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeApplications #-}
-
 module Horture.Render
   ( renderAssets,
     renderBackground,
@@ -50,7 +47,7 @@ import Linear.Vector
 import qualified RingBuffers.Lifted as RingBuffer
 import System.Random.Stateful (globalStdGen, randomM)
 
-renderAssets :: (HortureLogger (Horture l hdl)) => Double -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
+renderAssets :: forall l hdl. (HortureLogger (Horture l hdl)) => Double -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
 renderAssets _ m | Map.null m = return ()
 renderAssets dt m = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject

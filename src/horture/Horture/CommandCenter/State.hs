@@ -1,5 +1,3 @@
-{-# LANGUAGE NumericUnderscores #-}
-
 module Horture.CommandCenter.State
   ( CommandCenterState (..),
     ccEventChan,
