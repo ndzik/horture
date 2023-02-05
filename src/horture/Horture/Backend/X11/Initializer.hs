@@ -114,6 +114,7 @@ initialize startScene loadedImages loadedSounds logChan evChan = do
   (hsp, dip, hbp, ftp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) loadedImages mFont
   storage <- liftIO $ newTVarIO Nothing
   ringBuf <- liftIO $ RingBuffer.new 4
+  fftBuf <- liftIO $ RingBuffer.new 8
   let scene = startScene {_assetCache = dip ^. assets}
       hs =
         HortureState
@@ -122,7 +123,7 @@ initialize startScene loadedImages loadedSounds logChan evChan = do
             _audioRecording = Nothing,
             _audioStorage = storage,
             _audioState = def,
-            _mvgAvg = [],
+            _mvgAvg = fftBuf,
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr),
             _eventList = ringBuf
           }

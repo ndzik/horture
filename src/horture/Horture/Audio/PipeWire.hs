@@ -31,6 +31,7 @@ import Horture.Logging
 import Horture.State
 import Math.FFT
 import Math.FFT.Base
+import qualified RingBuffers.Lifted as Ringbuffer
 import UnliftIO.Exception
 
 deriving instance FFTWReal CFloat
@@ -62,8 +63,10 @@ currentHortureFFTPeak =
   gets (^. audioStorage) >>= liftIO . readTVarIO >>= \case
     Nothing -> return (0, 0, 0)
     Just res -> do
-      mvgAvg %= take 10 . (res :)
-      gets (^. mvgAvg) >>= \l -> takeAvg (fromIntegral . length $ l) l
+      gets (^. mvgAvg) >>= \fftBuf -> do
+        liftIO $ Ringbuffer.append res fftBuf
+        l <- liftIO $ Ringbuffer.toList fftBuf
+        takeAvg (fromIntegral . length $ l) l
 
 stopHortureRecording :: (HortureLogger (Horture l hdl)) => Horture l hdl ()
 stopHortureRecording =
