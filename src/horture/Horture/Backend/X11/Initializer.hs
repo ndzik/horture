@@ -113,7 +113,7 @@ initialize startScene loadedImages loadedSounds logChan evChan = do
   mFont <- asks (^. defaultFont)
   (hsp, dip, hbp, ftp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) loadedImages mFont
   storage <- liftIO $ newTVarIO Nothing
-  ringBuf <- liftIO $ RingBuffer.new 4
+  evBuf <- liftIO $ RingBuffer.new 4
   fftBuf <- liftIO $ RingBuffer.new 8
   let scene = startScene {_assetCache = dip ^. assets}
       hs =
@@ -125,7 +125,7 @@ initialize startScene loadedImages loadedSounds logChan evChan = do
             _audioState = def,
             _mvgAvg = fftBuf,
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr),
-            _eventList = ringBuf
+            _eventList = evBuf
           }
   let ssf = Map.fromList $ map (\(fp, AudioEffect eff _) -> (eff, fp)) loadedSounds
       hc =
