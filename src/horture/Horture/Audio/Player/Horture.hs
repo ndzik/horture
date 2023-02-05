@@ -37,7 +37,7 @@ withHortureAudio action = do
   let acquire = evalHorture s env initHortureAudio
       action' (_, s') = runHorture s' env action
       release (_, s') = runHorture s' env clearProteaAudio
-  void . liftIO $ bracket acquire action' release
+  void . liftIO $ bracket acquire release action'
 
 initHortureAudio :: Horture hdl l ()
 initHortureAudio = do

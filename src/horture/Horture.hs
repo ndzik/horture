@@ -59,7 +59,7 @@ hortureName = "horture"
 playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
-  void . withAudio . withRecording . go 0 . Just $ s
+  void . withRecording . withAudio . go 0 . Just $ s
   where
     go _ Nothing = do
       logInfo "horture stopped"
