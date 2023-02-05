@@ -230,7 +230,6 @@ refreshEventSource ::
 refreshEventSource Nothing = logInfo "No EventSource controller available"
 refreshEventSource (Just pipe) = do
   writeAndHandleResponse pipe InputPurgeAll
-
   baseCost <- gets (^. ccEventBaseCost)
   let shaderEffs = map (\v -> AddShaderEffect Forever v []) . enumFrom $ minBound
       behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> o)) . enumFrom $ minBound
@@ -240,9 +239,7 @@ refreshEventSource (Just pipe) = do
           ++ [AddAsset "" Forever (V3 0 0 0) [], AddScreenBehaviour Forever [], AddRapidFire []]
           ++ shaderEffs
           ++ counterEffs
-
   writeAndHandleResponse pipe . InputEnable . map (\eff -> (toTitle eff, eff, baseCost * effectToCost eff)) $ allEffs
-
   writeAndHandleResponse pipe InputListEvents
 
 writeAndHandleResponse ::
@@ -305,11 +302,11 @@ grabHorture = do
   pli <- gets _ccPreloadedImages
   pls <- gets _ccPreloadedSounds
   hurl <- gets _ccHortureUrl
+
   brickChan <-
     gets (^. ccBrickEventChan) >>= \case
       Nothing -> throwM InvalidBrickConfiguration
       Just brickChan -> pure brickChan
-
   logChan <- liftIO $ newChan @Text
   evChan <- liftIO $ newChan @Event
 
@@ -391,10 +388,11 @@ spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
                 (fromIntegral port)
                 path
                 (hortureWSStaticClientApp uid evChan env enabledTVar)
-                `catch` \(e :: ConnectionException) -> do
-                  logError . pack . show $ e
-                  threadDelay oneSec
-                  action
+                `catch` ( \(e :: ConnectionException) -> do
+                            logError . pack . show $ e
+                            threadDelay oneSec
+                            action
+                        )
         action
     Http ->
       liftIO . forkIO $ do
@@ -404,10 +402,11 @@ spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
                 (fromIntegral port)
                 path
                 (hortureWSStaticClientApp uid evChan env enabledTVar)
-                `catch` \(e :: ConnectionException) -> do
-                  logError . pack . show $ e
-                  threadDelay oneSec
-                  action
+                `catch` ( \(e :: ConnectionException) -> do
+                            logError . pack . show $ e
+                            threadDelay oneSec
+                            action
+                        )
         action
   where
     logError = HL.withColog Colog.Error (logActionChan logChan)
