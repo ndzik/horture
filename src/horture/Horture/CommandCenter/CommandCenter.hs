@@ -140,7 +140,9 @@ hotkeyUI =
           " | "
           [ "<g>: Select window to capture",
             "<q>: Stop window capture",
-            "<r>: Refresh EventSource events",
+            "<r>: Refresh EventSource",
+            "<p>: Purge EventSource",
+            "<s>: Toggle EventSource",
             "<esc>: Exit horture"
           ]
     )
