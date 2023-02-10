@@ -59,27 +59,27 @@ hortureName = "horture"
 playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
-  void . withRecording . withAudio . go 0 . Just $ s
+  void . withRecording . withAudio . go . Just $ s
   where
-    go _ Nothing = do
+    go Nothing = do
       logInfo "horture stopped"
-    go startTime (Just s) = do
+    go (Just s) = do
       let action = do
-            dt <- deltaTime startTime
+            dt <- deltaTime 0
             clearView
             renderBackground dt
-            s <- renderScene dt s
-            renderAssets dt . _assets $ s
-            renderActiveEffectText s
+            s' <- renderScene dt s
+            renderAssets dt . _assets $ s'
+            renderActiveEffectText s'
             renderEventList dt
             updateView
-            s' <- getTime >>= \timeNow -> pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
-            go startTime s'
+            s'' <- getTime >>= \timeNow -> pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
+            go s''
       action
         `catchError` ( \err -> do
                          handleHortureError err
                          logWarn "resetting scene & continuing..."
-                         go startTime $ Just s
+                         go $ Just s
                      )
     handleHortureError (HE err) = logError . pack $ err
     handleHortureError (WindowEnvironmentInitializationErr err) = logError . pack $ err
