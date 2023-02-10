@@ -73,14 +73,16 @@ playScene s = do
             renderActiveEffectText s
             renderEventList dt
             updateView
-            s <- getTime >>= \timeNow -> pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
-            go s
-      action
-        `catchError` ( \err -> do
-                         handleHortureError err
-                         logWarn "resetting scene & continuing..."
-                         go $ Just s
-                     )
+            timeNow <- getTime
+            pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
+      s <-
+        action
+          `catchError` ( \err -> do
+                           handleHortureError err
+                           logWarn "resetting scene & continuing..."
+                           return $ Just s
+                       )
+      go s
     handleHortureError (HE err) = logError . pack $ err
     handleHortureError (WindowEnvironmentInitializationErr err) = logError . pack $ err
     handleHortureError WindowEnvironmentQueryHortureErr = logError . pack . show $ WindowEnvironmentQueryHortureErr
