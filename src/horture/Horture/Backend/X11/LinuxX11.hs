@@ -105,7 +105,8 @@ pollXEvents = do
                 (projectionUniform, modelUniform)
                 (ev_width, ev_height)
                 (ev_x, ev_y)
-            UnmapEvent {} -> handleUnmapEvent xWin dp pm
+            UnmapEvent {} -> do
+              handleUnmapEvent xWin dp pm
             MapNotifyEvent {} -> do
               (pos, dim) <- handleMapEvent dp xWin
               handleConfigureEvent
@@ -206,4 +207,4 @@ handleConfigureEvent
 handleUnmapEvent :: Window -> Display -> Maybe Pixmap -> IO ((Window, Bool), Maybe Pixmap, (Int, Int))
 handleUnmapEvent xWin dp pm = do
   forM_ pm (freePixmap dp)
-  return ((xWin, False), Nothing, (0, 0))
+  return ((xWin, False), Nothing, (1, 1))
