@@ -68,13 +68,13 @@ playScene s = do
             dt <- deltaTime 0
             clearView
             renderBackground dt
-            s' <- renderScene dt s
-            renderAssets dt . _assets $ s'
-            renderActiveEffectText s'
+            s <- renderScene dt s
+            renderAssets dt . _assets $ s
+            renderActiveEffectText s
             renderEventList dt
             updateView
-            s'' <- getTime >>= \timeNow -> pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
-            go s''
+            s <- getTime >>= \timeNow -> pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
+            go s
       action
         `catchError` ( \err -> do
                          handleHortureError err
