@@ -30,7 +30,6 @@ import Graphics.X11.Xlib.Extras hiding (Event)
 import Horture
 import Horture.Audio.Player.Protea
 import Horture.Backend.X11.LinuxX11 (CaptureHandle)
-import qualified RingBuffers.Lifted as RingBuffer
 import Horture.Error
 import Horture.Event
 import Horture.Horture
@@ -42,6 +41,7 @@ import Horture.Scene hiding (assets)
 import Horture.State
 import Horture.WindowGrabber
 import Numeric (showHex)
+import qualified RingBuffers.Lifted as RingBuffer
 
 instance
   (HortureLogger (HortureInitializer l hdl), hdl ~ CaptureHandle) =>
@@ -97,6 +97,8 @@ initialize startScene loadedImages loadedSounds logChan evChan = do
       throwError . WindowEnvironmentInitializationErr $
         "X11 unable to query Xlibcomposite extension"
     _otherwise -> return ()
+
+  liftIO setDefaultErrorHandler
 
   -- CompositeRedirectManual to avoid unnecessarily drawing the captured
   -- window, which is overlayed anyway by our application.
