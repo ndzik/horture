@@ -87,7 +87,7 @@ renderAssets dt m = do
           timeSinceBirth = dt - _birth o
           o' = foldr (\(Behaviour _ f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
       liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform mu $=)
-      _ <- act timeSinceBirth
+      act timeSinceBirth
       drawBaseQuad
 
     noop _ = return ()
