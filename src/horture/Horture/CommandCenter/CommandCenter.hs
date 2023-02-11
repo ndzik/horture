@@ -369,50 +369,41 @@ spawnEventSource Nothing evChan _ = do
   images <- gets (^. ccImages)
   enabledTVar <- fetchOrCreateEventSourceTVar
   liftIO . forkIO $ hortureLocalEventSource timeout evChan images enabledTVar
-spawnEventSource (Just (BaseUrl scheme host port path)) evChan logChan = do
-  registeredEffs <- gets (^. ccRegisteredEffects)
-  assetEffs <- gets (^. ccImages)
+spawnEventSource (Just (BaseUrl Https host port path)) evChan logChan = do
+  env <- StaticEffectRandomizerEnv <$> gets (^. ccRegisteredEffects) <*> gets (^. ccImages)
   uid <- gets (^. ccUserId)
   enabledTVar <- fetchOrCreateEventSourceTVar
-  let env =
-        StaticEffectRandomizerEnv
-          { _registeredEffects = registeredEffs,
-            _assetEffects = assetEffs
-          }
-  case scheme of
-    Https ->
-      liftIO . forkIO $ do
-        let action =
-              runSecureClient
-                host
-                (fromIntegral port)
-                path
-                (hortureWSStaticClientApp uid evChan env enabledTVar)
-                `catch` ( \(e :: ConnectionException) -> do
-                            logError . pack . show $ e
-                            threadDelay oneSec
-                            action
-                        )
+  let run = runSecureClient host (fromIntegral port) path app
+      app = hortureWSStaticClientApp uid evChan env enabledTVar
+      action = run `catch` handler
+      handler :: ConnectionException -> IO ()
+      handler e = do
+        logErrorColog logChan . pack . show $ e
+        threadDelay oneSec
         action
-    Http ->
-      liftIO . forkIO $ do
-        let action =
-              runClient
-                host
-                (fromIntegral port)
-                path
-                (hortureWSStaticClientApp uid evChan env enabledTVar)
-                `catch` ( \(e :: ConnectionException) -> do
-                            logError . pack . show $ e
-                            threadDelay oneSec
-                            action
-                        )
+  liftIO . forkIO $ action
+spawnEventSource (Just (BaseUrl Http host port path)) evChan logChan = do
+  env <- StaticEffectRandomizerEnv <$> gets (^. ccRegisteredEffects) <*> gets (^. ccImages)
+  uid <- gets (^. ccUserId)
+  enabledTVar <- fetchOrCreateEventSourceTVar
+  let run = runClient host (fromIntegral port) path app
+      app = hortureWSStaticClientApp uid evChan env enabledTVar
+      action = run `catch` handler
+      handler :: ConnectionException -> IO ()
+      handler e = do
+        logErrorColog logChan . pack . show $ e
+        threadDelay oneSec
         action
-  where
-    logError = HL.withColog Colog.Error (logActionChan logChan)
-    logActionChan :: Chan Text -> Colog.LogAction IO Text
-    logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
-    oneSec = 1_000_000
+  liftIO . forkIO $ action
+
+logErrorColog :: Chan Text -> Text -> IO ()
+logErrorColog logChan = HL.withColog Colog.Error (logActionChan logChan)
+
+logActionChan :: Chan Text -> Colog.LogAction IO Text
+logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
+
+oneSec :: Int
+oneSec = 1_000_000
 
 focused :: AttrName
 focused = attrName "focused"
