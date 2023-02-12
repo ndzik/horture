@@ -29,6 +29,8 @@ data EventController a where
   -- source associated with the given cost, if applicable. Bool indicates
   -- success.
   EnableEvents :: [(Text, Effect, Int)] -> EventController Bool
+  -- | Changes the cost for an event id using the given value.
+  ChangeEventCost :: Text -> Int -> EventController Bool
   -- | Purge all enabled events. This disables all events on the controlled
   -- event source.
   PurgeAllEvents :: EventController Bool

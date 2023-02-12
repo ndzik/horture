@@ -84,6 +84,7 @@ library horture-lib
                             , Horture.EventSource.Random
                             , Horture.EventSource.Logger
                             , Horture.EventSource.Local
+                            , Horture.EventSource.Twitch
                             , Horture.EventSource.Controller
                             , Horture.EventSource.Controller.Controller
                             , Horture.EventSource.Controller.TwitchController
