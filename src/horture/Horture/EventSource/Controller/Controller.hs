@@ -5,6 +5,7 @@ module Horture.EventSource.Controller.Controller
     listAllEvents,
     enableEvents,
     purgeAllEvents,
+    changeEventCost,
     controlEventSource,
     EventControllerResponse (..),
     EventControllerInput (..),

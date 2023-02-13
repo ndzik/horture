@@ -229,7 +229,13 @@ refreshEventSource ::
   EventM Name CommandCenterState ()
 refreshEventSource Nothing = logInfo "No EventSource controller available"
 refreshEventSource (Just pipe) = do
+  allEffs <- deriveBaseEvents
   writeAndHandleResponse pipe InputPurgeAll
+  writeAndHandleResponse pipe . InputEnable $ allEffs
+  writeAndHandleResponse pipe InputListEvents
+
+deriveBaseEvents :: EventM Name CommandCenterState [(Text, Effect, Int)]
+deriveBaseEvents = do
   baseCost <- gets (^. ccEventBaseCost)
   let shaderEffs = map (\v -> AddShaderEffect Forever v []) . enumFrom $ minBound
       behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> o)) . enumFrom $ minBound
@@ -239,8 +245,7 @@ refreshEventSource (Just pipe) = do
           ++ [AddAsset "" Forever (V3 0 0 0) [], AddScreenBehaviour Forever [], AddRapidFire []]
           ++ shaderEffs
           ++ counterEffs
-  writeAndHandleResponse pipe . InputEnable . map (\eff -> (toTitle eff, eff, baseCost * effectToCost eff)) $ allEffs
-  writeAndHandleResponse pipe InputListEvents
+  return . map (\eff -> (toTitle eff, eff, baseCost * effectToCost eff)) $ allEffs
 
 writeAndHandleResponse ::
   (Chan EventControllerInput, Chan EventControllerResponse) ->
@@ -311,7 +316,7 @@ grabHorture = do
   evChan <- liftIO $ newChan @Event
 
   -- Event source thread.
-  evSourceTID <- spawnEventSource hurl evChan logChan
+  evSourceTID <- spawnEventSource hurl evChan logChan brickChan
   -- Horture rendering thread. Does not have to be externally killed, because
   -- we will try to end it cooperatively by issuing an external exit command.
   mv <- liftIO newEmptyMVar
@@ -363,38 +368,34 @@ fetchOrCreateEventSourceTVar = do
   ccEventSourceEnabled .= Just tv
   return tv
 
-spawnEventSource :: Maybe BaseUrl -> Chan Event -> Chan Text -> EventM Name CommandCenterState ThreadId
-spawnEventSource Nothing evChan _ = do
+spawnEventSource :: Maybe BaseUrl -> Chan Event -> Chan Text -> BChan CommandCenterEvent -> EventM Name CommandCenterState ThreadId
+spawnEventSource Nothing evChan _ _ = do
   timeout <- gets (^. ccTimeout)
   images <- gets (^. ccImages)
   enabledTVar <- fetchOrCreateEventSourceTVar
   liftIO . forkIO $ hortureLocalEventSource timeout evChan images enabledTVar
-spawnEventSource (Just (BaseUrl Https host port path)) evChan logChan = do
+spawnEventSource (Just (BaseUrl schema host port path)) evChan logChan appChan = do
+  runc <- case schema of
+    Https -> return runSecureClient
+    Http -> return $ \h p -> runClient h (fromIntegral p)
   env <- StaticEffectRandomizerEnv <$> gets (^. ccRegisteredEffects) <*> gets (^. ccImages)
   uid <- gets (^. ccUserId)
+  ccChan <- liftIO $ newChan @CommandCenterEvent
   enabledTVar <- fetchOrCreateEventSourceTVar
-  let run = runSecureClient host (fromIntegral port) path app
-      app = hortureWSStaticClientApp uid evChan env enabledTVar
+  baseEffects <- deriveBaseEvents
+  let run = runc host (fromIntegral port) path app
+      app = hortureWSStaticClientApp baseEffects uid evChan ccChan env enabledTVar
       action = run `catch` handler
       handler :: ConnectionException -> IO ()
       handler e = do
         logErrorColog logChan . pack . show $ e
         threadDelay oneSec
         action
-  liftIO . forkIO $ action
-spawnEventSource (Just (BaseUrl Http host port path)) evChan logChan = do
-  env <- StaticEffectRandomizerEnv <$> gets (^. ccRegisteredEffects) <*> gets (^. ccImages)
-  uid <- gets (^. ccUserId)
-  enabledTVar <- fetchOrCreateEventSourceTVar
-  let run = runClient host (fromIntegral port) path app
-      app = hortureWSStaticClientApp uid evChan env enabledTVar
-      action = run `catch` handler
-      handler :: ConnectionException -> IO ()
-      handler e = do
-        logErrorColog logChan . pack . show $ e
-        threadDelay oneSec
-        action
-  liftIO . forkIO $ action
+  liftIO . forkIO $ do
+    bracket
+      (forkIO . forever $ pipeToBrickChan ccChan appChan id)
+      killThread
+      (const action)
 
 logErrorColog :: Chan Text -> Text -> IO ()
 logErrorColog logChan = HL.withColog Colog.Error (logActionChan logChan)
