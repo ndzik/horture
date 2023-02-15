@@ -6,6 +6,7 @@
 module Horture.EventSource.Twitch where
 
 import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
+import Control.Concurrent.Chan.Synchronous
 import Control.Concurrent.STM
 import Control.Lens
 import Control.Monad (void)
@@ -13,7 +14,7 @@ import Control.Monad.Freer
 import Control.Monad.Freer.State
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import qualified Data.Map.Strict as Map
-import Data.Text (Text, pack, unpack)
+import Data.Text (Text)
 import Horture.Effect
 import Horture.Event
 import Horture.EventSource.Controller
@@ -56,23 +57,44 @@ makeFields ''TwitchEventSourceState
 
 runTwitchEventSource ::
   forall effs x.
-  (Members '[Logger, EventController] effs, LastMember IO (EventSink : effs)) =>
+  (Members '[Logger] effs, LastMember IO (EventSink : effs)) =>
   TwitchEventSourceState ->
+  Chan EventControllerInput ->
   Eff (EventSink : effs) x ->
   Eff (EventSink : effs) x
-runTwitchEventSource s eff = evalState s runEff'
+runTwitchEventSource s ic eff = runTwitchControllerWrapper ic . evalState s $ runEff'
   where
     runEff' = do
       let interval = 1
-      _tid <- startTicker' interval $ \s -> do
+      tid <- startTicker interval (twitchControllerWrapper ic) $ do
         let tvarCache = s ^. eventCosts
             stepDecreaseF = s ^. stepDecrease
             stepToBaseCost = applyCost (fromIntegral interval) stepDecreaseF
-        liftIO . atomically . modifyTVar' tvarCache $ stepToBaseCost
-        changeEventCost undefined undefined
-      res <- reinterpret2 twitchEventSourceHandler eff
-      -- liftIO $ killThread tid
+        costsToUpdate <- liftIO . atomically $ do
+          oldCosts <- readTVar tvarCache
+          let newCosts = stepToBaseCost oldCosts
+              appendIfChanged acc k (_, _, v) =
+                let newValue = round v
+                 in case Map.lookup k oldCosts of
+                      Just (_, _, v') | round v' /= newValue -> (k, newValue) : acc
+                      _otherwise -> acc
+              toUpdate = Map.foldlWithKey' appendIfChanged [] newCosts
+          return toUpdate
+        mapM_ (uncurry changeEventCost) costsToUpdate
+      res <- reinterpret3 twitchEventSourceHandler eff
+      liftIO $ killThread tid
       return res
+
+twitchControllerWrapper :: Chan EventControllerInput -> Eff '[EventController, IO] a -> IO a
+twitchControllerWrapper ic = runM . runTwitchControllerWrapper ic
+
+runTwitchControllerWrapper ::
+  LastMember IO effs =>
+  Chan EventControllerInput ->
+  Eff (EventController : effs) ~> Eff effs
+runTwitchControllerWrapper ic = interpret $ \case
+  ChangeEventCost id c -> (liftIO . writeChan ic $ InputChange id c) >> return True
+  _otherwise -> error "unhandled effect in TwitchControllerWrapper"
 
 twitchEventSourceHandler ::
   (Members '[State TwitchEventSourceState, EventSink, Logger, EventController] effs, LastMember IO effs) =>
@@ -93,40 +115,27 @@ handleEventCost (EventEffect _ eff) = do
       stepIncreaseF = s ^. stepIncrease
       stepUpCurrentCost = applyAndResetTime stepIncreaseF
   void . liftIO . atomically . modifyTVar' tvarCache $ stepUpCurrentCost id
-  Map.lookup id <$> liftIO (readTVarIO tvarCache) >>= \case
+  liftIO (Map.lookup id <$> readTVarIO tvarCache) >>= \case
     Nothing -> return ()
     Just (_dt, _bp, cp) -> void $ changeEventCost id (round cp)
 
 -- | startTicker starts a recurring handler invoked at each tick determined by
 -- the interval given in seconds.
 startTicker ::
-  ( Members '[State TwitchEventSourceState] effs,
-    LastMember IO effs
-  ) =>
+  (LastMember IO effsA, LastMember IO effsB) =>
+  -- Interval in seconds for ticker.
   Int ->
-  (TwitchEventSourceState -> IO ()) ->
-  Eff effs ThreadId
-startTicker interval action = do
-  s <- get @TwitchEventSourceState
-  let loop = do
-        threadDelay (interval * 1000 * 1000)
-        action s
-        loop
-  liftIO . forkIO $ loop
-
-startTicker' ::
-  ( Members '[State TwitchEventSourceState] effs,
-    LastMember IO effs
-  ) =>
-  Int ->
-  Eff effs () ->
-  Eff effs ()
-startTicker' interval action = do
+  -- Effects interpreter for the given action.
+  (Eff effsB a -> IO ()) ->
+  -- Action to run in the ticker.
+  Eff effsB a ->
+  Eff effsA ThreadId
+startTicker interval runEff action = do
   let loop = do
         liftIO $ threadDelay (interval * 1000 * 1000)
-        action
+        void action
         loop
-  loop
+  liftIO . forkIO . runEff $ loop
 
 -- | applyAndResetTime applies the given cost function to the entry of the
 -- given map and resets its timinginformation.

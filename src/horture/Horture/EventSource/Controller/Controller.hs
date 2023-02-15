@@ -43,6 +43,7 @@ data EventControllerInput
   | InputEnable ![(Text, Effect, Int)]
   | InputPurgeAll
   | InputTerminate
+  | InputChange Text Int
   deriving (Show)
 
 data EventControllerResponse
@@ -75,5 +76,6 @@ controlEventSource inputChan resChan = do
           InputListEvents -> listAllEvents >>= liftIO . writeChan rc . ListEvents >> return True
           InputEnable t -> enableEvents t >>= liftIO . writeChan rc . Enable >> return True
           InputPurgeAll -> purgeAllEvents >>= liftIO . writeChan rc . PurgeAll >> return True
+          InputChange t c -> changeEventCost t c >>= liftIO . writeChan rc . Enable >> return True
           InputTerminate -> purgeAllEvents >>= liftIO . writeChan rc . PurgeAll >> return False
       when res $ go ic rc

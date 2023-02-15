@@ -294,6 +294,7 @@ data CCException
   | UserAvoidedWindowSelection
   | AlreadyCapturingWindow
   | EventSourceUnavailable
+  | EventControllerUnavailable
   deriving (Show)
 
 instance Exception CCException
@@ -378,13 +379,17 @@ spawnEventSource (Just (BaseUrl schema host port path)) evChan logChan appChan =
   runc <- case schema of
     Https -> return runSecureClient
     Http -> return $ \h p -> runClient h (fromIntegral p)
+  ic <-
+    gets (^. ccControllerChans) >>= \case
+      Just (ic, _) -> return ic
+      Nothing -> throwM EventControllerUnavailable
   env <- StaticEffectRandomizerEnv <$> gets (^. ccRegisteredEffects) <*> gets (^. ccImages)
   uid <- gets (^. ccUserId)
   ccChan <- liftIO $ newChan @CommandCenterEvent
   enabledTVar <- fetchOrCreateEventSourceTVar
   baseEffects <- deriveBaseEvents
   let run = runc host (fromIntegral port) path app
-      app = hortureWSStaticClientApp baseEffects uid evChan ccChan env enabledTVar
+      app = hortureWSStaticClientApp baseEffects uid evChan ccChan ic env enabledTVar
       action = run `catch` handler
       handler :: ConnectionException -> IO ()
       handler e = do
@@ -434,6 +439,7 @@ handleCCExceptions InvalidBrickConfiguration = logError "InvalidBrickConfigurati
 handleCCExceptions UserAvoidedWindowSelection = logWarn "User avoided window selection"
 handleCCExceptions AlreadyCapturingWindow = logWarn "Already capturing application, stop your current capture first"
 handleCCExceptions EventSourceUnavailable = logError "Source of horture events not reachable"
+handleCCExceptions EventControllerUnavailable = logError "Communication channels for event controller unavailable"
 
 prepareEnvironment :: EventM Name CommandCenterState ()
 prepareEnvironment = return ()
