@@ -139,7 +139,7 @@ type UpdateCustomReward =
     :> QueryParam' [Required, Strict] "broadcaster_id" Text
     :> QueryParam' [Required, Strict] "id" Text
     :> ReqBody '[JSON] UpdateCustomRewardBody
-    :> Post '[JSON] (DataResponse [GetCustomRewardsData])
+    :> Patch '[JSON] (DataResponse [GetCustomRewardsData])
 
 newtype TwitchUsersClient = TwitchUsersClient
   { getUsers ::

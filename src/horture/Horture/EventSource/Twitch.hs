@@ -60,40 +60,63 @@ runTwitchEventSource ::
   (Members '[Logger] effs, LastMember IO (EventSink : effs)) =>
   TwitchEventSourceState ->
   Chan EventControllerInput ->
+  Chan EventControllerResponse ->
   Eff (EventSink : effs) x ->
   Eff (EventSink : effs) x
-runTwitchEventSource s ic eff = runTwitchControllerWrapper ic . evalState s $ runEff'
+runTwitchEventSource s ic rc eff = runTwitchControllerWrapper ic rc . evalState s $ runEff'
   where
     runEff' = do
       let interval = 1
-      tid <- startTicker interval (twitchControllerWrapper ic) $ do
+      tid <- startTicker interval (twitchControllerWrapper ic rc) $ do
         let tvarCache = s ^. eventCosts
             stepDecreaseF = s ^. stepDecrease
             stepToBaseCost = applyCost (fromIntegral interval) stepDecreaseF
+        registeredEvents <- Map.fromList <$> listAllEvents
         costsToUpdate <- liftIO . atomically $ do
           oldCosts <- readTVar tvarCache
           let newCosts = stepToBaseCost oldCosts
               appendIfChanged acc k (_, _, v) =
                 let newValue = round v
-                 in case Map.lookup k oldCosts of
-                      Just (_, _, v') | round v' /= newValue -> (k, newValue) : acc
-                      _otherwise -> acc
+                    res =
+                      Map.lookup k registeredEvents >>= \(backendId, _) -> do
+                        case Map.lookup k oldCosts of
+                          Just (_, _, v') | round v' /= newValue -> Just (backendId, newValue)
+                          _otherwise -> Nothing
+                 in case res of
+                      Just v -> v : acc
+                      Nothing -> acc
               toUpdate = Map.foldlWithKey' appendIfChanged [] newCosts
+          writeTVar tvarCache newCosts
           return toUpdate
         mapM_ (uncurry changeEventCost) costsToUpdate
       res <- reinterpret3 twitchEventSourceHandler eff
       liftIO $ killThread tid
       return res
 
-twitchControllerWrapper :: Chan EventControllerInput -> Eff '[EventController, IO] a -> IO a
-twitchControllerWrapper ic = runM . runTwitchControllerWrapper ic
+twitchControllerWrapper ::
+  Chan EventControllerInput ->
+  Chan EventControllerResponse ->
+  Eff '[EventController, IO] a ->
+  IO a
+twitchControllerWrapper ic rc = runM . runTwitchControllerWrapper ic rc
 
 runTwitchControllerWrapper ::
   LastMember IO effs =>
   Chan EventControllerInput ->
+  Chan EventControllerResponse ->
   Eff (EventController : effs) ~> Eff effs
-runTwitchControllerWrapper ic = interpret $ \case
-  ChangeEventCost id c -> (liftIO . writeChan ic $ InputChange id c) >> return True
+runTwitchControllerWrapper ic rc = interpret $ \case
+  ChangeEventCost id c -> do
+    liftIO . writeChan ic $ InputChange id c
+    (liftIO . readChan $ rc) >>= \case
+      Enable t -> return t
+      _else -> error "unexpected event controller response"
+  ListAllEvents -> do
+    liftIO . writeChan ic $ InputListEvents
+    -- TODO: This blocks for some reason?
+    (liftIO . readChan $ rc) >>= \case
+      ListEvents e -> return e
+      _else -> error "unexpected event controller response"
   _otherwise -> error "unhandled effect in TwitchControllerWrapper"
 
 twitchEventSourceHandler ::
@@ -115,9 +138,13 @@ handleEventCost (EventEffect _ eff) = do
       stepIncreaseF = s ^. stepIncrease
       stepUpCurrentCost = applyAndResetTime stepIncreaseF
   void . liftIO . atomically . modifyTVar' tvarCache $ stepUpCurrentCost id
+  registeredEvents <- Map.fromList <$> listAllEvents
+  backendId <- case Map.lookup id registeredEvents of
+    Just (backendId, _) -> return backendId
+    Nothing -> error "handling event cost: unregistered event encountered"
   liftIO (Map.lookup id <$> readTVarIO tvarCache) >>= \case
     Nothing -> return ()
-    Just (_dt, _bp, cp) -> void $ changeEventCost id (round cp)
+    Just (_dt, _bp, cp) -> void $ changeEventCost backendId (round cp)
 
 -- | startTicker starts a recurring handler invoked at each tick determined by
 -- the interval given in seconds.

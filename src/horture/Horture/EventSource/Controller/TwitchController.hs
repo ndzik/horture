@@ -20,7 +20,7 @@ import Control.Monad.Freer.State
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, unpack)
 import Horture.CommandCenter.Event
 import Horture.Effect
 import Horture.EventSource.Controller.Controller
@@ -107,10 +107,11 @@ changeCustomReward rewardId cost = do
   id <- gets @TwitchControllerState (^. broadcasterId)
   env <- gets @TwitchControllerState (^. clientEnv)
   go (updateCustomReward id rewardId) env cost
-    where go call env cost = do
-            let body = UpdateCustomRewardBody
-                        {
-                updatecustomrewardbodyTitle = Nothing,
+  where
+    go call env cost = do
+      let body =
+            UpdateCustomRewardBody
+              { updatecustomrewardbodyTitle = Nothing,
                 updatecustomrewardbodyCost = Just cost,
                 updatecustomrewardbodyPrompt = Nothing,
                 updatecustomrewardbodyIsEnabled = Nothing,
@@ -123,10 +124,10 @@ changeCustomReward rewardId cost = do
                 updatecustomrewardbodyIsGlobalCooldownEnabled = Nothing,
                 updatecustomrewardbodyGlobalCooldownSeconds = Nothing,
                 updatecustomrewardbodyShouldRedemptionsSkipRequestQuee = Nothing
-                        }
-            liftIO (runClientM (call body) env) >>= \case
-              Right _ -> return True
-              Left err -> logError (pack . show $ err) >> return False
+              }
+      liftIO (runClientM (call body) env) >>= \case
+        Right _ -> return True
+        Left err -> logError (pack . show $ err) >> return False
 
 storeCustomRewardCreation ::
   (Members '[State TwitchControllerState, Logger] effs) =>

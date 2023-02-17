@@ -25,7 +25,7 @@ import Horture.Server.Message
 import Network.WebSockets
 import qualified Twitch.EventSub.Event as TEvent
 import qualified Twitch.EventSub.Notification as TEvent
-import Horture.EventSource.Controller.Controller (EventControllerInput)
+import Horture.EventSource.Controller.Controller (EventControllerInput, EventControllerResponse)
 
 runWSEventSource ::
   forall effs x.
@@ -84,10 +84,11 @@ hortureWSStaticClientApp ::
   Chan Event ->
   Chan CommandCenterEvent ->
   Chan EventControllerInput ->
+  Chan EventControllerResponse ->
   StaticEffectRandomizerEnv ->
   TVar Bool ->
   ClientApp ()
-hortureWSStaticClientApp events bid evChan ccChan ecInput env enabled conn = do
+hortureWSStaticClientApp events bid evChan ccChan ecInput ecResponse env enabled conn = do
   liftIO $ sendTextData conn (HortureAuthorization bid)
   esTvar <- liftIO . newTVarIO . buildFromEvents $ events
   runM
@@ -96,7 +97,7 @@ hortureWSStaticClientApp events bid evChan ccChan ecInput env enabled conn = do
     . runReader enabled
     . runStaticEffectRandomizer
     . runWSEventSink evChan
-    . runTwitchEventSource (TwitchEventSourceState esTvar linearIncreaseFunction decayFunction) ecInput
+    . runTwitchEventSource (TwitchEventSourceState esTvar linearIncreaseFunction decayFunction) ecInput ecResponse
     . runWSEventSource conn
     $ eventSource
 

@@ -18,6 +18,7 @@ import Data.Text (Text, pack)
 import Horture.CommandCenter.Event
 import Prelude hiding (log)
 
+-- TODO: Add a LogTrace function.
 data Logger l where
   LogInfo :: Text -> Logger ()
   LogError :: Text -> Logger ()

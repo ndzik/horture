@@ -379,9 +379,9 @@ spawnEventSource (Just (BaseUrl schema host port path)) evChan logChan appChan =
   runc <- case schema of
     Https -> return runSecureClient
     Http -> return $ \h p -> runClient h (fromIntegral p)
-  ic <-
+  (ic, rc) <-
     gets (^. ccControllerChans) >>= \case
-      Just (ic, _) -> return ic
+      Just r -> return r
       Nothing -> throwM EventControllerUnavailable
   env <- StaticEffectRandomizerEnv <$> gets (^. ccRegisteredEffects) <*> gets (^. ccImages)
   uid <- gets (^. ccUserId)
@@ -389,7 +389,7 @@ spawnEventSource (Just (BaseUrl schema host port path)) evChan logChan appChan =
   enabledTVar <- fetchOrCreateEventSourceTVar
   baseEffects <- deriveBaseEvents
   let run = runc host (fromIntegral port) path app
-      app = hortureWSStaticClientApp baseEffects uid evChan ccChan ic env enabledTVar
+      app = hortureWSStaticClientApp baseEffects uid evChan ccChan ic rc env enabledTVar
       action = run `catch` handler
       handler :: ConnectionException -> IO ()
       handler e = do
