@@ -2,4 +2,6 @@ module Horture.CommandCenter.Event (CommandCenterEvent (..)) where
 
 import Data.Text (Text)
 
-newtype CommandCenterEvent = CCLog Text deriving (Show)
+data CommandCenterEvent = CCLog !Text
+  | CCFrameUpdate !Float
+  deriving (Show)

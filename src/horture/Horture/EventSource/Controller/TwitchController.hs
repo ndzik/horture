@@ -20,7 +20,7 @@ import Control.Monad.Freer.State
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
-import Data.Text (Text, pack, unpack)
+import Data.Text (Text, pack)
 import Horture.CommandCenter.Event
 import Horture.Effect
 import Horture.EventSource.Controller.Controller

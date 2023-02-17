@@ -15,7 +15,7 @@ import Brick.Widgets.List
 import qualified Colog
 import Control.Concurrent (ThreadId, forkIO, forkOS, killThread, newEmptyMVar, readMVar, threadDelay)
 import Control.Concurrent.Chan.Synchronous
-import Control.Concurrent.STM (TVar, atomically, modifyTVar, newTVarIO)
+import Control.Concurrent.STM (TVar, atomically, modifyTVar, newTVarIO, readTVarIO)
 import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Except
@@ -70,10 +70,16 @@ drawUI cs =
   let selectedName = (cs ^. ccCursorLocationName)
    in [ vBox
           [ vLimit 4 $
-              withBorderStyle unicode $
-                borderWithLabel
-                  (str "Horture CommandCenter")
-                  (currentCaptureUI . _ccCapturedWin $ cs),
+              hBox
+                [ withBorderStyle unicode $
+                    borderWithLabel
+                      (str "Horture CommandCenter")
+                      (currentCaptureUI . _ccCapturedWin $ cs),
+                  setAvailableSize (7, 4) $ withBorderStyle unicode $
+                    borderWithLabel
+                      (str "FPS")
+                      (center . fpsUI . _ccCurrentFPS $ cs)
+                ],
             hBox
               [ let mkAttr =
                       if selectedName == AssetPort
@@ -111,6 +117,9 @@ drawUI cs =
 currentCaptureUI :: Maybe String -> Widget Name
 currentCaptureUI Nothing = center (str "No window is captured")
 currentCaptureUI (Just s) = center (str s)
+
+fpsUI :: Float -> Widget Name
+fpsUI = str . show
 
 instance Splittable [] where
   splitAt n ls = (take n ls, drop n ls)
@@ -185,6 +194,7 @@ toggleEventSource (Just tv) = do
 
 handleCCEvent :: CommandCenterEvent -> EventM Name CommandCenterState ()
 handleCCEvent (CCLog msg) = constructLogFromBuffer msg
+handleCCEvent (CCFrameUpdate fps) = ccCurrentFPS .= fps
 
 stopApplication :: EventM Name CommandCenterState ()
 stopApplication = do
@@ -282,9 +292,9 @@ logActionCC = Colog.LogAction constructLogFromBuffer
 constructLogFromBuffer :: Text -> EventM Name CommandCenterState ()
 constructLogFromBuffer msg = do
   log <-
-    gets (^. ccLog) >>= \ rb -> do
-        liftIO $ RingBuffer.append msg rb
-        liftIO $ RingBuffer.toList rb
+    gets (^. ccLog) >>= \rb -> do
+      liftIO $ RingBuffer.append msg rb
+      liftIO $ RingBuffer.toList rb
   ccLogList .= log
 
 data CCException
@@ -466,6 +476,7 @@ runDebugCenter mcfg = do
     Nothing -> return Nothing
   logBuf <- liftIO $ RingBuffer.new 200
   frameCounter <- liftIO $ newTVarIO 0
+  void $ fpsTicker (500 * 1000) frameCounter appChan
   void $
     customMain
       initialVty
@@ -492,7 +503,8 @@ runDebugCenter mcfg = do
           _ccCursorLocationName = LogPort,
           _ccRegisteredEffects = Map.empty,
           _ccFrameCounter = frameCounter,
-          _ccEventSourceEnabled = Nothing
+          _ccEventSourceEnabled = Nothing,
+          _ccCurrentFPS = 0
         }
 
 runCommandCenter :: Bool -> Config -> IO ()
@@ -521,6 +533,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
   initialVty <- buildVty
   logBuf <- liftIO $ RingBuffer.new 200
   frameCounter <- liftIO $ newTVarIO 0
+  void $ fpsTicker (500 * 1000) frameCounter appChan
   void $
     customMain
       initialVty
@@ -547,7 +560,8 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
           _ccCursorLocationName = LogPort,
           _ccRegisteredEffects = Map.empty,
           _ccFrameCounter = frameCounter,
-          _ccEventSourceEnabled = Nothing
+          _ccEventSourceEnabled = Nothing,
+          _ccCurrentFPS = 0
         }
 
 fetchUserId :: BaseUrl -> Text -> Text -> IO Text
@@ -598,6 +612,17 @@ spawnTwitchEventController helixApi uid cid auth appChan = do
             controllerResponseChan
       )
   return (controllerInputChan, controllerResponseChan)
+
+fpsTicker :: Int -> TVar Int -> BChan CommandCenterEvent -> IO ThreadId
+fpsTicker microSecondsDelay fpsTVar bchan = do
+  let loop lastFrameCount = do
+        newFrameCount <- readTVarIO fpsTVar
+        let numOfFrames = fromIntegral $ newFrameCount - lastFrameCount
+            fps = numOfFrames / (fromIntegral microSecondsDelay / (1000 * 1000))
+        writeBChan bchan $ CCFrameUpdate fps
+        threadDelay microSecondsDelay
+        loop newFrameCount
+  forkIO $ loop 0
 
 pipeToBrickChan :: Chan a -> BChan b -> (a -> b) -> IO ()
 pipeToBrickChan chan bchan toBchan = readChan chan >>= writeBChan bchan . toBchan

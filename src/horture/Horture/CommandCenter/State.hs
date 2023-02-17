@@ -20,6 +20,7 @@ module Horture.CommandCenter.State
     ccCursorLocationName,
     ccEventSourceEnabled,
     ccDefaultFont,
+    ccCurrentFPS,
     Name (..),
   )
 where
@@ -66,6 +67,7 @@ data CommandCenterState = CCState
     _ccFrameCounter :: !(TVar Int),
     _ccCursorLocationName :: !Name,
     _ccEventBaseCost :: !Int,
+    _ccCurrentFPS :: !Float,
     -- | Timeout in microseconds for events to be generated. Only works in
     -- DEBUG mode.
     _ccTimeout :: !Int
