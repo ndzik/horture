@@ -1,7 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-
 module Horture.EventSource.Local
   ( hortureLocalEventSource,
   )
@@ -23,13 +19,22 @@ import Horture.EventSource.Random
 runLocalEventSource ::
   (Members '[RandomizeEffect] effs, LastMember IO effs) =>
   Int ->
-  Chan Event ->
   Eff (EventSource : effs) x ->
   Eff effs x
-runLocalEventSource timeout evChan = interpret $ do
+runLocalEventSource timeout = interpret $ do
   \case
     SourceEvent -> EventEffect "DebugUser" <$> randomizeEffect Noop <* liftIO (threadDelay timeout)
-    SinkEvent ev -> liftIO $ writeChan evChan ev
+
+-- | runLocalEventSink passes given events to some sink.
+runLocalEventSink ::
+  (Members '[RandomizeEffect] effs, LastMember IO effs) =>
+  Chan Event ->
+  Eff (EventSink : effs) x ->
+  Eff effs x
+runLocalEventSink evChan = interpret $ do
+  \case
+    SinkEvent ev -> do
+      liftIO $ writeChan evChan ev
 
 hortureLocalEventSource :: Int -> Chan Event -> [FilePath] -> TVar Bool -> IO ()
 hortureLocalEventSource timeout evChan env enabled =
@@ -37,5 +42,6 @@ hortureLocalEventSource timeout evChan env enabled =
     . runReader env
     . runReader enabled
     . runAnyEffectRandomizer
-    . runLocalEventSource timeout evChan
+    . runLocalEventSource timeout
+    . runLocalEventSink evChan
     $ eventSource

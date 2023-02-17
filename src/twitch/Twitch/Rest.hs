@@ -69,28 +69,39 @@ data TwitchChannelPointsClient = TwitchChannelPointsClient
       Text ->
       Text ->
       ClientM NoContent,
-    -- | breadcaster_id -> CreateCustomRewardBody.
+    -- | broadcaster_id -> CreateCustomRewardBody.
     createCustomReward ::
       Text ->
       CreateCustomRewardBody ->
+      ClientM (DataResponse [GetCustomRewardsData]),
+    -- | broadcaster_id -> custom_reward_id -> CreateCustomRewardBody.
+    updateCustomReward ::
+      Text ->
+      Text ->
+      UpdateCustomRewardBody ->
       ClientM (DataResponse [GetCustomRewardsData])
+
   }
 
 twitchChannelPointsClient :: Text -> AuthorizationToken -> TwitchChannelPointsClient
 twitchChannelPointsClient clientid at =
   let _getCustomRewards
         :<|> _deleteCustomReward
-        :<|> _createCustomReward = client (Proxy @ChannelPointsApi)
+        :<|> _createCustomReward
+        :<|> _updateCustomReward
+          = client (Proxy @ChannelPointsApi)
    in TwitchChannelPointsClient
         { getCustomRewards = _getCustomRewards clientid at,
           deleteCustomReward = _deleteCustomReward clientid at,
-          createCustomReward = _createCustomReward clientid at
+          createCustomReward = _createCustomReward clientid at,
+          updateCustomReward = _updateCustomReward clientid at
         }
 
 type ChannelPointsApi =
   GetCustomRewards
     :<|> DeleteCustomReward
     :<|> CreateCustomReward
+    :<|> UpdateCustomReward
 
 type GetCustomRewards =
   "channel_points"
@@ -119,6 +130,16 @@ type CreateCustomReward =
     :> QueryParam' [Required, Strict] "broadcaster_id" Text
     :> ReqBody '[JSON] CreateCustomRewardBody
     :> Post '[JSON] (DataResponse [GetCustomRewardsData])
+
+type UpdateCustomReward =
+  "channel_points"
+    :> "custom_rewards"
+    :> Header' [Required, Strict] "Client-Id" Text
+    :> Header' [Required, Strict] "Authorization" AuthorizationToken
+    :> QueryParam' [Required, Strict] "broadcaster_id" Text
+    :> QueryParam' [Required, Strict] "id" Text
+    :> ReqBody '[JSON] UpdateCustomRewardBody
+    :> Patch '[JSON] (DataResponse [GetCustomRewardsData])
 
 newtype TwitchUsersClient = TwitchUsersClient
   { getUsers ::

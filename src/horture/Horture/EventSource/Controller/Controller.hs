@@ -1,8 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
 -- | The EventSource.Controller allows to configure an EventSource, e.g. which
 -- events are enabled and can be received from the EventSource itself.
 module Horture.EventSource.Controller.Controller
@@ -10,6 +5,7 @@ module Horture.EventSource.Controller.Controller
     listAllEvents,
     enableEvents,
     purgeAllEvents,
+    changeEventCost,
     controlEventSource,
     EventControllerResponse (..),
     EventControllerInput (..),
@@ -34,6 +30,8 @@ data EventController a where
   -- source associated with the given cost, if applicable. Bool indicates
   -- success.
   EnableEvents :: [(Text, Effect, Int)] -> EventController Bool
+  -- | Changes the cost for an event id using the given value.
+  ChangeEventCost :: Text -> Int -> EventController Bool
   -- | Purge all enabled events. This disables all events on the controlled
   -- event source.
   PurgeAllEvents :: EventController Bool
@@ -45,6 +43,7 @@ data EventControllerInput
   | InputEnable ![(Text, Effect, Int)]
   | InputPurgeAll
   | InputTerminate
+  | InputChange Text Int
   deriving (Show)
 
 data EventControllerResponse
@@ -77,5 +76,6 @@ controlEventSource inputChan resChan = do
           InputListEvents -> listAllEvents >>= liftIO . writeChan rc . ListEvents >> return True
           InputEnable t -> enableEvents t >>= liftIO . writeChan rc . Enable >> return True
           InputPurgeAll -> purgeAllEvents >>= liftIO . writeChan rc . PurgeAll >> return True
+          InputChange t c -> changeEventCost t c >>= liftIO . writeChan rc . Enable >> return True
           InputTerminate -> purgeAllEvents >>= liftIO . writeChan rc . PurgeAll >> return False
       when res $ go ic rc

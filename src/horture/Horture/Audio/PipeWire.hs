@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | PipeWire backend for Horture to capture desktop audio.
@@ -17,6 +17,7 @@ import Control.Lens
 import Control.Loop
 import Control.Monad
 import Control.Monad.Except
+import Control.Monad.Reader
 import Control.Monad.State
 import Data.Array.CArray.Base
 import Data.Maybe
@@ -30,31 +31,18 @@ import Horture.Logging
 import Horture.State
 import Math.FFT
 import Math.FFT.Base
+import qualified RingBuffers.Lifted as Ringbuffer
+import UnliftIO.Exception
 
 deriving instance FFTWReal CFloat
 
 type AudioCallback = CUInt -> CUInt -> CUInt -> Ptr CFloat -> IO Bool
 
 instance (HortureLogger (Horture l hdl)) => AudioRecorder (Horture l hdl) where
-  startRecording =
-    gets (^. audioRecording) >>= \case
-      Nothing -> do
-        stopIt <- liftIO newEmptyMVar
-        storage <- liftIO $ newTVarIO Nothing
-        void . liftIO $ mkAudioCallback (onProcessAudio stopIt storage) >>= forkIO . runPipeWire
-        audioRecording .= Just stopIt
-        audioStorage .= storage
-      Just _ -> stopRecording >> startRecording
-  stopRecording =
-    gets (^. audioRecording) >>= \case
-      Nothing -> return ()
-      Just stopIt -> liftIO (putMVar stopIt ()) >> audioRecording .= Nothing
-  currentFFTPeak =
-    gets (^. audioStorage) >>= liftIO . readTVarIO >>= \case
-      Nothing -> return (0, 0, 0)
-      Just res -> do
-        mvgAvg %= take 10 . (res :)
-        gets (^. mvgAvg) >>= \l -> takeAvg (fromIntegral . length $ l) l
+  startRecording = startHortureRecording
+  stopRecording = stopHortureRecording
+  currentFFTPeak = currentHortureFFTPeak
+  withRecording = withHortureRecording
 
 takeAvg :: Int -> [(Double, Double, Double)] -> Horture l hdl (Double, Double, Double)
 takeAvg n ffts = do
@@ -69,6 +57,42 @@ foreign import ccall "wrapper"
 
 foreign import ccall "record.c run"
   runPipeWire :: FunPtr AudioCallback -> IO ()
+
+currentHortureFFTPeak :: (HortureLogger (Horture l hdl)) => Horture l hdl (Double, Double, Double)
+currentHortureFFTPeak =
+  gets (^. audioStorage) >>= liftIO . readTVarIO >>= \case
+    Nothing -> return (0, 0, 0)
+    Just res -> do
+      gets (^. mvgAvg) >>= \fftBuf -> do
+        liftIO $ Ringbuffer.append res fftBuf
+        l <- liftIO $ Ringbuffer.toList fftBuf
+        takeAvg (fromIntegral . length $ l) l
+
+stopHortureRecording :: (HortureLogger (Horture l hdl)) => Horture l hdl ()
+stopHortureRecording =
+  gets (^. audioRecording) >>= \case
+    Nothing -> return ()
+    Just stopIt -> liftIO (putMVar stopIt ()) >> audioRecording .= Nothing
+
+startHortureRecording :: (HortureLogger (Horture l hdl)) => Horture l hdl ()
+startHortureRecording =
+  gets (^. audioRecording) >>= \case
+    Nothing -> do
+      stopIt <- liftIO newEmptyMVar
+      storage <- liftIO $ newTVarIO Nothing
+      void . liftIO $ mkAudioCallback (onProcessAudio stopIt storage) >>= forkIO . runPipeWire
+      audioRecording .= Just stopIt
+      audioStorage .= storage
+    Just _ -> stopRecording >> startRecording
+
+withHortureRecording :: forall hdl l a. (HortureLogger (Horture l hdl)) => Horture l hdl a -> Horture l hdl ()
+withHortureRecording action = do
+  s <- get
+  env <- ask
+  let acquire = evalHorture s env (startRecording @(Horture l hdl))
+      action' (_, s') = runHorture s' env action
+      release (_, s') = runHorture s' env (stopRecording @(Horture l hdl))
+  void . liftIO $ bracket acquire release action'
 
 -- | onProcessAudio is the audio callback passed to pipewire when a new audio
 -- sample is ready to be processed. It is parameterized on an MVar signal

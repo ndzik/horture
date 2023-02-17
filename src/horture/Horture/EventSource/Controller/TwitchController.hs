@@ -1,8 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
 module Horture.EventSource.Controller.TwitchController
@@ -65,6 +60,7 @@ handleTwitchEventController ::
 handleTwitchEventController = interpret $ \case
   ListAllEvents -> gets @TwitchControllerState (Map.toList . (^. events))
   EnableEvents c -> putCustomRewards c
+  ChangeEventCost id c -> changeCustomReward id c
   PurgeAllEvents -> deleteAllRewards
 
 -- | putCustomRewards registers the given [(Title, Effect)] pairs as custom
@@ -100,6 +96,38 @@ putCustomRewards rewards = do
       runClientM (call id body) env >>= \case
         Right (DataResponse crs) -> return $ map (\d -> Right (title, (getcustomrewardsdataId d, eff))) crs
         Left err -> return [Left . pack . show $ err]
+
+changeCustomReward ::
+  (Members '[State TwitchControllerState, Logger] effs, LastMember IO effs) =>
+  Text ->
+  Int ->
+  Eff effs Bool
+changeCustomReward rewardId cost = do
+  TwitchChannelPointsClient {updateCustomReward} <- gets @TwitchControllerState (^. client)
+  id <- gets @TwitchControllerState (^. broadcasterId)
+  env <- gets @TwitchControllerState (^. clientEnv)
+  go (updateCustomReward id rewardId) env cost
+  where
+    go call env cost = do
+      let body =
+            UpdateCustomRewardBody
+              { updatecustomrewardbodyTitle = Nothing,
+                updatecustomrewardbodyCost = Just cost,
+                updatecustomrewardbodyPrompt = Nothing,
+                updatecustomrewardbodyIsEnabled = Nothing,
+                updatecustomrewardbodyBackgroundColor = Nothing,
+                updatecustomrewardbodyIsUserInputRequired = Nothing,
+                updatecustomrewardbodyIsMaxPerStreamEnabled = Nothing,
+                updatecustomrewardbodyMaxPerStream = Nothing,
+                updatecustomrewardbodyIsMaxPerUserPerStreamEnabled = Nothing,
+                updatecustomrewardbodyMaxPerUserPerStream = Nothing,
+                updatecustomrewardbodyIsGlobalCooldownEnabled = Nothing,
+                updatecustomrewardbodyGlobalCooldownSeconds = Nothing,
+                updatecustomrewardbodyShouldRedemptionsSkipRequestQuee = Nothing
+              }
+      liftIO (runClientM (call body) env) >>= \case
+        Right _ -> return True
+        Left err -> logError (pack . show $ err) >> return False
 
 storeCustomRewardCreation ::
   (Members '[State TwitchControllerState, Logger] effs) =>

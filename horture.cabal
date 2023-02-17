@@ -27,6 +27,14 @@ library horture-lib
                             , TypeOperators
                             , OverloadedStrings
                             , LambdaCase
+                            , DataKinds
+                            , GADTs
+                            , FlexibleContexts
+                            , FlexibleInstances
+                            , ScopedTypeVariables
+                            , TypeFamilies
+                            , FunctionalDependencies
+                            , NumericUnderscores
     exposed-modules:        Horture
                             , Horture.Authorize
                             , Horture.Path
@@ -57,6 +65,7 @@ library horture-lib
                             , Horture.Loader
                             , Horture.Effect
                             , Horture.Asset
+                            , Horture.Constraints
                             , Horture.Character
 
     -- Modules included in this library but not exported.
@@ -75,6 +84,7 @@ library horture-lib
                             , Horture.EventSource.Random
                             , Horture.EventSource.Logger
                             , Horture.EventSource.Local
+                            , Horture.EventSource.Twitch
                             , Horture.EventSource.Controller
                             , Horture.EventSource.Controller.Controller
                             , Horture.EventSource.Controller.TwitchController
@@ -119,6 +129,7 @@ library horture-lib
                             , vector
                             , synchronous-channels
                             , OpenGL
+                            , unliftio
                             , OpenGLRaw
                             , lens
                             , JuicyPixels
@@ -158,6 +169,8 @@ library horture-server-lib
                             , TypeOperators
                             , OverloadedStrings
                             , LambdaCase
+                            , NumericUnderscores
+                            , ScopedTypeVariables
     hs-source-dirs:     src/server
     default-language:   Haskell2010
     ghc-options:

@@ -1,9 +1,6 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-
 module Horture.EventSource.EventSource
   ( EventSource (..),
+    EventSink (..),
     RandomizeEffect (..),
     randomizeEffect,
     sourceEvent,
@@ -22,9 +19,12 @@ import Horture.Event
 
 data EventSource a where
   SourceEvent :: EventSource Event
-  SinkEvent :: Event -> EventSource ()
+
+data EventSink a where
+  SinkEvent :: Event -> EventSink ()
 
 makeEffect ''EventSource
+makeEffect ''EventSink
 
 data RandomizeEffect a where
   RandomizeEffect :: Effect -> RandomizeEffect Effect
@@ -32,9 +32,9 @@ data RandomizeEffect a where
 makeEffect ''RandomizeEffect
 
 -- | eventSource sources events from some source and passes them to a sink.
-eventSource :: (Members '[Reader (TVar Bool), EventSource] effs, LastMember IO effs) => Eff effs ()
+eventSource :: (Members '[Reader (TVar Bool), EventSource, EventSink] effs, LastMember IO effs) => Eff effs ()
 eventSource =
-  sourceEvent >>= \ev -> do
+  sourceEvent >>= \ev ->
     -- Only if we are enabled do we push the newly aquired event to the sink.
     -- Otherwise we drop it.
     ask @(TVar Bool) >>= liftIO . readTVarIO >>= \case

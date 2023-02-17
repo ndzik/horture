@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-
 module Horture.Initializer.Environment
   ( HortureInitializerEnvironment (..),
     logChan,

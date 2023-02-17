@@ -1,9 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
 
 module Horture
   ( SizeUpdate (..),
@@ -21,9 +17,12 @@ module Horture
   )
 where
 
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.STM
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.Bifunctor
 import Data.Default
 import qualified Data.Map.Strict as Map
@@ -39,6 +38,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import Horture.Audio
 import Horture.Audio.PipeWire ()
 import Horture.Audio.Player.Horture ()
+import Horture.Constraints
 import Horture.Effect
 import Horture.Error
 import Horture.Events
@@ -58,26 +58,20 @@ import System.Exit
 hortureName :: String
 hortureName = "horture"
 
-type HortureEffects hdl l =
-  ( HortureLogger (Horture l hdl),
-    WindowPoller hdl (Horture l hdl)
-  )
+frameTime :: Double
+frameTime = 1 / 60
 
 -- | playScene plays the given scene in a Horture context.
 playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
-  initAudio
-  startRecording
-  go 0 (Just s)
+  void . withRecording . withAudio . go 0 . Just $ s
   where
     go _ Nothing = do
-      deinitAudio
-      stopRecording
       logInfo "horture stopped"
-    go startTime (Just s) = do
+    go lt (Just s) = do
       let action = do
-            dt <- deltaTime startTime
+            dt <- deltaTime 0
             clearView
             renderBackground dt
             s <- renderScene dt s
@@ -85,14 +79,21 @@ playScene s = do
             renderActiveEffectText s
             renderEventList dt
             updateView
-            s' <- getTime >>= \timeNow -> pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
-            go startTime s'
-      action
-        `catchError` ( \err -> do
-                         handleHortureError err
-                         logWarn "resetting scene & continuing..."
-                         go startTime $ Just s
-                     )
+            countFrame
+            timeNow <- getTime
+            pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
+      s <-
+        action
+          `catchError` ( \err -> do
+                           handleHortureError err
+                           logWarn "resetting scene & continuing..."
+                           return $ Just s
+                       )
+      deltaTime lt >>= \timeSinceFrame ->
+        when (timeSinceFrame < frameTime) $
+          liftIO . threadDelay . round $ (frameTime - timeSinceFrame) * 1000 * 1000
+      newTime <- getTime
+      go newTime s
     handleHortureError (HE err) = logError . pack $ err
     handleHortureError (WindowEnvironmentInitializationErr err) = logError . pack $ err
     handleHortureError WindowEnvironmentQueryHortureErr = logError . pack . show $ WindowEnvironmentQueryHortureErr
@@ -105,6 +106,9 @@ processAudio Nothing = return Nothing
 processAudio (Just s) = do
   mapM_ playAudio $ s ^. audio
   return $ Just s
+
+countFrame :: Horture l hdl ()
+countFrame = gets (^. frameCounter) >>= liftIO . atomically . flip modifyTVar' (+ 1)
 
 clearView :: Horture l hdl ()
 clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]

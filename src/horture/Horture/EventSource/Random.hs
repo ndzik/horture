@@ -1,8 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
-
 module Horture.EventSource.Random
   ( runStaticEffectRandomizer,
     runAnyEffectRandomizer,
@@ -170,12 +165,14 @@ newRandomStitchShader =
     <$> (Limited <$> uniformRM' 6 12) <*> return Stitch <*> return []
 
 newRandomFlashbangShader :: (LastMember IO effs) => Eff effs Effect
-newRandomFlashbangShader =
+newRandomFlashbangShader = do
+  pitchPeep <- randomRM' 0.1 0.6
+  pitchBang <- randomRM' 0.7 1.2
   AddShaderEffect
     <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang
       <*> return
-        [ StaticSound 0.2 FlashbangPeep,
-          StaticSound 1.0 FlashbangBang
+        [ StaticSound pitchPeep FlashbangPeep,
+          StaticSound pitchBang FlashbangBang
         ]
 
 newRandomCycleShader :: (LastMember IO effs) => Eff effs Effect
@@ -221,16 +218,19 @@ newRandomEffect =
           else
             if r < 0.8
               then newRandomShaderEffect
-              else if r < 0.5
-                then newRandomPurgeEffect
-                else newRandomRapidFireEffect
+              else
+                if r < 0.5
+                  then newRandomPurgeEffect
+                  else newRandomRapidFireEffect
 
 newRandomPurgeEffect ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
   Eff effs Effect
 newRandomPurgeEffect = do
-  randomM' @_ @Float >>= \r -> if r < 0.5 then RemoveScreenBehaviour <$> randomM'
-                                          else RemoveShaderEffect <$> randomM'
+  randomM' @_ @Float >>= \r ->
+    if r < 0.5
+      then RemoveScreenBehaviour <$> randomM'
+      else RemoveShaderEffect <$> randomM'
 
 newRandomRapidFireEffect ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>

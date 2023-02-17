@@ -1,5 +1,3 @@
-{-#LANGUAGE FunctionalDependencies#-}
-{-#LANGUAGE FlexibleInstances#-}
 module Horture.Character where
 
 import Control.Lens

@@ -1,12 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module Horture.Backend.X11.Initializer
   ( initialize,
@@ -16,7 +11,7 @@ where
 
 import Control.Concurrent.Chan.Synchronous
 import Control.Concurrent.MVar
-import Control.Concurrent.STM (newTVarIO)
+import Control.Concurrent.STM (TVar, newTVarIO)
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -35,7 +30,6 @@ import Graphics.X11.Xlib.Extras hiding (Event)
 import Horture
 import Horture.Audio.Player.Protea
 import Horture.Backend.X11.LinuxX11 (CaptureHandle)
-import qualified RingBuffers.Lifted as RingBuffer
 import Horture.Error
 import Horture.Event
 import Horture.Horture
@@ -47,6 +41,7 @@ import Horture.Scene hiding (assets)
 import Horture.State
 import Horture.WindowGrabber
 import Numeric (showHex)
+import qualified RingBuffers.Lifted as RingBuffer
 
 instance
   (HortureLogger (HortureInitializer l hdl), hdl ~ CaptureHandle) =>
@@ -70,10 +65,11 @@ initialize ::
   Scene ->
   [(FilePath, Asset)] ->
   [(FilePath, Asset)] ->
+  TVar Int ->
   Maybe (Chan Text) ->
   Chan Event ->
   HortureInitializer l hdl ()
-initialize startScene loadedImages loadedSounds logChan evChan = do
+initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
   glW <- liftIO initGLFW
   (dp, w, isMapped) <- grabAnyWindow
 
@@ -103,6 +99,8 @@ initialize startScene loadedImages loadedSounds logChan evChan = do
         "X11 unable to query Xlibcomposite extension"
     _otherwise -> return ()
 
+  liftIO setDefaultErrorHandler
+
   -- CompositeRedirectManual to avoid unnecessarily drawing the captured
   -- window, which is overlayed anyway by our application.
   liftIO $ xCompositeRedirectWindow dp w CompositeRedirectManual
@@ -118,7 +116,8 @@ initialize startScene loadedImages loadedSounds logChan evChan = do
   mFont <- asks (^. defaultFont)
   (hsp, dip, hbp, ftp) <- liftIO $ initResources (fromIntegral ww, fromIntegral wh) loadedImages mFont
   storage <- liftIO $ newTVarIO Nothing
-  ringBuf <- liftIO $ RingBuffer.new 4
+  evBuf <- liftIO $ RingBuffer.new 4
+  fftBuf <- liftIO $ RingBuffer.new 8
   let scene = startScene {_assetCache = dip ^. assets}
       hs =
         HortureState
@@ -127,9 +126,10 @@ initialize startScene loadedImages loadedSounds logChan evChan = do
             _audioRecording = Nothing,
             _audioStorage = storage,
             _audioState = def,
-            _mvgAvg = [],
+            _frameCounter = frameCounter,
+            _mvgAvg = fftBuf,
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr),
-            _eventList = ringBuf
+            _eventList = evBuf
           }
   let ssf = Map.fromList $ map (\(fp, AudioEffect eff _) -> (eff, fp)) loadedSounds
       hc =

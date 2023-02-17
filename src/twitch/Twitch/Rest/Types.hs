@@ -1,6 +1,7 @@
 module Twitch.Rest.Types
   ( GetCustomRewardsData (..),
     CreateCustomRewardBody (..),
+    UpdateCustomRewardBody (..),
     GetUserInformation (..),
   )
 where
@@ -69,6 +70,22 @@ data CreateCustomRewardBody = CreateCustomRewardBody
   }
   deriving (Show)
 
+data UpdateCustomRewardBody = UpdateCustomRewardBody
+  { updatecustomrewardbodyTitle :: !(Maybe Text),
+    updatecustomrewardbodyCost :: !(Maybe Int),
+    updatecustomrewardbodyPrompt :: !(Maybe Text),
+    updatecustomrewardbodyIsEnabled :: !(Maybe Bool),
+    updatecustomrewardbodyBackgroundColor :: !(Maybe Text),
+    updatecustomrewardbodyIsUserInputRequired :: !(Maybe Bool),
+    updatecustomrewardbodyIsMaxPerStreamEnabled :: !(Maybe Bool),
+    updatecustomrewardbodyMaxPerStream :: !(Maybe Int),
+    updatecustomrewardbodyIsMaxPerUserPerStreamEnabled :: !(Maybe Bool),
+    updatecustomrewardbodyMaxPerUserPerStream :: !(Maybe Int),
+    updatecustomrewardbodyIsGlobalCooldownEnabled :: !(Maybe Bool),
+    updatecustomrewardbodyGlobalCooldownSeconds :: !(Maybe Int),
+    updatecustomrewardbodyShouldRedemptionsSkipRequestQuee :: !(Maybe Bool)
+  } deriving (Show)
+
 data GetUserInformation = GetUserInformation
   { getuserinformationBroadcasterType :: !Text,
     getuserinformationDescription :: !Text,
@@ -95,4 +112,11 @@ $( deriveJSON
          omitNothingFields = True
        }
      ''CreateCustomRewardBody
+ )
+$( deriveJSON
+     defaultOptions
+       { fieldLabelModifier = drop (length ("updatecustomrewardbody_" :: String)) . camelTo2 '_',
+         omitNothingFields = True
+       }
+     ''UpdateCustomRewardBody
  )

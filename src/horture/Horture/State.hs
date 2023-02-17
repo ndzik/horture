@@ -31,7 +31,8 @@ data HortureState hdl = HortureState
     _audioRecording :: !(Maybe (MVar ())),
     _audioStorage :: !(TVar (Maybe FFTSnapshot)),
     _audioState :: !AudioPlayerState,
-    _mvgAvg :: ![FFTSnapshot],
+    _frameCounter :: !(TVar Int),
+    _mvgAvg :: !(RingBuffer FFTSnapshot),
     _capture :: !(Maybe Drawable),
     _dim :: !(Int, Int),
     _eventList :: !(RingBuffer PastEvent)

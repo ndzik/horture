@@ -1,6 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -8,6 +5,7 @@
 module Horture.Horture
   ( Horture (..),
     runHorture,
+    evalHorture,
     LoggingTarget (..),
   )
 where
@@ -45,3 +43,6 @@ instance MonadError HortureError (Horture l hdl) where
 
 runHorture :: HortureState hdl -> HortureStatic -> Horture l hdl a -> IO (Either HortureError a)
 runHorture ss rs = flip runReaderT rs . flip evalStateT ss . runExceptT . unHorture
+
+evalHorture :: HortureState hdl -> HortureStatic -> Horture l hdl a -> IO (Either HortureError a, HortureState hdl)
+evalHorture ss rs = flip runReaderT rs . flip runStateT ss . runExceptT . unHorture

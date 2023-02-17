@@ -19,6 +19,10 @@ class Monad m => AudioPlayer m where
   -- | deinit frees all required resources for the audioplayer.
   deinitAudio :: m ()
 
+  -- | withAudio allows to safely acquire the audio player resource and
+  -- guarantee a release for blocked resources in async exception cases.
+  withAudio :: m a -> m ()
+
 -- | Sound is an abstraction for sounddata used by the AudioPlayer.
 data Sound k
   = StaticSound !Float !k

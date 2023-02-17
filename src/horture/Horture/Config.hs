@@ -1,5 +1,3 @@
-{-# LANGUAGE NumericUnderscores #-}
-
 -- | Horture client configuration.
 module Horture.Config
   ( Config (..),

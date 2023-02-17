@@ -1,10 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module Horture.Backend.X11.LinuxX11 where
 
@@ -18,9 +14,10 @@ import Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.X11
 import Graphics.X11.Xlib.Extras
+import Graphics.X11.Xlib.Types
+import Horture.Asset
 import Horture.Backend.X11.X11
 import Horture.GL
-import Horture.Asset
 import Horture.Horture
 import Horture.Logging
 import Horture.Program
@@ -43,24 +40,27 @@ captureApplicationFrame =
   gets (^. envHandle) >>= \case
     (dp, xWin, True) -> do
       dim <- gets (^. dim)
-      liftIO $ getWindowImage dp xWin dim >>= updateWindowTexture dim
+      img <- liftIO $ getWindowImage dp xWin dim
+      forM_ img $ liftIO . updateWindowTexture dim
     -- The captured X11 window is currently not shown/unmapped, we cannot draw
     -- anything, so we have to abort.
     _otherwise -> return ()
 
 -- | getWindowImage fetches the image of the currently captured application
 -- window.
-getWindowImage :: Display -> Window -> (Int, Int) -> IO Image
-getWindowImage dp xWin (w, h) =
-  getImage
-    dp
-    xWin
-    1
-    1
-    (fromIntegral w)
-    (fromIntegral h)
-    0xFFFFFFFF
-    zPixmap
+getWindowImage :: Display -> Window -> (Int, Int) -> IO (Maybe Image)
+getWindowImage dp xWin (w, h) = do
+  img <-
+    xGetImage
+      dp
+      xWin
+      0
+      0
+      (fromIntegral w)
+      (fromIntegral h)
+      0xFFFFFFFF
+      zPixmap
+  if img == nullPtr then return Nothing else return . Just . Image $ img
 
 -- | updateWindowTexture updates the OpenGL texture for the captured window
 -- using the given dimensions together with the source image as a data source.
@@ -93,7 +93,7 @@ pollXEvents = do
       if doIt
         then do
           getEvent evptr >>= \case
-            ConfigureEvent {..} ->
+            ConfigureEvent {..} -> do
               handleConfigureEvent
                 dp
                 xWin
@@ -105,7 +105,8 @@ pollXEvents = do
                 (projectionUniform, modelUniform)
                 (ev_width, ev_height)
                 (ev_x, ev_y)
-            UnmapEvent {} -> handleUnmapEvent xWin dp pm
+            UnmapEvent {} -> do
+              handleUnmapEvent xWin dp pm
             MapNotifyEvent {} -> do
               (pos, dim) <- handleMapEvent dp xWin
               handleConfigureEvent
@@ -120,7 +121,6 @@ pollXEvents = do
                 dim
                 pos
             _otherwise -> do
-              print _otherwise
               return ((xWin, isMapped), pm, (oldW, oldH))
         else return ((xWin, isMapped), pm, (oldW, oldH))
   modify $ \hs ->
@@ -196,7 +196,6 @@ handleConfigureEvent
         anyPixelData
       generateMipmap' Texture2D
 
-      -- TODO: WHY does this have no effect?
       let proj = projectionForAspectRatio (newWFloat, newHFloat)
       m44ToGLmatrix proj >>= (uniform projectionUniform $=)
 
@@ -208,4 +207,4 @@ handleConfigureEvent
 handleUnmapEvent :: Window -> Display -> Maybe Pixmap -> IO ((Window, Bool), Maybe Pixmap, (Int, Int))
 handleUnmapEvent xWin dp pm = do
   forM_ pm (freePixmap dp)
-  return ((xWin, False), Nothing, (0, 0))
+  return ((xWin, False), Nothing, (1, 1))

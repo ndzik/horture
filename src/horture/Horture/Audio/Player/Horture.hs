@@ -1,51 +1,61 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Horture.Audio.Player.Horture where
 
+import Control.Lens
+import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Except
 import Data.Default
-import Control.Lens
+import qualified Data.Map.Strict as Map
+import Horture.Audio.Player.Effects
 import Horture.Audio.Player.Player
 import Horture.Audio.Player.Protea
-import Horture.Audio.Player.Effects
-import Horture.Horture
-import qualified Data.Map.Strict as Map
-import Sound.ProteaAudio.SDL as Protea (Sample, sampleFromFile)
 import Horture.Error
-import Horture.State
+import Horture.Horture
 import Horture.Logging
+import Horture.State
+import Sound.ProteaAudio.SDL as Protea (Sample, sampleFromFile)
+import UnliftIO.Exception (bracket)
 
 instance (HortureLogger (Horture hdl l)) => AudioPlayer (Horture hdl l) where
   initAudio = initHortureAudio
   deinitAudio = deinitProteaAudio
   clearAudio = clearProteaAudio
   playAudio = playHortureAudio
+  withAudio = withHortureAudio
 
 sampleFromFile' :: FilePath -> Float -> Horture l hdl Sample
 sampleFromFile' fp = liftIO . sampleFromFile fp
 
+withHortureAudio :: Horture hdl l a -> Horture hdl l ()
+withHortureAudio action = do
+  s <- get
+  env <- ask
+  let acquire = evalHorture s env initHortureAudio
+      action' (_, s') = runHorture s' env action
+      release (_, s') = runHorture s' env clearProteaAudio
+  void . liftIO $ bracket acquire release action'
+
 initHortureAudio :: Horture hdl l ()
 initHortureAudio = do
-    liftIO (runProteaPlayer def def initProteaAudio) >>= \case
-                  (Left _,_) -> throwError AudioSinkInitializationErr
-                  (Right _,_) -> return ()
-    env <- asks (^. audioEnv)
-    let files = Map.toList $ staticSoundFiles env
-    soundSamplesFiles <- mapM (\(n, fp) -> (n,) <$> sampleFromFile' fp 0.6) files
-    soundSamplesGenerated <- mapM (\(n, pcm) -> (n,) <$> generateSampleFromPCM pcm) [(FlashbangPeep, flashbangPeep)]
-    modify $ \s -> s & audioState %~ \as -> as { staticSounds = Map.fromList $ soundSamplesFiles ++ soundSamplesGenerated }
+  liftIO (runProteaPlayer def def initProteaAudio) >>= \case
+    (Left _, _) -> throwError AudioSinkInitializationErr
+    (Right _, _) -> return ()
+  env <- asks (^. audioEnv)
+  let files = Map.toList $ staticSoundFiles env
+  soundSamplesFiles <- mapM (\(n, fp) -> (n,) <$> sampleFromFile' fp 0.6) files
+  soundSamplesGenerated <- mapM (\(n, pcm) -> (n,) <$> generateSampleFromPCM pcm) [(FlashbangPeep, flashbangPeep)]
+  modify $ \s -> s & audioState %~ \as -> as {staticSounds = Map.fromList $ soundSamplesFiles ++ soundSamplesGenerated}
 
 playHortureAudio :: Sound StaticSoundEffect -> Horture l hdl ()
 playHortureAudio a = do
-    as <- gets (^. audioState)
-    ae <- asks (^. audioEnv)
-    (res, as') <- liftIO $ runProteaPlayer ae as (playProteaAudio a)
-    case res of
-      Left err -> throwError $ AudioSinkPlayErr err
-      Right _ -> pure ()
-    modify (\s -> s & audioState .~ as')
+  as <- gets (^. audioState)
+  ae <- asks (^. audioEnv)
+  (res, as') <- liftIO $ runProteaPlayer ae as (playProteaAudio a)
+  case res of
+    Left err -> throwError $ AudioSinkPlayErr err
+    Right _ -> pure ()
+  modify (\s -> s & audioState .~ as')

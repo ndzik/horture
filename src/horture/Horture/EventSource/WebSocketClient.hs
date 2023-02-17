@@ -1,6 +1,4 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Horture.EventSource.WebSocketClient
@@ -9,33 +7,55 @@ module Horture.EventSource.WebSocketClient
 where
 
 import Control.Concurrent.Chan.Synchronous
-import Control.Concurrent.STM (TVar)
+import Control.Concurrent.STM (TVar, newTVarIO)
 import Control.Lens
-import Control.Monad.Freer
+import Control.Monad.Freer as F
 import Control.Monad.Freer.Reader
-import Control.Monad.State
+import Control.Monad.IO.Class (MonadIO (liftIO))
 import qualified Data.Map.Strict as Map
-import Data.Text (Text)
+import Data.Text (Text, pack, unpack)
+import Horture.CommandCenter.Event
 import Horture.Effect
 import Horture.Event
 import Horture.EventSource.EventSource
+import Horture.EventSource.Logger
 import Horture.EventSource.Random
+import Horture.EventSource.Twitch
 import Horture.Server.Message
 import Network.WebSockets
 import qualified Twitch.EventSub.Event as TEvent
 import qualified Twitch.EventSub.Notification as TEvent
+import Horture.EventSource.Controller.Controller (EventControllerInput, EventControllerResponse)
 
 runWSEventSource ::
+  forall effs x.
   (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs, LastMember IO effs) =>
   Connection ->
-  Chan Event ->
   Eff (EventSource : effs) x ->
   Eff effs x
-runWSEventSource conn evChan = do
-  interpret $ do
-    \case
-      SourceEvent -> liftIO (receiveData @HortureServerMessage conn) >>= resolveServerMessageToEvent
-      SinkEvent ev -> liftIO (writeChan evChan ev)
+runWSEventSource conn = interpret (wsEventSourceHandler conn)
+
+wsEventSourceHandler ::
+  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs, LastMember IO effs) =>
+  Connection ->
+  (EventSource ~> Eff effs)
+wsEventSourceHandler conn SourceEvent = liftIO (receiveData @HortureServerMessage conn) >>= resolveServerMessageToEvent
+
+runWSEventSink ::
+  forall effs x.
+  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect, Logger] effs, LastMember IO effs) =>
+  Chan Event ->
+  Eff (EventSink : effs) x ->
+  Eff effs x
+runWSEventSink evChan = interpret (wsEventSinkHandler evChan)
+
+wsEventSinkHandler ::
+  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect, Logger] effs, LastMember IO effs) =>
+  Chan Event ->
+  (EventSink ~> Eff effs)
+wsEventSinkHandler evChan (SinkEvent ev) = do
+  logInfo . pack . unwords $ ["EventSinkHandler:", "SinkEvent", unpack . toTitle $ ev]
+  liftIO (writeChan evChan ev)
 
 resolveServerMessageToEvent ::
   (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs) =>
@@ -58,12 +78,33 @@ effectFromTitle title =
     Nothing -> return Noop
     Just (_, eff) -> return eff
 
-hortureWSStaticClientApp :: Text -> Chan Event -> StaticEffectRandomizerEnv -> TVar Bool -> ClientApp ()
-hortureWSStaticClientApp bid evChan env enabled conn = do
+hortureWSStaticClientApp ::
+  [(Text, Effect, Int)] ->
+  Text ->
+  Chan Event ->
+  Chan CommandCenterEvent ->
+  Chan EventControllerInput ->
+  Chan EventControllerResponse ->
+  StaticEffectRandomizerEnv ->
+  TVar Bool ->
+  ClientApp ()
+hortureWSStaticClientApp events bid evChan ccChan ecInput ecResponse env enabled conn = do
   liftIO $ sendTextData conn (HortureAuthorization bid)
+  esTvar <- liftIO . newTVarIO . buildFromEvents $ events
   runM
+    . runHortureChannelLogger ccChan
     . runReader env
     . runReader enabled
     . runStaticEffectRandomizer
-    . runWSEventSource conn evChan
+    . runWSEventSink evChan
+    . runTwitchEventSource (TwitchEventSourceState esTvar linearIncreaseFunction decayFunction) ecInput ecResponse
+    . runWSEventSource conn
     $ eventSource
+
+buildFromEvents :: [(Text, b, Int)] -> Map.Map Text (Double, Float, Float)
+buildFromEvents =
+  Map.fromList
+    . map
+      ( \(title, _, baseCost) ->
+          (title, (0, fromIntegral baseCost, fromIntegral baseCost))
+      )

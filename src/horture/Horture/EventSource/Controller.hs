@@ -1,7 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-
 -- | The EventSource.Controller allows to configure an EventSource, e.g. which
 -- events are enabled and can be received from the EventSource itself.
 module Horture.EventSource.Controller (

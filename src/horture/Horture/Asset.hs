@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-
 module Horture.Asset where
 
 import Codec.Picture.Gif

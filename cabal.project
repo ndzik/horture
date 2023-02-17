@@ -13,7 +13,7 @@ test-show-details: streaming
 source-repository-package
   type: git
   location: https://github.com/ndzik/X11.git
-  tag: 3193e6e927c4e122cbec7bd188ff7e34059e2674
+  tag: d419a95e95baa47da8e193cfe6eeb508766002b0
 
 -- bindings-GLFW low level GLFW bindings update to GLFW-3.4.
 source-repository-package

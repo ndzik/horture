@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeApplications #-}
-
 module Horture.Render
   ( renderAssets,
     renderBackground,
@@ -50,7 +47,7 @@ import Linear.Vector
 import qualified RingBuffers.Lifted as RingBuffer
 import System.Random.Stateful (globalStdGen, randomM)
 
-renderAssets :: (HortureLogger (Horture l hdl)) => Double -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
+renderAssets :: forall l hdl. (HortureLogger (Horture l hdl)) => Double -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
 renderAssets _ m | Map.null m = return ()
 renderAssets dt m = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject
@@ -90,7 +87,7 @@ renderAssets dt m = do
           timeSinceBirth = dt - _birth o
           o' = foldr (\(Behaviour _ f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
       liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform mu $=)
-      _ <- act timeSinceBirth
+      act timeSinceBirth
       drawBaseQuad
 
     noop _ = return ()
@@ -203,7 +200,7 @@ renderEventList timeNow = do
     go numOfLines 0 $ map (\pe@(PastEvent bt _ _) -> (bt, show pe)) evs
   where
     height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
-    showTime = 8
+    showTime = 16
     lineSpacing = round $ 10 * baseScale
     go :: (HortureLogger (Horture l hdl)) => Int -> Int -> [(Double, String)] -> Horture l hdl ()
     go _ _ [] = return ()
