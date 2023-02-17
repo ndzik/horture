@@ -18,9 +18,11 @@ module Horture
 where
 
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.STM
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.Bifunctor
 import Data.Default
 import qualified Data.Map.Strict as Map
@@ -77,6 +79,7 @@ playScene s = do
             renderActiveEffectText s
             renderEventList dt
             updateView
+            countFrame
             timeNow <- getTime
             pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
       s <-
@@ -103,6 +106,9 @@ processAudio Nothing = return Nothing
 processAudio (Just s) = do
   mapM_ playAudio $ s ^. audio
   return $ Just s
+
+countFrame :: Horture l hdl ()
+countFrame = gets (^. frameCounter) >>= liftIO . atomically . flip modifyTVar' (+ 1)
 
 clearView :: Horture l hdl ()
 clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
