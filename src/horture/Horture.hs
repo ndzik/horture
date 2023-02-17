@@ -17,6 +17,7 @@ module Horture
   )
 where
 
+import Control.Concurrent (threadDelay)
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -55,15 +56,18 @@ import System.Exit
 hortureName :: String
 hortureName = "horture"
 
+frameTime :: Double
+frameTime = 1 / 60
+
 -- | playScene plays the given scene in a Horture context.
 playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
-  void . withRecording . withAudio . go . Just $ s
+  void . withRecording . withAudio . go 0 . Just $ s
   where
-    go Nothing = do
+    go _ Nothing = do
       logInfo "horture stopped"
-    go (Just s) = do
+    go lt (Just s) = do
       let action = do
             dt <- deltaTime 0
             clearView
@@ -82,7 +86,11 @@ playScene s = do
                            logWarn "resetting scene & continuing..."
                            return $ Just s
                        )
-      go s
+      deltaTime lt >>= \timeSinceFrame ->
+        when (timeSinceFrame < frameTime) $
+          liftIO . threadDelay . round $ (frameTime - timeSinceFrame) * 1000 * 1000
+      newTime <- getTime
+      go newTime s
     handleHortureError (HE err) = logError . pack $ err
     handleHortureError (WindowEnvironmentInitializationErr err) = logError . pack $ err
     handleHortureError WindowEnvironmentQueryHortureErr = logError . pack . show $ WindowEnvironmentQueryHortureErr
