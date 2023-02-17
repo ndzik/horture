@@ -11,7 +11,7 @@ where
 
 import Control.Concurrent.Chan.Synchronous
 import Control.Concurrent.MVar
-import Control.Concurrent.STM (newTVarIO)
+import Control.Concurrent.STM (TVar, newTVarIO)
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -65,10 +65,11 @@ initialize ::
   Scene ->
   [(FilePath, Asset)] ->
   [(FilePath, Asset)] ->
+  TVar Int ->
   Maybe (Chan Text) ->
   Chan Event ->
   HortureInitializer l hdl ()
-initialize startScene loadedImages loadedSounds logChan evChan = do
+initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
   glW <- liftIO initGLFW
   (dp, w, isMapped) <- grabAnyWindow
 
@@ -125,6 +126,7 @@ initialize startScene loadedImages loadedSounds logChan evChan = do
             _audioRecording = Nothing,
             _audioStorage = storage,
             _audioState = def,
+            _frameCounter = frameCounter,
             _mvgAvg = fftBuf,
             _dim = (fromIntegral . wa_width $ attr, fromIntegral . wa_height $ attr),
             _eventList = evBuf

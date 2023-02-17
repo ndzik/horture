@@ -282,9 +282,7 @@ logActionCC = Colog.LogAction constructLogFromBuffer
 constructLogFromBuffer :: Text -> EventM Name CommandCenterState ()
 constructLogFromBuffer msg = do
   log <-
-    gets (^. ccLog) >>= \case
-      Nothing -> return []
-      Just rb -> do
+    gets (^. ccLog) >>= \ rb -> do
         liftIO $ RingBuffer.append msg rb
         liftIO $ RingBuffer.toList rb
   ccLogList .= log
@@ -309,12 +307,10 @@ grabHorture = do
   pls <- gets _ccPreloadedSounds
   hurl <- gets _ccHortureUrl
 
-  brickChan <-
-    gets (^. ccBrickEventChan) >>= \case
-      Nothing -> throwM InvalidBrickConfiguration
-      Just brickChan -> pure brickChan
+  brickChan <- gets (^. ccBrickEventChan)
   logChan <- liftIO $ newChan @Text
   evChan <- liftIO $ newChan @Event
+  frameCounter <- gets (^. ccFrameCounter)
 
   -- Event source thread.
   evSourceTID <- spawnEventSource hurl evChan logChan brickChan
@@ -335,7 +331,7 @@ grabHorture = do
             { _screen = def,
               _shaders = []
             }
-        action = initialize @'Channel startScene pli pls (Just logChan) evChan
+        action = initialize @'Channel startScene pli pls frameCounter (Just logChan) evChan
     runHortureInitializer env action >>= \case
       Left err -> logError . pack . show $ err
       Right _ -> return ()
@@ -469,13 +465,14 @@ runDebugCenter mcfg = do
     Just cfg -> return $ Horture.Config.mDefaultFont cfg
     Nothing -> return Nothing
   logBuf <- liftIO $ RingBuffer.new 200
+  frameCounter <- liftIO $ newTVarIO 0
   void $
     customMain
       initialVty
       buildVty
       (Just appChan)
       app
-      def
+      $ CCState
         { _ccImages = images,
           _ccImagesList = list AssetPort images 1,
           _ccPreloadedImages = preloadedImages,
@@ -484,10 +481,18 @@ runDebugCenter mcfg = do
           _ccHortureUrl = Nothing,
           _ccUserId = "some_user_id",
           _ccControllerChans = Nothing,
-          _ccLog = Just logBuf,
-          _ccBrickEventChan = Just appChan,
+          _ccLog = logBuf,
+          _ccBrickEventChan = appChan,
           _ccEventBaseCost = 10,
-          _ccTimeout = 1 * 1000 * 1000
+          _ccTimeout = 1 * 1000 * 1000,
+          _ccEventChan = Nothing,
+          _ccCapturedWin = Nothing,
+          _ccLogList = [],
+          _ccTIDsToClean = [],
+          _ccCursorLocationName = LogPort,
+          _ccRegisteredEffects = Map.empty,
+          _ccFrameCounter = frameCounter,
+          _ccEventSourceEnabled = Nothing
         }
 
 runCommandCenter :: Bool -> Config -> IO ()
@@ -515,25 +520,34 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
   logBuf <- liftIO $ RingBuffer.new 200
+  frameCounter <- liftIO $ newTVarIO 0
   void $
     customMain
       initialVty
       buildVty
       (Just appChan)
       app
-      def
+      $ CCState
         { _ccImages = images,
           _ccImagesList = list AssetPort images 1,
           _ccPreloadedImages = preloadedImages,
           _ccPreloadedSounds = preloadedSounds,
           _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
           _ccUserId = uid,
-          _ccLog = Just logBuf,
+          _ccLog = logBuf,
           _ccDefaultFont = mDefaultFont,
           _ccControllerChans = controllerChans,
-          _ccBrickEventChan = Just appChan,
+          _ccBrickEventChan = appChan,
           _ccEventBaseCost = baseC,
-          _ccTimeout = delay
+          _ccTimeout = delay,
+          _ccEventChan = Nothing,
+          _ccCapturedWin = Nothing,
+          _ccLogList = [],
+          _ccTIDsToClean = [],
+          _ccCursorLocationName = LogPort,
+          _ccRegisteredEffects = Map.empty,
+          _ccFrameCounter = frameCounter,
+          _ccEventSourceEnabled = Nothing
         }
 
 fetchUserId :: BaseUrl -> Text -> Text -> IO Text
