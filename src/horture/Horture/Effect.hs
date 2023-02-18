@@ -6,6 +6,8 @@ module Horture.Effect
     FromText (..),
     Entitled (..),
     effectToCost,
+    effectToImage,
+    effectToColor,
   )
 where
 
@@ -14,6 +16,7 @@ import Horture.Audio.Player
 import Horture.Object
 import Linear.V3
 import System.FilePath.Posix
+import Twitch.EventSub
 
 type AssetIndex = FilePath
 
@@ -52,6 +55,56 @@ effectToCost (RemoveScreenBehaviour _) = 3
 effectToCost (RemoveShaderEffect _) = 2
 effectToCost AddRapidFire {} = 6
 effectToCost Noop {} = 0
+
+effectToColor :: Effect -> Text
+effectToColor AddAsset {} = "#66ffff"
+effectToColor (AddScreenBehaviour _ [Behaviour BehaviourAudiophile _]) = "#ff66ff"
+effectToColor (AddScreenBehaviour _ [Behaviour BehaviourShake _]) = "#660066"
+effectToColor (AddScreenBehaviour _ [Behaviour BehaviourRotate _]) = "#660066"
+effectToColor (AddScreenBehaviour _ [Behaviour BehaviourMoveTo _]) = "#660066"
+effectToColor (AddScreenBehaviour _ [Behaviour BehaviourCircle _]) = "#660066"
+effectToColor (AddScreenBehaviour _ [Behaviour BehaviourPulse _]) = "#660066"
+effectToColor (AddScreenBehaviour _ _) = "#660066"
+effectToColor (AddShaderEffect _ Barrel _) = "#ffff66"
+effectToColor (AddShaderEffect _ Blur _) = "#669999"
+effectToColor (AddShaderEffect _ Stitch _) = "#663300"
+effectToColor (AddShaderEffect _ Flashbang _) = "#ffffff"
+effectToColor (AddShaderEffect _ Cycle _) = "#ccffcc"
+effectToColor (AddShaderEffect _ Blink _) = "#000000"
+effectToColor (AddShaderEffect _ Mirror _) = "#ffcc99"
+effectToColor (AddShaderEffect _ Invert _) = "#66ffff"
+effectToColor (AddShaderEffect _ Toonify _) = "#99cc00"
+effectToColor (AddShaderEffect _ Audiophile _) = "#cc0000"
+effectToColor (AddShaderEffect _ BassRealityWarp _) = "#7a7a52"
+effectToColor (RemoveScreenBehaviour _) = "#ff0000"
+effectToColor (RemoveShaderEffect _) = "#ff0000"
+effectToColor AddRapidFire {} = "#006600"
+effectToColor Noop {} = "#000000"
+
+effectToImage :: Effect -> Maybe Image
+effectToImage AddAsset {} = Nothing
+effectToImage (AddScreenBehaviour _ [Behaviour BehaviourAudiophile _]) = Nothing
+effectToImage (AddScreenBehaviour _ [Behaviour BehaviourShake _]) = Nothing
+effectToImage (AddScreenBehaviour _ [Behaviour BehaviourRotate _]) = Nothing
+effectToImage (AddScreenBehaviour _ [Behaviour BehaviourMoveTo _]) = Nothing
+effectToImage (AddScreenBehaviour _ [Behaviour BehaviourCircle _]) = Nothing
+effectToImage (AddScreenBehaviour _ [Behaviour BehaviourPulse _]) = Nothing
+effectToImage (AddScreenBehaviour _ _) = Nothing
+effectToImage (AddShaderEffect _ Barrel _) = Nothing
+effectToImage (AddShaderEffect _ Blur _) = Nothing
+effectToImage (AddShaderEffect _ Stitch _) = Nothing
+effectToImage (AddShaderEffect _ Flashbang _) = Nothing
+effectToImage (AddShaderEffect _ Cycle _) = Nothing
+effectToImage (AddShaderEffect _ Blink _) = Nothing
+effectToImage (AddShaderEffect _ Mirror _) = Nothing
+effectToImage (AddShaderEffect _ Invert _) = Nothing
+effectToImage (AddShaderEffect _ Toonify _) = Nothing
+effectToImage (AddShaderEffect _ Audiophile _) = Nothing
+effectToImage (AddShaderEffect _ BassRealityWarp _) = Nothing
+effectToImage (RemoveScreenBehaviour _) = Nothing
+effectToImage (RemoveShaderEffect _) = Nothing
+effectToImage AddRapidFire {} = Nothing
+effectToImage Noop {} = Nothing
 
 data ShaderEffect
   = Barrel
