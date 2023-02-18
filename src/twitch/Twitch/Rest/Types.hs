@@ -8,6 +8,7 @@ where
 
 import Data.Aeson
 import Data.Aeson.TH
+import Data.Default
 import Data.Text (Text)
 import Twitch.EventSub.Image
 
@@ -66,9 +67,27 @@ data CreateCustomRewardBody = CreateCustomRewardBody
     createcustomrewardbodyMaxPerUserPerStream :: !(Maybe Int),
     createcustomrewardbodyIsGlobalCooldownEnabled :: !(Maybe Bool),
     createcustomrewardbodyGlobalCooldownSeconds :: !(Maybe Int),
-    createcustomrewardbodyShouldRedemptionsSkipRequestQuee :: !(Maybe Bool)
+    createcustomrewardbodyShouldRedemptionsSkipRequestQueue :: !(Maybe Bool)
   }
   deriving (Show)
+
+instance Default CreateCustomRewardBody where
+  def =
+    CreateCustomRewardBody
+      { createcustomrewardbodyTitle = "",
+        createcustomrewardbodyCost = 0,
+        createcustomrewardbodyPrompt = Nothing,
+        createcustomrewardbodyIsEnabled = Nothing,
+        createcustomrewardbodyBackgroundColor = Nothing,
+        createcustomrewardbodyIsUserInputRequired = Nothing,
+        createcustomrewardbodyIsMaxPerStreamEnabled = Nothing,
+        createcustomrewardbodyMaxPerStream = Nothing,
+        createcustomrewardbodyIsMaxPerUserPerStreamEnabled = Nothing,
+        createcustomrewardbodyMaxPerUserPerStream = Nothing,
+        createcustomrewardbodyIsGlobalCooldownEnabled = Nothing,
+        createcustomrewardbodyGlobalCooldownSeconds = Nothing,
+        createcustomrewardbodyShouldRedemptionsSkipRequestQueue = Nothing
+      }
 
 data UpdateCustomRewardBody = UpdateCustomRewardBody
   { updatecustomrewardbodyTitle :: !(Maybe Text),
@@ -83,8 +102,27 @@ data UpdateCustomRewardBody = UpdateCustomRewardBody
     updatecustomrewardbodyMaxPerUserPerStream :: !(Maybe Int),
     updatecustomrewardbodyIsGlobalCooldownEnabled :: !(Maybe Bool),
     updatecustomrewardbodyGlobalCooldownSeconds :: !(Maybe Int),
-    updatecustomrewardbodyShouldRedemptionsSkipRequestQuee :: !(Maybe Bool)
-  } deriving (Show)
+    updatecustomrewardbodyShouldRedemptionsSkipRequestQueue :: !(Maybe Bool)
+  }
+  deriving (Show)
+
+instance Default UpdateCustomRewardBody where
+  def =
+    UpdateCustomRewardBody
+      { updatecustomrewardbodyTitle = Nothing,
+        updatecustomrewardbodyCost = Nothing,
+        updatecustomrewardbodyPrompt = Nothing,
+        updatecustomrewardbodyIsEnabled = Nothing,
+        updatecustomrewardbodyBackgroundColor = Nothing,
+        updatecustomrewardbodyIsUserInputRequired = Nothing,
+        updatecustomrewardbodyIsMaxPerStreamEnabled = Nothing,
+        updatecustomrewardbodyMaxPerStream = Nothing,
+        updatecustomrewardbodyIsMaxPerUserPerStreamEnabled = Nothing,
+        updatecustomrewardbodyMaxPerUserPerStream = Nothing,
+        updatecustomrewardbodyIsGlobalCooldownEnabled = Nothing,
+        updatecustomrewardbodyGlobalCooldownSeconds = Nothing,
+        updatecustomrewardbodyShouldRedemptionsSkipRequestQueue = Nothing
+      }
 
 data GetUserInformation = GetUserInformation
   { getuserinformationBroadcasterType :: !Text,
