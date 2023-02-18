@@ -86,7 +86,6 @@ putCustomRewards rewards = do
                 createcustomrewardbodyBackgroundColor = Just $ effectToColor eff,
                 createcustomrewardbodyIsUserInputRequired = Nothing,
                 createcustomrewardbodyIsMaxPerStreamEnabled = Nothing,
-                createcustomrewardbodyImage = effectToImage eff,
                 createcustomrewardbodyMaxPerStream = Nothing,
                 createcustomrewardbodyIsMaxPerUserPerStreamEnabled = Nothing,
                 createcustomrewardbodyMaxPerUserPerStream = Nothing,

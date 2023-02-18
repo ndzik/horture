@@ -38,12 +38,14 @@ linearCostFunction (dt, bc, cp)
 linearIncreaseFunction :: CostAdjustFunction
 linearIncreaseFunction (_, _, cp) = cp + 25
 
-decayFunction :: CostAdjustFunction
-decayFunction (dt, bc, cp)
-  | dt > 5 =
-    let np = cp * 0.8
-     in if np < bc then bc else np
-  | otherwise = cp
+-- TODO: Add a stepfunction for decaying.
+decayFunction :: Double -> CostAdjustFunction
+decayFunction timeTillDecay = decay
+  where decay (dt, bc, cp)
+            | dt > timeTillDecay =
+              let np = cp * 0.8
+              in if np < bc then bc else np
+            | otherwise = cp
 
 -- | TwitchEventSoucreState tracks the current costs for each effect identified
 -- by a string id together with their deltatime since last usage.

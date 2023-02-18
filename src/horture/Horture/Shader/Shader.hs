@@ -351,7 +351,8 @@ layout(location = 0) out vec4 frag_colour;
 vec4 cycleColours(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec4 c = texture2D(tex, uv);
   float pp = float(dt);
-  return vec4(abs(cos(pp * c.x)), abs(sin(pp*c.y)), abs(sin(pp*c.z)*cos(pp*c.z)), 1);
+  vec4 update = vec4(abs(cos(pp * c.x)), abs(sin(pp*c.y)), abs(sin(pp*c.z)*cos(pp*c.z)), 1);
+  return mix(c, update, clamp(float(dt/(lifetime*0.3)), 0.0, 1.0));
 }
 
 void main() {

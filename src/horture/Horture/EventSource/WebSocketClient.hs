@@ -89,6 +89,7 @@ hortureWSStaticClientApp ::
   TVar Bool ->
   ClientApp ()
 hortureWSStaticClientApp events bid evChan ccChan ecInput ecResponse env enabled conn = do
+  let timeTillDecay = 15
   liftIO $ sendTextData conn (HortureAuthorization bid)
   esTvar <- liftIO . newTVarIO . buildFromEvents $ events
   runM
@@ -97,7 +98,7 @@ hortureWSStaticClientApp events bid evChan ccChan ecInput ecResponse env enabled
     . runReader enabled
     . runStaticEffectRandomizer
     . runWSEventSink evChan
-    . runTwitchEventSource (TwitchEventSourceState esTvar linearIncreaseFunction decayFunction) ecInput ecResponse
+    . runTwitchEventSource (TwitchEventSourceState esTvar linearIncreaseFunction (decayFunction timeTillDecay)) ecInput ecResponse
     . runWSEventSource conn
     $ eventSource
 
