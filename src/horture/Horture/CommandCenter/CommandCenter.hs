@@ -178,6 +178,11 @@ appEvent (VtyEvent (EvKey (KChar 'k') [])) = do
 appEvent (VtyEvent (EvKey (KChar 's') [])) = gets _ccEventSourceEnabled >>= toggleEventSource
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'l') [])) = return ()
+
+appEvent (VtyEvent (EvKey (KChar 'd') [])) = gets _ccControllerChans >>= disableEventsOnEventSource
+
+appEvent (VtyEvent (EvKey (KChar 'e') [])) = gets _ccControllerChans >>= enableEventsOnEventSource
+
 appEvent (VtyEvent (EvKey (KChar 'p') [])) = gets _ccControllerChans >>= purgeEventSource
 appEvent (VtyEvent (EvKey (KChar 'r') [])) = gets _ccControllerChans >>= refreshEventSource
 appEvent (VtyEvent (EvKey (KChar 'g') [])) = grabHorture
@@ -226,6 +231,20 @@ stopHorture = do
 writeExit :: Chan Event -> EventM Name CommandCenterState ()
 writeExit chan = liftIO $ writeChan chan (EventCommand Exit)
 
+disableEventsOnEventSource ::
+  Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
+  EventM Name CommandCenterState ()
+disableEventsOnEventSource Nothing = logInfo "No EventSource controller available"
+disableEventsOnEventSource (Just pipe) = writeAndHandleResponse pipe InputDisableAll
+
+enableEventsOnEventSource ::
+  Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
+  EventM Name CommandCenterState ()
+enableEventsOnEventSource Nothing = logInfo "No EventSource controller available"
+enableEventsOnEventSource (Just pipe) = do
+  writeAndHandleResponse pipe InputEnableAll
+  writeAndHandleResponse pipe InputListEvents
+
 purgeEventSource ::
   Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
   EventM Name CommandCenterState ()
@@ -240,8 +259,9 @@ refreshEventSource ::
 refreshEventSource Nothing = logInfo "No EventSource controller available"
 refreshEventSource (Just pipe) = do
   allEffs <- deriveBaseEvents
-  writeAndHandleResponse pipe InputPurgeAll
+  writeAndHandleResponse pipe InputDisableAll
   writeAndHandleResponse pipe . InputEnable $ allEffs
+  writeAndHandleResponse pipe InputEnableAll
   writeAndHandleResponse pipe InputListEvents
 
 deriveBaseEvents :: EventM Name CommandCenterState [(Text, Effect, Int)]
@@ -510,7 +530,7 @@ runDebugCenter mcfg = do
 runCommandCenter :: Bool -> Config -> IO ()
 runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay mDefaultFont) = do
   images <- makeAbsolute (dir <> imagesDir) >>= loadDirectory
-  appChan <- newBChan 10
+  appChan <- newBChan 256
   preloadedImages <-
     runPreloader (PLC $ dir <> imagesDir) loadAssetsInMemory >>= \case
       Left err -> print err >> exitFailure
@@ -624,5 +644,8 @@ fpsTicker microSecondsDelay fpsTVar bchan = do
         loop newFrameCount
   forkIO $ loop 0
 
-pipeToBrickChan :: Chan a -> BChan b -> (a -> b) -> IO ()
-pipeToBrickChan chan bchan toBchan = readChan chan >>= writeBChan bchan . toBchan
+pipeToBrickChan :: (Show a, Show b) => Chan a -> BChan b -> (a -> b) -> IO ()
+pipeToBrickChan chan bchan toBchan = do
+  tmp <- readChan chan
+  appendFile "lmaoxdusuckatcoding" $ show tmp
+  writeBChan bchan . toBchan $ tmp
