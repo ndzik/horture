@@ -112,6 +112,7 @@ library horture-lib
                             , bytestring
                             , exceptions
                             , co-log
+                            , extra
                             , aeson
                             , http-api-data
                             , http-client
@@ -234,6 +235,7 @@ library twitch-api
                         , http-types
                         , servant
                         , servant-client
+                        , data-default
 
     exposed-modules:    Twitch
                         , Twitch.EventSub
