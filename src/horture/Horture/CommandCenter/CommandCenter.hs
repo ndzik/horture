@@ -75,10 +75,11 @@ drawUI cs =
                     borderWithLabel
                       (str "Horture CommandCenter")
                       (currentCaptureUI . _ccCapturedWin $ cs),
-                  setAvailableSize (7, 4) $ withBorderStyle unicode $
-                    borderWithLabel
-                      (str "FPS")
-                      (center . fpsUI . _ccCurrentFPS $ cs)
+                  setAvailableSize (7, 4) $
+                    withBorderStyle unicode $
+                      borderWithLabel
+                        (str "FPS")
+                        (center . fpsUI . _ccCurrentFPS $ cs)
                 ],
             hBox
               [ let mkAttr =
@@ -106,7 +107,7 @@ drawUI cs =
                         metainfoUI
                   ]
               ],
-            vLimit 3 $
+            vLimit 4 $
               withBorderStyle unicode $
                 borderWithLabel
                   (str "Hotkeys")
@@ -145,15 +146,19 @@ hotkeyUI :: Widget Name
 hotkeyUI =
   center
     ( str $
-        intercalate
-          " | "
-          [ "<g>: Select window to capture",
-            "<q>: Stop window capture",
-            "<r>: Refresh EventSource",
-            "<p>: Purge EventSource",
-            "<s>: Toggle EventSource",
-            "<esc>: Exit horture"
-          ]
+        unlines
+          . map (intercalate " | ")
+          $ [ [ "<g>: Select window to capture",
+                "<q>: Stop window capture",
+                "<r>: Refresh EventSource",
+                "<d>: Disable all events"
+              ],
+              [ "<e>: Enable all events",
+                "<p>: Purge EventSource",
+                "<s>: Toggle EventSource",
+                "<esc>: Exit horture"
+              ]
+            ]
     )
 
 scrollLogPort :: ViewportScroll Name
@@ -178,11 +183,8 @@ appEvent (VtyEvent (EvKey (KChar 'k') [])) = do
 appEvent (VtyEvent (EvKey (KChar 's') [])) = gets _ccEventSourceEnabled >>= toggleEventSource
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'l') [])) = return ()
-
 appEvent (VtyEvent (EvKey (KChar 'd') [])) = gets _ccControllerChans >>= disableEventsOnEventSource
-
 appEvent (VtyEvent (EvKey (KChar 'e') [])) = gets _ccControllerChans >>= enableEventsOnEventSource
-
 appEvent (VtyEvent (EvKey (KChar 'p') [])) = gets _ccControllerChans >>= purgeEventSource
 appEvent (VtyEvent (EvKey (KChar 'r') [])) = gets _ccControllerChans >>= refreshEventSource
 appEvent (VtyEvent (EvKey (KChar 'g') [])) = grabHorture
