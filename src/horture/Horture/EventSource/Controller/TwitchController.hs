@@ -60,7 +60,7 @@ handleTwitchEventController ::
   Eff (EventController : effs) ~> Eff effs
 handleTwitchEventController = interpret $ \case
   ListAllEvents -> getAllRewards'
-  EnableEvents c -> putCustomRewards c
+  EnableEvents c -> putAndEnableRewards c
   ChangeEventCost id c -> changeCustomReward id c
   PurgeAllEvents -> deleteAllRewards
   EnableAllEvents -> enableAllRewards
@@ -117,13 +117,14 @@ disableAllRewards = do
     handleResponse (Right title) = logInfo ("successfully disabled: " <> title) >> return True
     handleResponse (Left err) = logWarn ("error when disabling: " <> err) >> return False
 
--- | putCustomRewards registers the given [(Title, Effect)] pairs as custom
--- channel points rewards on the associated channel.
-putCustomRewards ::
+-- | putAndEnableRewards registers the given [(Title, Effect)] pairs as custom
+-- channel points rewards on the associated channel or enables them if they are
+-- already registered but disabled.
+putAndEnableRewards ::
   (Members '[State TwitchControllerState, Logger] effs, LastMember IO effs) =>
   [(Text, Effect, Int)] ->
   Eff effs Bool
-putCustomRewards rewards = do
+putAndEnableRewards rewards = do
   rewards' <- identifyNewRewards rewards
   TwitchChannelPointsClient {createCustomReward, updateCustomReward} <- gets @TwitchControllerState (^. client)
   id <- gets @TwitchControllerState (^. broadcasterId)
