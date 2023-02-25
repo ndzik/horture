@@ -26,3 +26,15 @@ source-repository-package
   type: git
   location: https://github.com/ndzik/GLFW-b.git
   tag: c6bd7af27729a2c0267c0c99f262df9b47f945f0
+
+-- twitch api dependency.
+source-repository-package
+  type: git
+  location: https://github.com/ndzik/haskell-twitch-api.git
+  tag: e2a528ba61104c4ee179de856e80a3048fd1ed51
+
+-- horture server dependency.
+source-repository-package
+  type: git
+  location: https://github.com/ndzik/horture-server.git
+  tag: 34989678773578db54580b3042c4ba11035185b3
