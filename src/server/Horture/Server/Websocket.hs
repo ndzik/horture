@@ -14,7 +14,7 @@ import Control.Monad.RWS
 import Data.Aeson (encode)
 import Data.ByteString (ByteString)
 import Data.Default
-import Data.Text (Text, unpack)
+import Data.Text (Text, pack, unpack)
 import Data.Text.Encoding (decodeUtf8)
 import Horture.Server.Client
 import Horture.Server.Message
@@ -59,6 +59,7 @@ hortureClientConn = do
           Nothing -> liftIO (threadDelay 250_000) >> writerAction
           Just msg -> do
             logFM DebugS "TwitchEvent encountered, forwarding..."
+            logFM DebugS (logStr . pack . show $ msg)
             -- Forward twitch event to connected client.
             liftIO (sendTextData @HortureServerMessage conn (HortureEventSub msg))
             writerAction
