@@ -260,15 +260,17 @@ refreshEventSource ::
   EventM Name CommandCenterState ()
 refreshEventSource Nothing = logInfo "No EventSource controller available"
 refreshEventSource (Just pipe) = do
-  allEffs <- deriveBaseEvents
+  allEffs <- deriveBaseEventsCC
   writeAndHandleResponse pipe InputDisableAll
   writeAndHandleResponse pipe . InputEnable $ allEffs
   writeAndHandleResponse pipe InputEnableAll
   writeAndHandleResponse pipe InputListEvents
 
-deriveBaseEvents :: EventM Name CommandCenterState [(Text, Effect, Int)]
-deriveBaseEvents = do
-  baseCost <- gets (^. ccEventBaseCost)
+deriveBaseEventsCC :: EventM Name CommandCenterState [(Text, Effect, Int)]
+deriveBaseEventsCC = deriveBaseEvents <$> gets (^. ccEventBaseCost)
+
+deriveBaseEvents :: Int -> [(Text, Effect, Int)]
+deriveBaseEvents baseCost = do
   let shaderEffs = map (\v -> AddShaderEffect Forever v []) . enumFrom $ minBound
       behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> o)) . enumFrom $ minBound
       counterEffs = [RemoveScreenBehaviour 0, RemoveShaderEffect 0]
@@ -277,7 +279,7 @@ deriveBaseEvents = do
           ++ [AddAsset "" Forever (V3 0 0 0) [], AddScreenBehaviour Forever [], AddRapidFire []]
           ++ shaderEffs
           ++ counterEffs
-  return . map (\eff -> (toTitle eff, eff, baseCost * effectToCost eff)) $ allEffs
+   in map (\eff -> (toTitle eff, eff, baseCost * effectToCost eff)) allEffs
 
 writeAndHandleResponse ::
   (Chan EventControllerInput, Chan EventControllerResponse) ->
@@ -415,7 +417,7 @@ spawnEventSource (Just (BaseUrl schema host port path)) evChan logChan appChan =
   uid <- gets (^. ccUserId)
   ccChan <- liftIO $ newChan @CommandCenterEvent
   enabledTVar <- fetchOrCreateEventSourceTVar
-  baseEffects <- deriveBaseEvents
+  baseEffects <- deriveBaseEventsCC
   let run = runc host (fromIntegral port) path app
       app = hortureWSStaticClientApp baseEffects uid evChan ccChan ic rc env enabledTVar
       action = run `catch` handler
@@ -549,7 +551,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
           Just auth -> return auth
           Nothing -> error "No AuthorizationToken available, authorize Horture first"
         uid <- fetchUserId helixApi cid auth
-        cs <- spawnTwitchEventController helixApi uid cid auth appChan
+        cs <- spawnTwitchEventController baseC helixApi uid cid auth appChan
         return (Just cs, uid)
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
@@ -606,13 +608,14 @@ fetchUserId helixApi cid auth = do
     Right (DataResponse (u : _)) -> return . getuserinformationId $ u
 
 spawnTwitchEventController ::
+  Int ->
   BaseUrl ->
   Text ->
   Text ->
   Text ->
   BChan CommandCenterEvent ->
   IO (Chan EventControllerInput, Chan EventControllerResponse)
-spawnTwitchEventController helixApi uid cid auth appChan = do
+spawnTwitchEventController baseCost helixApi uid cid auth appChan = do
   mgr <-
     newManager =<< case baseUrlScheme helixApi of
       Https -> return tlsManagerSettings
@@ -628,7 +631,8 @@ spawnTwitchEventController helixApi uid cid auth appChan = do
       killThread
       ( const $
           runHortureTwitchEventController
-            (TCS channelPointsClient uid clientEnv Map.empty)
+            (Map.fromList . map (\(a, b, c) -> (a, (b, c))) $ deriveBaseEvents baseCost)
+            (TCS channelPointsClient uid clientEnv)
             logChan
             controllerInputChan
             controllerResponseChan
