@@ -418,14 +418,14 @@ spawnEventSource (Just (BaseUrl schema host port path)) evChan logChan appChan =
   ccChan <- liftIO $ newChan @CommandCenterEvent
   enabledTVar <- fetchOrCreateEventSourceTVar
   baseEffects <- deriveBaseEventsCC
-  let run = runc host (fromIntegral port) path app
-      app = hortureWSStaticClientApp baseEffects uid evChan ccChan ic rc env enabledTVar
-      action = run `catch` handler
-      handler :: ConnectionException -> IO ()
-      handler e = do
-        logErrorColog logChan . pack . show $ e
-        threadDelay oneSec
-        action
+  let app = hortureWSStaticClientApp baseEffects uid evChan ccChan ic rc env enabledTVar
+      run = runc host (fromIntegral port) path app
+      action =
+        let handler :: ConnectionException -> IO ()
+            handler e = do
+              logErrorColog logChan . pack . show $ e
+              threadDelay oneSec
+         in run `catch` (\e -> handler e >> action)
   liftIO . forkIO $ do
     bracket
       (forkIO . forever $ pipeToBrickChan ccChan appChan id)
