@@ -133,8 +133,7 @@ class Entitled d where
   toTitle :: d -> Text
 
 instance Entitled Effect where
-  toTitle (AddAsset "" _ _ _) = "RandomGifOrImage"
-  toTitle (AddAsset n _ _ _) = pack . takeFileName $ n
+  toTitle AddAsset {} = "RandomGifOrImage"
   toTitle (AddScreenBehaviour _ [behaviour]) = toTitle behaviour
   toTitle (AddScreenBehaviour _ _) = "RandomScreenEffect"
   toTitle (AddShaderEffect _ eff _) = toTitle eff
@@ -177,23 +176,23 @@ instance FromText Effect where
   fromText "AddRapidFire" = AddRapidFire []
   fromText "RemoveShaderEffect" = RemoveShaderEffect 0
   fromText "RemoveScreenBehaviour" = RemoveScreenBehaviour 0
-  fromText "ThiccIt"=  AddShaderEffect Forever Barrel []
-  fromText "WhereAreMyGlasses?"=  AddShaderEffect Forever Blur []
-  fromText "GrandmaSaysHi"=  AddShaderEffect Forever Stitch []
-  fromText "FLASHBANG"=  AddShaderEffect Forever Flashbang []
-  fromText "TakeTheWhitePill"=  AddShaderEffect Forever Cycle []
-  fromText "EyesClosed"=  AddShaderEffect Forever Blink []
-  fromText "Discombobulated"=  AddShaderEffect Forever Mirror []
-  fromText "InvertColors"=  AddShaderEffect Forever Invert []
-  fromText "Toonify"=  AddShaderEffect Forever Toonify []
-  fromText "Audiophile"=  AddShaderEffect Forever Audiophile []
-  fromText "BassRealityWarp"=  AddShaderEffect Forever BassRealityWarp []
-  fromText "hearAndFeelIt"=  AddScreenBehaviour (Limited 8) [Behaviour BehaviourAudiophile (\_ _ o -> o)]
-  fromText "shakeIt"=  AddScreenBehaviour (Limited 8) [Behaviour BehaviourShake (\_ _ o -> o)]
-  fromText "rotateIt"=  AddScreenBehaviour (Limited 8) [Behaviour BehaviourRotate (\_ _ o -> o)]
-  fromText "moveIt"=  AddScreenBehaviour (Limited 8) [Behaviour BehaviourMoveTo (\_ _ o -> o)]
-  fromText "circleIt"=  AddScreenBehaviour (Limited 8) [Behaviour BehaviourCircle (\_ _ o -> o)]
-  fromText "pulseIt"=  AddScreenBehaviour (Limited 8) [Behaviour BehaviourPulse (\_ _ o -> o)]
+  fromText "ThiccIt" = AddShaderEffect Forever Barrel []
+  fromText "WhereAreMyGlasses?" = AddShaderEffect Forever Blur []
+  fromText "GrandmaSaysHi" = AddShaderEffect Forever Stitch []
+  fromText "FLASHBANG" = AddShaderEffect Forever Flashbang []
+  fromText "TakeTheWhitePill" = AddShaderEffect Forever Cycle []
+  fromText "EyesClosed" = AddShaderEffect Forever Blink []
+  fromText "Discombobulated" = AddShaderEffect Forever Mirror []
+  fromText "InvertColors" = AddShaderEffect Forever Invert []
+  fromText "Toonify" = AddShaderEffect Forever Toonify []
+  fromText "Audiophile" = AddShaderEffect Forever Audiophile []
+  fromText "BassRealityWarp" = AddShaderEffect Forever BassRealityWarp []
+  fromText "hearAndFeelIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourAudiophile (\_ _ o -> o)]
+  fromText "shakeIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourShake (\_ _ o -> o)]
+  fromText "rotateIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourRotate (\_ _ o -> o)]
+  fromText "moveIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourMoveTo (\_ _ o -> o)]
+  fromText "circleIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourCircle (\_ _ o -> o)]
+  fromText "pulseIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourPulse (\_ _ o -> o)]
   fromText "RandomGifOrImage" = AddAsset "" Forever (V3 0 0 0) []
   fromText "RandomScreenEffect" = AddScreenBehaviour Forever []
   fromText "RATATATATA" = AddRapidFire []
