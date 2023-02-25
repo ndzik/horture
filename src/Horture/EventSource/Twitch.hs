@@ -41,11 +41,12 @@ linearIncreaseFunction (_, _, cp) = cp + 25
 -- TODO: Add a stepfunction for decaying.
 decayFunction :: Double -> CostAdjustFunction
 decayFunction timeTillDecay = decay
-  where decay (dt, bc, cp)
-            | dt > timeTillDecay =
-              let np = cp * 0.8
-              in if np < bc then bc else np
-            | otherwise = cp
+  where
+    decay (dt, bc, cp)
+      | dt > timeTillDecay =
+        let np = cp * 0.8
+         in if np < bc then bc else np
+      | otherwise = cp
 
 -- | TwitchEventSoucreState tracks the current costs for each effect identified
 -- by a string id together with their deltatime since last usage.
@@ -143,7 +144,10 @@ handleEventCost (EventEffect _ eff) = do
   registeredEvents <- Map.fromList <$> listAllEvents
   backendId <- case Map.lookup id registeredEvents of
     Just (backendId, _) -> return backendId
-    Nothing -> error "handling event cost: unregistered event encountered"
+    Nothing -> do
+      logError $ "unregistered event encountered: " <> id
+      -- TODO: Add Freer.Error implementation here.
+      error "handling event cost: unregistered event encountered"
   liftIO (Map.lookup id <$> readTVarIO tvarCache) >>= \case
     Nothing -> return ()
     Just (_dt, _bp, cp) -> void $ changeEventCost backendId (round cp)

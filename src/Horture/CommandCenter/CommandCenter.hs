@@ -75,10 +75,11 @@ drawUI cs =
                     borderWithLabel
                       (str "Horture CommandCenter")
                       (currentCaptureUI . _ccCapturedWin $ cs),
-                  setAvailableSize (7, 4) $ withBorderStyle unicode $
-                    borderWithLabel
-                      (str "FPS")
-                      (center . fpsUI . _ccCurrentFPS $ cs)
+                  setAvailableSize (7, 4) $
+                    withBorderStyle unicode $
+                      borderWithLabel
+                        (str "FPS")
+                        (center . fpsUI . _ccCurrentFPS $ cs)
                 ],
             hBox
               [ let mkAttr =
@@ -106,7 +107,7 @@ drawUI cs =
                         metainfoUI
                   ]
               ],
-            vLimit 3 $
+            vLimit 4 $
               withBorderStyle unicode $
                 borderWithLabel
                   (str "Hotkeys")
@@ -145,15 +146,19 @@ hotkeyUI :: Widget Name
 hotkeyUI =
   center
     ( str $
-        intercalate
-          " | "
-          [ "<g>: Select window to capture",
-            "<q>: Stop window capture",
-            "<r>: Refresh EventSource",
-            "<p>: Purge EventSource",
-            "<s>: Toggle EventSource",
-            "<esc>: Exit horture"
-          ]
+        unlines
+          . map (intercalate " | ")
+          $ [ [ "<g>: Select window to capture",
+                "<q>: Stop window capture",
+                "<r>: Refresh EventSource",
+                "<d>: Disable all events"
+              ],
+              [ "<e>: Enable all events",
+                "<p>: Purge EventSource",
+                "<s>: Toggle EventSource",
+                "<esc>: Exit horture"
+              ]
+            ]
     )
 
 scrollLogPort :: ViewportScroll Name
@@ -178,6 +183,8 @@ appEvent (VtyEvent (EvKey (KChar 'k') [])) = do
 appEvent (VtyEvent (EvKey (KChar 's') [])) = gets _ccEventSourceEnabled >>= toggleEventSource
 appEvent (VtyEvent (EvKey (KChar 'h') [])) = return ()
 appEvent (VtyEvent (EvKey (KChar 'l') [])) = return ()
+appEvent (VtyEvent (EvKey (KChar 'd') [])) = gets _ccControllerChans >>= disableEventsOnEventSource
+appEvent (VtyEvent (EvKey (KChar 'e') [])) = gets _ccControllerChans >>= enableEventsOnEventSource
 appEvent (VtyEvent (EvKey (KChar 'p') [])) = gets _ccControllerChans >>= purgeEventSource
 appEvent (VtyEvent (EvKey (KChar 'r') [])) = gets _ccControllerChans >>= refreshEventSource
 appEvent (VtyEvent (EvKey (KChar 'g') [])) = grabHorture
@@ -226,6 +233,20 @@ stopHorture = do
 writeExit :: Chan Event -> EventM Name CommandCenterState ()
 writeExit chan = liftIO $ writeChan chan (EventCommand Exit)
 
+disableEventsOnEventSource ::
+  Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
+  EventM Name CommandCenterState ()
+disableEventsOnEventSource Nothing = logInfo "No EventSource controller available"
+disableEventsOnEventSource (Just pipe) = writeAndHandleResponse pipe InputDisableAll
+
+enableEventsOnEventSource ::
+  Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
+  EventM Name CommandCenterState ()
+enableEventsOnEventSource Nothing = logInfo "No EventSource controller available"
+enableEventsOnEventSource (Just pipe) = do
+  writeAndHandleResponse pipe InputEnableAll
+  writeAndHandleResponse pipe InputListEvents
+
 purgeEventSource ::
   Maybe (Chan EventControllerInput, Chan EventControllerResponse) ->
   EventM Name CommandCenterState ()
@@ -239,14 +260,17 @@ refreshEventSource ::
   EventM Name CommandCenterState ()
 refreshEventSource Nothing = logInfo "No EventSource controller available"
 refreshEventSource (Just pipe) = do
-  allEffs <- deriveBaseEvents
-  writeAndHandleResponse pipe InputPurgeAll
+  allEffs <- deriveBaseEventsCC
+  writeAndHandleResponse pipe InputDisableAll
   writeAndHandleResponse pipe . InputEnable $ allEffs
+  writeAndHandleResponse pipe InputEnableAll
   writeAndHandleResponse pipe InputListEvents
 
-deriveBaseEvents :: EventM Name CommandCenterState [(Text, Effect, Int)]
-deriveBaseEvents = do
-  baseCost <- gets (^. ccEventBaseCost)
+deriveBaseEventsCC :: EventM Name CommandCenterState [(Text, Effect, Int)]
+deriveBaseEventsCC = deriveBaseEvents <$> gets (^. ccEventBaseCost)
+
+deriveBaseEvents :: Int -> [(Text, Effect, Int)]
+deriveBaseEvents baseCost = do
   let shaderEffs = map (\v -> AddShaderEffect Forever v []) . enumFrom $ minBound
       behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> o)) . enumFrom $ minBound
       counterEffs = [RemoveScreenBehaviour 0, RemoveShaderEffect 0]
@@ -255,7 +279,7 @@ deriveBaseEvents = do
           ++ [AddAsset "" Forever (V3 0 0 0) [], AddScreenBehaviour Forever [], AddRapidFire []]
           ++ shaderEffs
           ++ counterEffs
-  return . map (\eff -> (toTitle eff, eff, baseCost * effectToCost eff)) $ allEffs
+   in map (\eff -> (toTitle eff, eff, baseCost * effectToCost eff)) allEffs
 
 writeAndHandleResponse ::
   (Chan EventControllerInput, Chan EventControllerResponse) ->
@@ -393,15 +417,15 @@ spawnEventSource (Just (BaseUrl schema host port path)) evChan logChan appChan =
   uid <- gets (^. ccUserId)
   ccChan <- liftIO $ newChan @CommandCenterEvent
   enabledTVar <- fetchOrCreateEventSourceTVar
-  baseEffects <- deriveBaseEvents
-  let run = runc host (fromIntegral port) path app
-      app = hortureWSStaticClientApp baseEffects uid evChan ccChan ic rc env enabledTVar
-      action = run `catch` handler
-      handler :: ConnectionException -> IO ()
-      handler e = do
-        logErrorColog logChan . pack . show $ e
-        threadDelay oneSec
-        action
+  baseEffects <- deriveBaseEventsCC
+  let app = hortureWSStaticClientApp baseEffects uid evChan ccChan ic rc env enabledTVar
+      run = runc host (fromIntegral port) path app
+      action =
+        let handler :: ConnectionException -> IO ()
+            handler e = do
+              logErrorColog logChan . pack . show $ e
+              threadDelay oneSec
+         in run `catch` (\e -> handler e >> action)
   liftIO . forkIO $ do
     bracket
       (forkIO . forever $ pipeToBrickChan ccChan appChan id)
@@ -510,7 +534,7 @@ runDebugCenter mcfg = do
 runCommandCenter :: Bool -> Config -> IO ()
 runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay mDefaultFont) = do
   images <- makeAbsolute (dir <> imagesDir) >>= loadDirectory
-  appChan <- newBChan 10
+  appChan <- newBChan 256
   preloadedImages <-
     runPreloader (PLC $ dir <> imagesDir) loadAssetsInMemory >>= \case
       Left err -> print err >> exitFailure
@@ -527,7 +551,7 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
           Just auth -> return auth
           Nothing -> error "No AuthorizationToken available, authorize Horture first"
         uid <- fetchUserId helixApi cid auth
-        cs <- spawnTwitchEventController helixApi uid cid auth appChan
+        cs <- spawnTwitchEventController baseC helixApi uid cid auth appChan
         return (Just cs, uid)
   let buildVty = mkVty defaultConfig
   initialVty <- buildVty
@@ -584,13 +608,14 @@ fetchUserId helixApi cid auth = do
     Right (DataResponse (u : _)) -> return . getuserinformationId $ u
 
 spawnTwitchEventController ::
+  Int ->
   BaseUrl ->
   Text ->
   Text ->
   Text ->
   BChan CommandCenterEvent ->
   IO (Chan EventControllerInput, Chan EventControllerResponse)
-spawnTwitchEventController helixApi uid cid auth appChan = do
+spawnTwitchEventController baseCost helixApi uid cid auth appChan = do
   mgr <-
     newManager =<< case baseUrlScheme helixApi of
       Https -> return tlsManagerSettings
@@ -606,7 +631,8 @@ spawnTwitchEventController helixApi uid cid auth appChan = do
       killThread
       ( const $
           runHortureTwitchEventController
-            (TCS channelPointsClient uid clientEnv Map.empty)
+            (Map.fromList . map (\(a, b, c) -> (a, (b, c))) $ deriveBaseEvents baseCost)
+            (TCS channelPointsClient uid clientEnv)
             logChan
             controllerInputChan
             controllerResponseChan
@@ -624,5 +650,10 @@ fpsTicker microSecondsDelay fpsTVar bchan = do
         loop newFrameCount
   forkIO $ loop 0
 
-pipeToBrickChan :: Chan a -> BChan b -> (a -> b) -> IO ()
-pipeToBrickChan chan bchan toBchan = readChan chan >>= writeBChan bchan . toBchan
+pipeToBrickChan :: (Show a, Show b) => Chan a -> BChan b -> (a -> b) -> IO ()
+pipeToBrickChan chan bchan toBchan = do
+  -- It is required to use a temporary variable here, otherwise laziness might
+  -- lead to a deadlock, because readChan is never evaluated and thus the
+  -- synchronization between the synchronous channels is not triggered.
+  tmp <- readChan chan
+  writeBChan bchan . toBchan $ tmp

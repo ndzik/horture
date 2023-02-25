@@ -100,7 +100,7 @@ library horture-lib
 
     -- LANGUAGE extensions used by modules in this package.
     build-depends:          base ^>=4.14.3.0
-                            , twitch-api
+                            , haskell-twitch-api
                             , horture-server-lib
                             , X11
                             , text
@@ -112,6 +112,7 @@ library horture-lib
                             , bytestring
                             , exceptions
                             , co-log
+                            , extra
                             , aeson
                             , http-api-data
                             , http-client
@@ -160,109 +161,8 @@ library horture-lib
                             -fno-warn-name-shadowing
                             -fno-warn-unticked-promoted-constructors
                             -fno-warn-orphans
-    hs-source-dirs:         src/horture
+    hs-source-dirs:         src
     default-language:       Haskell2010
-
-library horture-server-lib
-    default-extensions:     TemplateHaskell
-                            , TypeApplications
-                            , TypeOperators
-                            , OverloadedStrings
-                            , LambdaCase
-                            , NumericUnderscores
-                            , ScopedTypeVariables
-    hs-source-dirs:     src/server
-    default-language:   Haskell2010
-    ghc-options:
-                        -Wall
-                        -fno-warn-name-shadowing
-                        -fno-warn-unticked-promoted-constructors
-                        -fno-warn-orphans
-
-    build-depends:      base ^>=4.14.3.0
-                        , twitch-api
-                        , text
-                        , lens
-                        , servant-client
-                        , servant-client-core
-                        , http-types
-                        , http-client
-                        , http-client-tls
-                        , data-default
-                        , mtl
-                        , synchronous-channels
-                        , wai
-                        , warp
-                        , warp-tls
-                        , websockets
-                        , wai-websockets
-                        , aeson
-                        , random
-                        , bytestring
-                        , cryptonite
-                        , memory
-                        , katip
-
-    exposed-modules:    Horture.Server.Config
-                        , Horture.Server.Reader
-                        , Horture.Server.Application
-                        , Horture.Server.Client
-                        , Horture.Server.Message
-                        , Horture.Server.Websocket
-                        , Horture.Server.Server
-
-    -- other-modules:
-
-library twitch-api
-    default-extensions:     TemplateHaskell
-                            , TypeApplications
-                            , TypeOperators
-                            , OverloadedStrings
-                            , LambdaCase
-    hs-source-dirs:     src/twitch
-    default-language:   Haskell2010
-    ghc-options:
-                            -Wall
-                            -fno-warn-name-shadowing
-                            -fno-warn-unticked-promoted-constructors
-                            -fno-warn-orphans
-
-    build-depends:      base ^>=4.14.3.0
-                        , aeson
-                        , text
-                        , http-api-data
-                        , http-types
-                        , servant
-                        , servant-client
-
-    exposed-modules:    Twitch
-                        , Twitch.EventSub
-                        , Twitch.EventSub.Event
-                        , Twitch.EventSub.Notification
-                        , Twitch.Rest
-                        , Twitch.Rest.Authorization
-                        , Twitch.Rest.Authentication
-                        , Twitch.Rest.DataResponse
-                        , Twitch.Rest.Types
-                        , Twitch.Mock
-
-    other-modules:      Twitch.Rest.Token
-                        , Twitch.EventSub.Condition
-                        , Twitch.EventSub.Request
-                        , Twitch.EventSub.Response
-                        , Twitch.EventSub.Transport
-                        , Twitch.EventSub.BitsVoting
-                        , Twitch.EventSub.ChannelPointsVoting
-                        , Twitch.EventSub.Choices
-                        , Twitch.EventSub.EntitlementObject
-                        , Twitch.EventSub.GlobalCooldown
-                        , Twitch.EventSub.Image
-                        , Twitch.EventSub.Contribution
-                        , Twitch.EventSub.Message
-                        , Twitch.EventSub.Outcomes
-                        , Twitch.EventSub.Poll
-                        , Twitch.EventSub.Product
-                        , Twitch.EventSub.Reward
 
 test-suite horture-test
   type:                     exitcode-stdio-1.0
@@ -287,27 +187,3 @@ executable horture-client
                           , horture-lib
                           , optparse-applicative
   default-language:       Haskell2010
-
-executable horture-server
-  default-extensions:     LambdaCase
-  hs-source-dirs:           app/Server
-  main-is:                  Main.hs
-  ghc-options:
-                            -Wall
-                            -fno-warn-name-shadowing
-                            -threaded
-                            -O2
-  other-modules:            Config
-  build-depends:            base ^>=4.14.3.0
-                            , horture-server-lib
-                            , twitch-api
-                            , directory
-                            , optparse-applicative
-                            , aeson
-                            , text
-                            , http-client-tls
-                            , warp
-                            , servant-client
-                            , http-client
-                            , bytestring
-  default-language:         Haskell2010

@@ -17,6 +17,7 @@ import Data.Text (Text, pack, unpack)
 import Horture.CommandCenter.Event
 import Horture.Effect
 import Horture.Event
+import Horture.EventSource.Controller.Controller (EventControllerInput, EventControllerResponse)
 import Horture.EventSource.EventSource
 import Horture.EventSource.Logger
 import Horture.EventSource.Random
@@ -25,21 +26,21 @@ import Horture.Server.Message
 import Network.WebSockets
 import qualified Twitch.EventSub.Event as TEvent
 import qualified Twitch.EventSub.Notification as TEvent
-import Horture.EventSource.Controller.Controller (EventControllerInput, EventControllerResponse)
 
 runWSEventSource ::
   forall effs x.
-  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs, LastMember IO effs) =>
+  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect, Logger] effs, LastMember IO effs) =>
   Connection ->
   Eff (EventSource : effs) x ->
   Eff effs x
 runWSEventSource conn = interpret (wsEventSourceHandler conn)
 
 wsEventSourceHandler ::
-  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs, LastMember IO effs) =>
+  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect, Logger] effs, LastMember IO effs) =>
   Connection ->
   (EventSource ~> Eff effs)
-wsEventSourceHandler conn SourceEvent = liftIO (receiveData @HortureServerMessage conn) >>= resolveServerMessageToEvent
+wsEventSourceHandler conn SourceEvent =
+  liftIO (receiveData @HortureServerMessage conn) >>= resolveServerMessageToEvent
 
 runWSEventSink ::
   forall effs x.
@@ -58,7 +59,7 @@ wsEventSinkHandler evChan (SinkEvent ev) = do
   liftIO (writeChan evChan ev)
 
 resolveServerMessageToEvent ::
-  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect] effs) =>
+  (Members '[Reader StaticEffectRandomizerEnv, RandomizeEffect, Logger] effs) =>
   HortureServerMessage ->
   Eff effs Event
 resolveServerMessageToEvent HortureServerGarbage = return $ EventEffect "" Noop
@@ -70,7 +71,7 @@ resolveServerMessageToEvent (HortureEventSub ev) = resolveToEvent ev
     resolveToEvent _ = return $ EventEffect "" Noop
 
 effectFromTitle ::
-  (Members '[Reader StaticEffectRandomizerEnv] effs) =>
+  (Members '[Reader StaticEffectRandomizerEnv, Logger] effs) =>
   Text ->
   Eff effs Effect
 effectFromTitle title =
