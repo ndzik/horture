@@ -648,6 +648,8 @@ fpsTicker microSecondsDelay fpsTVar bchan = do
 
 pipeToBrickChan :: (Show a, Show b) => Chan a -> BChan b -> (a -> b) -> IO ()
 pipeToBrickChan chan bchan toBchan = do
+  -- It is required to use a temporary variable here, otherwise laziness might
+  -- lead to a deadlock, because readChan is never evaluated and thus the
+  -- synchronization between the synchronous channels is not triggered.
   tmp <- readChan chan
-  appendFile "lmaoxdusuckatcoding" $ show tmp
   writeBChan bchan . toBchan $ tmp
