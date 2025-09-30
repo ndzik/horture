@@ -4,15 +4,22 @@ import Control.Concurrent (MVar)
 import Control.Concurrent.Chan.Synchronous
 import Control.Concurrent.STM
 import Control.Lens.TH
+import Data.RingBuffer
 import Data.Text (Text)
+import qualified Data.Vector as V
 import Graphics.Rendering.OpenGL hiding (get)
 import qualified Graphics.UI.GLFW as GLFW
-import Graphics.X11
+-- import Graphics.X11
+-- import Horture.Audio.Player.Protea
 import Horture.Audio.Recorder
 import Horture.Event
-import Horture.Audio.Player.Protea
 import Horture.Program
-import RingBuffers.Lifted
+
+data AudioPlayerEnv = AudioPlayerEnv
+
+data AudioPlayerState = AudioPlayerState
+
+data Drawable = Drawable
 
 data HortureStatic = HortureStatic
   { _screenProg :: !HortureScreenProgram,
@@ -32,10 +39,10 @@ data HortureState hdl = HortureState
     _audioStorage :: !(TVar (Maybe FFTSnapshot)),
     _audioState :: !AudioPlayerState,
     _frameCounter :: !(TVar Int),
-    _mvgAvg :: !(RingBuffer FFTSnapshot),
+    _mvgAvg :: !(RingBuffer V.Vector FFTSnapshot),
     _capture :: !(Maybe Drawable),
     _dim :: !(Int, Int),
-    _eventList :: !(RingBuffer PastEvent)
+    _eventList :: !(RingBuffer V.Vector PastEvent)
   }
 
 makeLenses ''HortureStatic

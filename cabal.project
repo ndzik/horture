@@ -7,6 +7,11 @@ write-ghc-environment-files: never
 -- The only sensible test display option.
 test-show-details: streaming
 
+source-repository-package
+  type: git
+  location: https://github.com/ndzik/freer-simple.git
+  tag: 60b0aee747aa5272f3818ba29bd9e42558938738
+
 -- X11 update with xCompositing
 -- HOTFIX: https://github.com/haskell/cabal/issues/4903
 -- There should be a way to define some kind of user-hook to custom commands...
@@ -19,22 +24,22 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/ndzik/bindings-GLFW.git
-  tag: b6b05359f541ea3d1a28afe01ec1f6af40f362bc
+  tag: 3152e71b596d09c644bb6168902384bd6db9346d
 
 -- bindings-GLFW low level GLFW bindings update to GLFW-3.4.
 source-repository-package
   type: git
   location: https://github.com/ndzik/GLFW-b.git
-  tag: c6bd7af27729a2c0267c0c99f262df9b47f945f0
+  tag: 8f609121bd0dd19c5c3f76d4377b8005c0723ca8
 
 -- twitch api dependency.
 source-repository-package
   type: git
   location: https://github.com/ndzik/haskell-twitch-api.git
-  tag: e2a528ba61104c4ee179de856e80a3048fd1ed51
+  tag: d0dac13c90ccf315e5e764a26d28464115f3deaa
 
 -- horture server dependency.
 source-repository-package
   type: git
   location: https://github.com/ndzik/horture-server.git
-  tag: 34989678773578db54580b3042c4ba11035185b3
+  tag: 0682b853d45e952128e0e52f36cab7a9b45b7d05

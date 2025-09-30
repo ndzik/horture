@@ -19,6 +19,7 @@ import Data.Bits
 import Data.Default
 import Data.Foldable
 import qualified Data.Map as Map
+import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text, pack)
 import Foreign.C.String
 import Foreign.Marshal.Alloc
@@ -41,7 +42,6 @@ import Horture.Scene hiding (assets)
 import Horture.State
 import Horture.WindowGrabber
 import Numeric (showHex)
-import qualified RingBuffers.Lifted as RingBuffer
 
 instance
   (HortureLogger (HortureInitializer l hdl), hdl ~ CaptureHandle) =>
@@ -169,7 +169,8 @@ findMe root dp me = do
               else return Nothing
         )
         childs
-    return . join
+    return
+      . join
       . find
         ( \case
             (Just (ns, _c)) -> me `elem` ns

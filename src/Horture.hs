@@ -20,6 +20,7 @@ where
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
 import Control.Lens
+import Control.Monad (unless, void, when)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
@@ -62,7 +63,7 @@ frameTime :: Double
 frameTime = 1 / 60
 
 -- | playScene plays the given scene in a Horture context.
-playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
+playScene :: forall l hdl. (HortureEffects hdl l) => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
   void . withRecording . withAudio . go 0 . Just $ s
@@ -91,7 +92,8 @@ playScene s = do
                        )
       deltaTime lt >>= \timeSinceFrame ->
         when (timeSinceFrame < frameTime) $
-          liftIO . threadDelay . round $ (frameTime - timeSinceFrame) * 1000 * 1000
+          liftIO . threadDelay . round $
+            (frameTime - timeSinceFrame) * 1000 * 1000
       newTime <- getTime
       go newTime s
     handleHortureError (HE err) = logError . pack $ err
@@ -101,7 +103,7 @@ playScene s = do
     handleHortureError asi@AudioSinkInitializationErr = logError . pack . show $ asi
     handleHortureError asp@(AudioSinkPlayErr _) = logError . pack . show $ asp
 
-processAudio :: HortureEffects hdl l => Maybe Scene -> Horture l hdl (Maybe Scene)
+processAudio :: (HortureEffects hdl l) => Maybe Scene -> Horture l hdl (Maybe Scene)
 processAudio Nothing = return Nothing
 processAudio (Just s) = do
   mapM_ playAudio $ s ^. audio
@@ -116,7 +118,7 @@ clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
 updateView :: Horture l hdl ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
 
-pollEvents :: HortureEffects hdl l => Scene -> Double -> Double -> Horture l hdl (Maybe Scene)
+pollEvents :: (HortureEffects hdl l) => Scene -> Double -> Double -> Horture l hdl (Maybe Scene)
 pollEvents s timeNow dt = do
   pollGLFWEvents
   pollWindowEnvironment

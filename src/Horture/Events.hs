@@ -5,6 +5,7 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import qualified Data.RingBuffer as Ringbuffer
 import Horture.Command
 import Horture.Effect
 import Horture.Error
@@ -13,11 +14,11 @@ import Horture.Horture
 import Horture.Logging
 import Horture.Scene
 import Horture.State
-import qualified RingBuffers.Lifted as Ringbuffer
 
 pollHortureEvents :: (HortureLogger (Horture l hdl)) => Double -> Double -> Scene -> Horture l hdl (Maybe Scene)
 pollHortureEvents timeNow dt s = do
-  asks _eventChan >>= liftIO . tryReadChan
+  asks _eventChan
+    >>= liftIO . tryReadChan
     >>= \case
       Success ev -> do
         logEvent ev

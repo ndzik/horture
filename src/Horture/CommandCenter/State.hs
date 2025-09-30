@@ -32,13 +32,14 @@ import Control.Concurrent.Chan.Synchronous
 import Control.Concurrent.STM (TVar)
 import Control.Lens
 import qualified Data.Map.Strict as Map
+import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text)
+import qualified Data.Vector as V
 import Horture.CommandCenter.Event
 import Horture.Effect
 import Horture.Event
 import Horture.EventSource.Controller
 import Horture.Loader.Asset
-import qualified RingBuffers.Lifted as RingBuffer
 import Servant.Client (BaseUrl)
 
 data Name
@@ -52,7 +53,7 @@ data CommandCenterState = CCState
     _ccBrickEventChan :: !(BChan CommandCenterEvent),
     _ccCapturedWin :: !(Maybe String),
     _ccControllerChans :: !(Maybe (Chan EventControllerInput, Chan EventControllerResponse)),
-    _ccLog :: !(RingBuffer.RingBuffer Text),
+    _ccLog :: !(RingBuffer.RingBuffer V.Vector Text),
     _ccLogList :: ![Text],
     _ccImages :: ![FilePath],
     _ccImagesList :: !(GenericList Name [] FilePath),

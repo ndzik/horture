@@ -17,14 +17,18 @@ import Control.Concurrent (ThreadId, forkIO, forkOS, killThread, newEmptyMVar, r
 import Control.Concurrent.Chan.Synchronous
 import Control.Concurrent.STM (TVar, atomically, modifyTVar, newTVarIO, readTVarIO)
 import Control.Lens
+import Control.Monad (forever, void)
 import Control.Monad.Catch
 import Control.Monad.Except
+import Control.Monad.IO.Class (liftIO)
 import Data.Default
 import Data.List (intercalate)
 import qualified Data.Map.Strict as Map
+import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text, pack)
 import Graphics.Vty hiding (Config, Event)
-import Horture.Backend.X11
+import Graphics.Vty.Platform.Unix (mkVty)
+-- import Horture.Backend.X11
 import Horture.Command
 import Horture.CommandCenter.Event
 import Horture.CommandCenter.State
@@ -45,7 +49,6 @@ import Linear.V3
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client.TLS
 import Network.WebSockets (ConnectionException (..), runClient)
-import qualified RingBuffers.Lifted as RingBuffer
 import Servant.Client (mkClientEnv, runClientM)
 import Servant.Client.Core.BaseUrl
 import System.Directory
@@ -145,20 +148,20 @@ metainfoUI = center (str "No metainformation available")
 hotkeyUI :: Widget Name
 hotkeyUI =
   center
-    ( str $
-        unlines
+    ( str
+        $ unlines
           . map (intercalate " | ")
-          $ [ [ "<g>: Select window to capture",
-                "<q>: Stop window capture",
-                "<r>: Refresh EventSource",
-                "<d>: Disable all events"
-              ],
-              [ "<e>: Enable all events",
-                "<p>: Purge EventSource",
-                "<s>: Toggle EventSource",
-                "<esc>: Exit horture"
-              ]
+        $ [ [ "<g>: Select window to capture",
+              "<q>: Stop window capture",
+              "<r>: Refresh EventSource",
+              "<d>: Disable all events"
+            ],
+            [ "<e>: Enable all events",
+              "<p>: Purge EventSource",
+              "<s>: Toggle EventSource",
+              "<esc>: Exit horture"
             ]
+          ]
     )
 
 scrollLogPort :: ViewportScroll Name
@@ -332,60 +335,61 @@ data CCException
 instance Exception CCException
 
 grabHorture :: EventM Name CommandCenterState ()
-grabHorture = do
-  gets (^. ccCapturedWin) >>= \case
-    Nothing -> return ()
-    Just _ -> throwM AlreadyCapturingWindow
+grabHorture = do undefined
 
-  pli <- gets _ccPreloadedImages
-  pls <- gets _ccPreloadedSounds
-  hurl <- gets _ccHortureUrl
-
-  brickChan <- gets (^. ccBrickEventChan)
-  logChan <- liftIO $ newChan @Text
-  evChan <- liftIO $ newChan @Event
-  frameCounter <- gets (^. ccFrameCounter)
-
-  -- Event source thread.
-  evSourceTID <- spawnEventSource hurl evChan logChan brickChan
-  -- Horture rendering thread. Does not have to be externally killed, because
-  -- we will try to end it cooperatively by issuing an external exit command.
-  mv <- liftIO newEmptyMVar
-  mDefaultFont <- gets (^. ccDefaultFont)
-  let env =
-        HortureInitializerEnvironment
-          { _hortureInitializerEnvironmentLogChan = logChan,
-            _hortureInitializerEnvironmentGrabbedWin = mv,
-            _hortureInitializerEnvironmentDefaultFont = mDefaultFont
-          }
-      logError = HL.withColog Colog.Error (logActionChan logChan)
-  void . liftIO . forkOS $ do
-    let startScene =
-          def
-            { _screen = def,
-              _shaders = []
-            }
-        action = initialize @'Channel startScene pli pls frameCounter (Just logChan) evChan
-    runHortureInitializer env action >>= \case
-      Left err -> logError . pack . show $ err
-      Right _ -> return ()
-  -- Logging relay thread `Renderer` -> `Frontend`.
-  logSourceTID <- liftIO . forkIO . forever $ pipeToBrickChan logChan brickChan CCLog
-  -- Cache ThreadIDs which can to be killed externally.
-  ccTIDsToClean .= [evSourceTID, logSourceTID]
-
-  res <-
-    liftIO (readMVar mv) >>= \case
-      Nothing -> throwM UserAvoidedWindowSelection
-      Just res -> return res
-  modify $ \ccs ->
-    ccs
-      { _ccEventChan = Just evChan,
-        _ccCapturedWin = Just res
-      }
-  where
-    logActionChan :: Chan Text -> Colog.LogAction IO Text
-    logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
+--   gets (^. ccCapturedWin) >>= \case
+--     Nothing -> return ()
+--     Just _ -> throwM AlreadyCapturingWindow
+--
+--   pli <- gets _ccPreloadedImages
+--   pls <- gets _ccPreloadedSounds
+--   hurl <- gets _ccHortureUrl
+--
+--   brickChan <- gets (^. ccBrickEventChan)
+--   logChan <- liftIO $ newChan @Text
+--   evChan <- liftIO $ newChan @Event
+--   frameCounter <- gets (^. ccFrameCounter)
+--
+--   -- Event source thread.
+--   evSourceTID <- spawnEventSource hurl evChan logChan brickChan
+--   -- Horture rendering thread. Does not have to be externally killed, because
+--   -- we will try to end it cooperatively by issuing an external exit command.
+--   mv <- liftIO newEmptyMVar
+--   mDefaultFont <- gets (^. ccDefaultFont)
+--   let env =
+--         HortureInitializerEnvironment
+--           { _hortureInitializerEnvironmentLogChan = logChan,
+--             _hortureInitializerEnvironmentGrabbedWin = mv,
+--             _hortureInitializerEnvironmentDefaultFont = mDefaultFont
+--           }
+--       logError = HL.withColog Colog.Error (logActionChan logChan)
+--   void . liftIO . forkOS $ do
+--     let startScene =
+--           def
+--             { _screen = def,
+--               _shaders = []
+--             }
+--         action = initialize @'Channel startScene pli pls frameCounter (Just logChan) evChan
+--     runHortureInitializer env action >>= \case
+--       Left err -> logError . pack . show $ err
+--       Right _ -> return ()
+--   -- Logging relay thread `Renderer` -> `Frontend`.
+--   logSourceTID <- liftIO . forkIO . forever $ pipeToBrickChan logChan brickChan CCLog
+--   -- Cache ThreadIDs which can to be killed externally.
+--   ccTIDsToClean .= [evSourceTID, logSourceTID]
+--
+--   res <-
+--     liftIO (readMVar mv) >>= \case
+--       Nothing -> throwM UserAvoidedWindowSelection
+--       Just res -> return res
+--   modify $ \ccs ->
+--     ccs
+--       { _ccEventChan = Just evChan,
+--         _ccCapturedWin = Just res
+--       }
+--   where
+--     logActionChan :: Chan Text -> Colog.LogAction IO Text
+--     logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
 
 -- | fetchOrCreateEventSourceTVar looks up if an EventSourceTVar is already
 -- registered. If that is not the case, it creates a default initialized TVar,
@@ -501,35 +505,35 @@ runDebugCenter mcfg = do
   logBuf <- liftIO $ RingBuffer.new 200
   frameCounter <- liftIO $ newTVarIO 0
   void $ fpsTicker (500 * 1000) frameCounter appChan
-  void $
-    customMain
+  void
+    $ customMain
       initialVty
       buildVty
       (Just appChan)
       app
-      $ CCState
-        { _ccImages = images,
-          _ccImagesList = list AssetPort images 1,
-          _ccPreloadedImages = preloadedImages,
-          _ccPreloadedSounds = preloadedSounds,
-          _ccDefaultFont = mFont,
-          _ccHortureUrl = Nothing,
-          _ccUserId = "some_user_id",
-          _ccControllerChans = Nothing,
-          _ccLog = logBuf,
-          _ccBrickEventChan = appChan,
-          _ccEventBaseCost = 10,
-          _ccTimeout = 1 * 1000 * 1000,
-          _ccEventChan = Nothing,
-          _ccCapturedWin = Nothing,
-          _ccLogList = [],
-          _ccTIDsToClean = [],
-          _ccCursorLocationName = LogPort,
-          _ccRegisteredEffects = Map.empty,
-          _ccFrameCounter = frameCounter,
-          _ccEventSourceEnabled = Nothing,
-          _ccCurrentFPS = 0
-        }
+    $ CCState
+      { _ccImages = images,
+        _ccImagesList = list AssetPort images 1,
+        _ccPreloadedImages = preloadedImages,
+        _ccPreloadedSounds = preloadedSounds,
+        _ccDefaultFont = mFont,
+        _ccHortureUrl = Nothing,
+        _ccUserId = "some_user_id",
+        _ccControllerChans = Nothing,
+        _ccLog = logBuf,
+        _ccBrickEventChan = appChan,
+        _ccEventBaseCost = 10,
+        _ccTimeout = 1 * 1000 * 1000,
+        _ccEventChan = Nothing,
+        _ccCapturedWin = Nothing,
+        _ccLogList = [],
+        _ccTIDsToClean = [],
+        _ccCursorLocationName = LogPort,
+        _ccRegisteredEffects = Map.empty,
+        _ccFrameCounter = frameCounter,
+        _ccEventSourceEnabled = Nothing,
+        _ccCurrentFPS = 0
+      }
 
 runCommandCenter :: Bool -> Config -> IO ()
 runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir delay mDefaultFont) = do
@@ -558,35 +562,35 @@ runCommandCenter mockMode (Config cid _ _ helixApi _ mauth wsEndpoint baseC dir 
   logBuf <- liftIO $ RingBuffer.new 200
   frameCounter <- liftIO $ newTVarIO 0
   void $ fpsTicker (500 * 1000) frameCounter appChan
-  void $
-    customMain
+  void
+    $ customMain
       initialVty
       buildVty
       (Just appChan)
       app
-      $ CCState
-        { _ccImages = images,
-          _ccImagesList = list AssetPort images 1,
-          _ccPreloadedImages = preloadedImages,
-          _ccPreloadedSounds = preloadedSounds,
-          _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
-          _ccUserId = uid,
-          _ccLog = logBuf,
-          _ccDefaultFont = mDefaultFont,
-          _ccControllerChans = controllerChans,
-          _ccBrickEventChan = appChan,
-          _ccEventBaseCost = baseC,
-          _ccTimeout = delay,
-          _ccEventChan = Nothing,
-          _ccCapturedWin = Nothing,
-          _ccLogList = [],
-          _ccTIDsToClean = [],
-          _ccCursorLocationName = LogPort,
-          _ccRegisteredEffects = Map.empty,
-          _ccFrameCounter = frameCounter,
-          _ccEventSourceEnabled = Nothing,
-          _ccCurrentFPS = 0
-        }
+    $ CCState
+      { _ccImages = images,
+        _ccImagesList = list AssetPort images 1,
+        _ccPreloadedImages = preloadedImages,
+        _ccPreloadedSounds = preloadedSounds,
+        _ccHortureUrl = if mockMode then Nothing else wsEndpoint,
+        _ccUserId = uid,
+        _ccLog = logBuf,
+        _ccDefaultFont = mDefaultFont,
+        _ccControllerChans = controllerChans,
+        _ccBrickEventChan = appChan,
+        _ccEventBaseCost = baseC,
+        _ccTimeout = delay,
+        _ccEventChan = Nothing,
+        _ccCapturedWin = Nothing,
+        _ccLogList = [],
+        _ccTIDsToClean = [],
+        _ccCursorLocationName = LogPort,
+        _ccRegisteredEffects = Map.empty,
+        _ccFrameCounter = frameCounter,
+        _ccEventSourceEnabled = Nothing,
+        _ccCurrentFPS = 0
+      }
 
 fetchUserId :: BaseUrl -> Text -> Text -> IO Text
 fetchUserId helixApi cid auth = do

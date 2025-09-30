@@ -12,20 +12,21 @@ import Codec.Picture hiding (readImage)
 import Codec.Picture.Gif
 import Control.Lens
 import Control.Loop
+import Control.Monad (forM_, void, when)
 import Control.Monad.Except
-import Data.Foldable (foldrM)
 import Control.Monad.Reader
 import Data.ByteString (readFile)
+import Data.Foldable (foldrM)
 import Data.Vector.Storable (Vector, unsafeWith)
 import Data.Word
 import Foreign hiding (void)
+import Horture.Audio.Player.Effects
 import Horture.Loader.Asset
 import Horture.Loader.Config
 import Horture.Loader.Error
 import System.Directory (listDirectory, makeAbsolute)
-import System.FilePath (takeExtension, takeBaseName)
+import System.FilePath (takeBaseName, takeExtension)
 import Prelude hiding (readFile)
-import Horture.Audio.Player.Effects
 
 type FilePreloader a = ExceptT LoaderError (ReaderT PreloaderConfig IO) a
 
@@ -35,9 +36,10 @@ runPreloader lc = flip runReaderT lc . runExceptT
 loadAssetsInMemory :: FilePreloader [(FilePath, Asset)]
 loadAssetsInMemory = do
   dirContent <- asks (^. assetDirectory) >>= liftIO . makeAbsolute >>= liftIO . loadDirectory
-  let loadAssetsIgnoreInvalidExt asset loaded = ((: loaded) <$> readAssets asset) `catchError` \case
-        LoaderUnsupportedAssetType _ -> return loaded
-        err -> throwError err
+  let loadAssetsIgnoreInvalidExt asset loaded =
+        ((: loaded) <$> readAssets asset) `catchError` \case
+          LoaderUnsupportedAssetType _ -> return loaded
+          err -> throwError err
   foldrM loadAssetsIgnoreInvalidExt [] dirContent
 
 loadDirectory :: FilePath -> IO [FilePath]

@@ -11,6 +11,7 @@ where
 
 import Codec.Picture.Gif
 import Control.Lens
+import Control.Monad (foldM_)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
@@ -19,6 +20,7 @@ import Data.Default
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
+import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text, unpack)
 import Foreign hiding (rotate, void)
 import Graphics.GLUtil.Camera3D as Util hiding (orientation)
@@ -44,7 +46,6 @@ import Linear.Quaternion
 import Linear.V3
 import Linear.V4
 import Linear.Vector
-import qualified RingBuffers.Lifted as RingBuffer
 import System.Random.Stateful (globalStdGen, randomM)
 
 renderAssets :: forall l hdl. (HortureLogger (Horture l hdl)) => Double -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
