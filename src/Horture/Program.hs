@@ -2,11 +2,11 @@ module Horture.Program where
 
 import Control.Lens.TH
 import Data.Map.Strict
-import Graphics.Rendering.OpenGL
 import qualified Data.Map.Strict as Map
-import Horture.Effect
-import Horture.Character
+import Graphics.Rendering.OpenGL
 import Horture.Asset
+import Horture.Character
+import Horture.Effect
 
 -- | HortureScreenProgram contains all OpenGL informations to handle the
 -- rendering and displaying of the captured screen image.
@@ -24,6 +24,7 @@ data HortureScreenProgram = HortureScreenProgram
     -- | All shaders receive the same uniforms.
     _hortureScreenProgramModelUniform :: !UniformLocation,
     _hortureScreenProgramProjectionUniform :: !UniformLocation,
+    _hortureScreenProgramTextureUniform :: !UniformLocation,
     _hortureScreenProgramViewUniform :: !UniformLocation,
     _hortureScreenProgramTimeUniform :: !UniformLocation,
     _hortureScreenProgramTextureObject :: !TextureObject,
@@ -56,13 +57,14 @@ data HortureImageProgram = HortureImageProgram
   deriving (Show)
 
 data HortureFontProgram = HortureFontProgram
-  { _hortureFontProgramShader :: !Program
-  , _hortureFontProgramTextureUnit :: !TextureUnit
-  , _hortureFontProgramTexUniform :: !UniformLocation
-  , _hortureFontProgramModelUniform :: !UniformLocation
-  , _hortureFontProgramOpacityUniform :: !UniformLocation
-  , _hortureFontProgramChars :: !(Map.Map Char Character)
-  } deriving (Show)
+  { _hortureFontProgramShader :: !Program,
+    _hortureFontProgramTextureUnit :: !TextureUnit,
+    _hortureFontProgramTexUniform :: !UniformLocation,
+    _hortureFontProgramModelUniform :: !UniformLocation,
+    _hortureFontProgramOpacityUniform :: !UniformLocation,
+    _hortureFontProgramChars :: !(Map.Map Char Character)
+  }
+  deriving (Show)
 
 data HortureBackgroundProgram = HortureBackgroundProgram
   { _hortureBackgroundProgramShader :: !Program,

@@ -37,6 +37,9 @@ library horture-lib
                             , NumericUnderscores
     exposed-modules:        Horture
                             , Horture.Authorize
+                            , Horture.Backend
+                            , Horture.Initializer.Initializer
+                            , Horture.Initializer.Environment
                             , Horture.Path
                             , Horture.Audio
                             , Horture.Audio.Player
@@ -69,13 +72,12 @@ library horture-lib
 
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
+                            , Horture.Backend.Types
                             , Horture.Audio.Recorder
                             , Horture.Audio.Player.Player
                             , Horture.Audio.Player.Error
                             , Horture.Audio.Player.Effects
                             , Horture.Audio.Player.Horture
-                            , Horture.Initializer.Initializer
-                            , Horture.Initializer.Environment
                             , Horture.EventSource.Random
                             , Horture.EventSource.Logger
                             , Horture.EventSource.Local
@@ -98,7 +100,7 @@ library horture-lib
     build-depends:          base
                             , haskell-twitch-api
                             , horture-server-lib
-                            , text
+                            , text >= 2.1.3
                             , word-wrap
                             , raw-strings-qq
                             , servant-client
@@ -166,12 +168,20 @@ library horture-lib
                        , contiguous ==0.5.2
         cpp-options: -DPROTEA_ENABLED -DHORTURE_LINUX
         pkgconfig-depends: libpipewire-0.3
-        c-sources: cbits/record.c
-    if os(darwin)
+        c-sources: cbits/linux/record.c
+    if os(osx)
+        other-modules: Horture.Backend.MacOS
+                     , Horture.Backend.MacOS.Initializer
+                     , Horture.Backend.MacOS.Interface
         cpp-options: -DHORTURE_DARWIN
+        include-dirs: cbits, cbits/macos
+        includes: SCShim.h
+        install-includes: SCShim.h
+        c-sources: cbits/macos/SCShim.m
+        cc-options: -fobjc-arc
+        frameworks: ScreenCaptureKit, CoreMedia, CoreVideo, AVFoundation, AppKit
         build-depends: contiguous ==0.6.5.0
                      , primitive-unlifted >=2.2.0.0
-        -- pkgconfig-depends: glfw3
 
 
 test-suite horture-test
@@ -182,6 +192,9 @@ test-suite horture-test
                             , horture-lib
                             , tasty
                             , tasty-hunit
+                            , synchronous-channels
+                            , text
+                            , data-default
   default-language:         Haskell2010
 
 executable horture-client

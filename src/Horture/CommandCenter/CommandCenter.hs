@@ -28,7 +28,7 @@ import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text, pack)
 import Graphics.Vty hiding (Config, Event)
 import Graphics.Vty.Platform.Unix (mkVty)
--- import Horture.Backend.X11
+import Horture.Backend as Backend
 import Horture.Command
 import Horture.CommandCenter.Event
 import Horture.CommandCenter.State
@@ -335,61 +335,60 @@ data CCException
 instance Exception CCException
 
 grabHorture :: EventM Name CommandCenterState ()
-grabHorture = do undefined
+grabHorture = do
+  gets (^. ccCapturedWin) >>= \case
+    Nothing -> return ()
+    Just _ -> throwM AlreadyCapturingWindow
 
---   gets (^. ccCapturedWin) >>= \case
---     Nothing -> return ()
---     Just _ -> throwM AlreadyCapturingWindow
---
---   pli <- gets _ccPreloadedImages
---   pls <- gets _ccPreloadedSounds
---   hurl <- gets _ccHortureUrl
---
---   brickChan <- gets (^. ccBrickEventChan)
---   logChan <- liftIO $ newChan @Text
---   evChan <- liftIO $ newChan @Event
---   frameCounter <- gets (^. ccFrameCounter)
---
---   -- Event source thread.
---   evSourceTID <- spawnEventSource hurl evChan logChan brickChan
---   -- Horture rendering thread. Does not have to be externally killed, because
---   -- we will try to end it cooperatively by issuing an external exit command.
---   mv <- liftIO newEmptyMVar
---   mDefaultFont <- gets (^. ccDefaultFont)
---   let env =
---         HortureInitializerEnvironment
---           { _hortureInitializerEnvironmentLogChan = logChan,
---             _hortureInitializerEnvironmentGrabbedWin = mv,
---             _hortureInitializerEnvironmentDefaultFont = mDefaultFont
---           }
---       logError = HL.withColog Colog.Error (logActionChan logChan)
---   void . liftIO . forkOS $ do
---     let startScene =
---           def
---             { _screen = def,
---               _shaders = []
---             }
---         action = initialize @'Channel startScene pli pls frameCounter (Just logChan) evChan
---     runHortureInitializer env action >>= \case
---       Left err -> logError . pack . show $ err
---       Right _ -> return ()
---   -- Logging relay thread `Renderer` -> `Frontend`.
---   logSourceTID <- liftIO . forkIO . forever $ pipeToBrickChan logChan brickChan CCLog
---   -- Cache ThreadIDs which can to be killed externally.
---   ccTIDsToClean .= [evSourceTID, logSourceTID]
---
---   res <-
---     liftIO (readMVar mv) >>= \case
---       Nothing -> throwM UserAvoidedWindowSelection
---       Just res -> return res
---   modify $ \ccs ->
---     ccs
---       { _ccEventChan = Just evChan,
---         _ccCapturedWin = Just res
---       }
---   where
---     logActionChan :: Chan Text -> Colog.LogAction IO Text
---     logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
+  pli <- gets _ccPreloadedImages
+  pls <- gets _ccPreloadedSounds
+  hurl <- gets _ccHortureUrl
+
+  brickChan <- gets (^. ccBrickEventChan)
+  logChan <- liftIO $ newChan @Text
+  evChan <- liftIO $ newChan @Event
+  frameCounter <- gets (^. ccFrameCounter)
+
+  -- Event source thread.
+  evSourceTID <- spawnEventSource hurl evChan logChan brickChan
+  -- Horture rendering thread. Does not have to be externally killed, because
+  -- we will try to end it cooperatively by issuing an external exit command.
+  mv <- liftIO newEmptyMVar
+  mDefaultFont <- gets (^. ccDefaultFont)
+  let env =
+        HortureInitializerEnvironment
+          { _hortureInitializerEnvironmentLogChan = logChan,
+            _hortureInitializerEnvironmentGrabbedWin = mv,
+            _hortureInitializerEnvironmentDefaultFont = mDefaultFont
+          }
+      logError = HL.withColog Colog.Error (logActionChan logChan)
+  void . liftIO . forkOS $ do
+    let startScene =
+          def
+            { _screen = def,
+              _shaders = []
+            }
+        action = Backend.initialize @'Channel startScene pli pls frameCounter (Just logChan) evChan
+    runHortureInitializer env action >>= \case
+      Left err -> logError . pack . show $ err
+      Right _ -> return ()
+  -- Logging relay thread `Renderer` -> `Frontend`.
+  logSourceTID <- liftIO . forkIO . forever $ pipeToBrickChan logChan brickChan CCLog
+  -- Cache ThreadIDs which can be killed externally.
+  ccTIDsToClean .= [evSourceTID, logSourceTID]
+
+  res <-
+    liftIO (readMVar mv) >>= \case
+      Nothing -> throwM UserAvoidedWindowSelection
+      Just res -> return res
+  modify $ \ccs ->
+    ccs
+      { _ccEventChan = Just evChan,
+        _ccCapturedWin = Just res
+      }
+  where
+    logActionChan :: Chan Text -> Colog.LogAction IO Text
+    logActionChan chan = Colog.LogAction $ \msg -> writeChan chan msg
 
 -- | fetchOrCreateEventSourceTVar looks up if an EventSourceTVar is already
 -- registered. If that is not the case, it creates a default initialized TVar,

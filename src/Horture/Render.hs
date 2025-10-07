@@ -27,7 +27,7 @@ import Graphics.GLUtil.Camera3D as Util hiding (orientation)
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, rotate, scale)
 import Horture.Asset
 import Horture.Audio
-import Horture.Audio.PipeWire ()
+-- import Horture.Audio.PipeWire ()
 import Horture.Character
 import Horture.Effect
 import Horture.Error (HortureError (HE))
@@ -110,9 +110,10 @@ renderBackground dt = do
   backgroundP <- asks (^. backgroundProg . shader)
   backgroundTexUnit <- asks (^. backgroundProg . textureUnit)
   timeUni <- asks (^. backgroundProg . timeUniform)
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
   activeTexture $= backgroundTexUnit
-  uniform timeUni $= dt
   currentProgram $= Just backgroundP
+  uniform @GLfloat timeUni $= (realToFrac dt)
   drawBaseQuad
 
 -- | renderScene renders the captured application window. It is assumed that
@@ -129,7 +130,8 @@ renderScene t scene = do
   -- Fetch the next frame.
   nextFrame
   -- Apply shaders to captured texture.
-  fft <- currentFFTPeak
+  -- fft <- currentFFTPeak
+  let fft = (0, 0, 0) -- Disable audio-reactive effects for now.
   applySceneShaders fft t scene
   -- Final renderpass rendering scene.
   currentProgram $= Just screenP
@@ -144,6 +146,7 @@ applySceneShaders fft t scene = do
   fb <- asks (^. screenProg . framebuffer)
   -- Set custom framebuffer as target for read&writes.
   bindFramebuffer Framebuffer $= fb
+  -- Fronttexture here already has the captured window texture.
   frontTexture <- asks (^. screenProg . textureObject)
   backTexture <- asks (^. screenProg . backTextureObject)
   -- Use tmp texture with correct dimensions to enable ping-ponging.
@@ -180,7 +183,7 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
       currentProgram $= Just (prog ^. shader)
       setLifetimeUniform lt (prog ^. lifetimeUniform)
       liftIO . withArray [bass, mids, highs] $ uniformv (prog ^. frequenciesUniform) 3
-      uniform (prog ^. dtUniform) $= t - birth
+      uniform @Float (prog ^. dtUniform) $= (realToFrac $ t - birth)
       newRandomNumber >>= (uniform (prog ^. randomUniform) $=)
       drawBaseQuad
       genMipMap

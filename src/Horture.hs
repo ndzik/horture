@@ -37,7 +37,7 @@ import Graphics.GLUtil.Camera3D as Cam3D
 import Graphics.Rendering.OpenGL as GL hiding (Color, Invert, flush)
 import qualified Graphics.UI.GLFW as GLFW
 import Horture.Audio
-import Horture.Audio.PipeWire ()
+-- import Horture.Audio.PipeWire ()
 import Horture.Audio.Player.Horture ()
 import Horture.Constraints
 import Horture.Effect
@@ -66,7 +66,8 @@ frameTime = 1 / 60
 playScene :: forall l hdl. (HortureEffects hdl l) => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
-  void . withRecording . withAudio . go 0 . Just $ s
+  -- void . withRecording . withAudio . go 0 . Just $ s
+  void . go 0 . Just $ s
   where
     go _ Nothing = do
       logInfo "horture stopped"
@@ -74,11 +75,11 @@ playScene s = do
       let action = do
             dt <- deltaTime 0
             clearView
-            renderBackground dt
+            renderBackground lt
             s <- renderScene dt s
-            renderAssets dt . _assets $ s
-            renderActiveEffectText s
-            renderEventList dt
+            -- renderAssets dt . _assets $ s
+            -- renderActiveEffectText s
+            -- renderEventList dt
             updateView
             countFrame
             timeNow <- getTime
@@ -169,6 +170,12 @@ initGLFW = do
   GLFW.windowHint $ GLFW.WindowHint'Focused False
   GLFW.windowHint $ GLFW.WindowHint'Decorated False
   GLFW.windowHint $ GLFW.WindowHint'MousePassthrough True
+
+  GLFW.windowHint (GLFW.WindowHint'ContextVersionMajor 4)
+  GLFW.windowHint (GLFW.WindowHint'ContextVersionMinor 1)
+  GLFW.windowHint (GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core)
+  GLFW.windowHint (GLFW.WindowHint'OpenGLForwardCompat True)
+
   win <-
     GLFW.createWindow 1024 1024 hortureName Nothing Nothing >>= \case
       Nothing -> throwError . userError $ "Failed to create GLFW window"
@@ -255,6 +262,10 @@ initHortureScreenProgram (w, h) effs = do
   fsp <- loadShaderBS "display.shader" FragmentShader displayShader
   prog <- linkShaderProgram [vsp, fsp]
   currentProgram $= Just prog
+
+  screenTexUniform <- uniformLocation prog "imgTexture"
+  uniform screenTexUniform $= Index1 (0 :: GLint)
+
   -- Initialize source texture holding captured window image.
   backTexture <- genObjectName
   let !anyPixelData = PixelData BGRA UnsignedByte nullPtr
@@ -267,6 +278,9 @@ initHortureScreenProgram (w, h) effs = do
     (TextureSize2D w h)
     0
     anyPixelData
+  textureFilter Texture2D $= ((Linear', Nothing), Linear')
+  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
 
   renderedTexture <- genObjectName
   textureBinding Texture2D $= Just renderedTexture
@@ -278,6 +292,9 @@ initHortureScreenProgram (w, h) effs = do
     (TextureSize2D w h)
     0
     anyPixelData
+  textureFilter Texture2D $= ((Linear', Nothing), Linear')
+  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
 
   -- FRAMEBUFFER SETUP BEGIN
   -- fb is the framebuffer, grouping our textures.
@@ -306,12 +323,15 @@ initHortureScreenProgram (w, h) effs = do
   timeUniform <- uniformLocation prog "dt"
   uniform timeUniform $= (0 :: Float)
 
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
+
   return $
     HortureScreenProgram
       { _hortureScreenProgramShader = prog,
         _hortureScreenProgramShaderEffects = effs,
         _hortureScreenProgramModelUniform = modelUniform,
         _hortureScreenProgramProjectionUniform = projectionUniform,
+        _hortureScreenProgramTextureUniform = screenTexUniform,
         _hortureScreenProgramViewUniform = viewUniform,
         _hortureScreenProgramTimeUniform = timeUniform,
         _hortureScreenProgramFramebuffer = fb,

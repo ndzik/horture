@@ -30,10 +30,43 @@ where
 import Data.ByteString.Char8 (ByteString)
 import Text.RawString.QQ
 
+backgroundShader :: ByteString
+backgroundShader =
+  [r|
+#version 410 core
+
+in vec2 texCoord;
+uniform float time;                 // set from CPU each frame (seconds)
+
+layout(location = 0) out vec4 frag_colour;
+
+vec4 drawBackground(vec2 uv, float t) {
+  // base colour
+  vec3 base = vec3(0.2, 0.4, 0.7);
+
+  // distance from centre
+  float r = distance(uv, vec2(0.5,0.5));
+
+  // radial pulse oscillates with time
+  float pulse = 0.5 + 0.5 * sin(t + r*0.25);
+
+  // vary hue slightly
+  vec3 colour = mix(base, vec3(1.0,0.2,0.3), 0.3*pulse);
+
+  return vec4(colour * (1.0 - r) * (0.5 + 0.5*pulse), 1.0);
+}
+
+void main()
+{
+  vec2 uv = vec2(texCoord.x, 1.0 - texCoord.y);
+  frag_colour = drawBackground(uv, time);
+}
+  |]
+
 passthroughVertexShader :: ByteString
 passthroughVertexShader =
   [r|
-#version 410
+#version 410 core
 
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aTexCoord;
@@ -43,6 +76,63 @@ out vec2 texCoord;
 void main() {
   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
   texCoord = vec2(aTexCoord.x, aTexCoord.y);
+}
+  |]
+
+imageFragmentShader :: ByteString
+imageFragmentShader =
+  [r|
+#version 410 core
+
+in vec2 texCoord;
+
+uniform sampler2D imgTexture;
+
+out vec4 frag_colour;
+
+void main() {
+  frag_colour = texture(imgTexture, vec2(texCoord.x, texCoord.y));
+}
+  |]
+
+mvpVertexShader :: ByteString
+mvpVertexShader =
+  [r|
+#version 410 core
+
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec2 aTexCoord;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 proj;
+uniform float dt;
+
+out vec2 texCoord;
+
+void main() {
+  gl_Position = proj * view * model * vec4(aPos.x, aPos.y, aPos.z, 1.0);
+  texCoord = aTexCoord;
+}
+   |]
+
+displayShader :: ByteString
+displayShader =
+  [r|
+#version 410 core
+
+in vec2 texCoord;
+
+uniform float dt;
+uniform sampler2D imgTexture;
+
+out vec4 frag_colour;
+
+// NOTE: DisplayShader expects RGB colors in RGBA format, thus invalidating any
+// input alpha values and replacing them with 1.0. Keeps compatibility high
+// between multiple display applications.
+void main() {
+  vec4 col = texture(imgTexture, texCoord);
+  frag_colour = vec4(col.x, col.y, col.z, 1.0);
 }
   |]
 
@@ -100,63 +190,6 @@ void main() {
 }
   |]
 
-imageFragmentShader :: ByteString
-imageFragmentShader =
-  [r|
-#version 410
-
-in vec2 texCoord;
-
-uniform sampler2D imgTexture;
-
-out vec4 frag_colour;
-
-void main() {
-  frag_colour = texture(imgTexture, vec2(texCoord.x, texCoord.y));
-}
-  |]
-
-mvpVertexShader :: ByteString
-mvpVertexShader =
-  [r|
-#version 410
-
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec2 aTexCoord;
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 proj;
-uniform float dt;
-
-out vec2 texCoord;
-
-void main() {
-  gl_Position = proj * view * model * vec4(aPos.x, aPos.y, aPos.z, 1.0);
-  texCoord = aTexCoord;
-}
-   |]
-
-displayShader :: ByteString
-displayShader =
-  [r|
-#version 410
-
-in vec2 texCoord;
-
-uniform float dt;
-uniform sampler2D texture1;
-
-out vec4 frag_colour;
-
-// NOTE: DisplayShader expects RGB colors in RGBA format, thus invalidating any
-// input alpha values and replacing them with 1.0. Keeps compatibility high
-// between multiple display applications.
-void main() {
-  vec4 col = texture2D(texture1, texCoord);
-  frag_colour = vec4(col.x, col.y, col.z, 1.0);
-}
-  |]
-
 barrelShader :: ByteString
 barrelShader =
   [r|
@@ -164,15 +197,15 @@ barrelShader =
 
 in vec2 texCoord;
 
-uniform sampler2D texture1;
+uniform sampler2D imgTexture;
 uniform float barrelPower = 1.5;
-uniform double lifetime = 0;
-uniform double dt = 0;
+uniform float lifetime = 0;
+uniform float dt = 0;
 uniform vec3 frequencies = vec3(0, 0, 0);
 
 layout(location = 0) out vec4 frag_colour;
 
-vec4 distort(sampler2D tex, vec2 uv, double lifetime, double dt) {
+vec4 distort(sampler2D tex, vec2 uv, float lifetime, float dt) {
   vec2 xy = 2.0 * uv - 1.0;
   if (length(xy)>=1.0) return texture(tex, uv);
 
@@ -188,7 +221,7 @@ vec4 distort(sampler2D tex, vec2 uv, double lifetime, double dt) {
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = distort(texture1, uv, lifetime, dt);
+  frag_colour = distort(imgTexture, uv, lifetime, dt);
 }
     |]
 
@@ -198,14 +231,14 @@ stitchShader =
 #version 410
 
 in vec2 texCoord;
-uniform sampler2D texture1;
+uniform sampler2D imgTexture;
 uniform float stitchSize = 6.0;
-uniform double lifetime = 0;
-uniform double dt = 0;
+uniform float lifetime = 0;
+uniform float dt = 0;
 uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
-vec4 stitchIt(sampler2D tex, vec2 uv, double lifetime, double dt) {
+vec4 stitchIt(sampler2D tex, vec2 uv, float lifetime, float dt) {
   vec2 texSize = textureSize(tex, 0);
   float rtW = float(texSize.x);
   float rtH = float(texSize.y);
@@ -220,7 +253,7 @@ vec4 stitchIt(sampler2D tex, vec2 uv, double lifetime, double dt) {
   vec2 blpos = tlpos;
   blpos.y += (size - 1.0);
   if ((remx == remy) || (((int(cpos.x) - int(blpos.x)) == (int(blpos.y) - int(cpos.y))))) {
-    c = texture2D(tex, tlpos * vec2(1.0/rtW, 1.0/rtH)) * 0.8;
+    c = texture(tex, tlpos * vec2(1.0/rtW, 1.0/rtH)) * 0.8;
   } else {
     c = vec4(0.2, 0.15, 0.05, 0.5);
   }
@@ -229,7 +262,7 @@ vec4 stitchIt(sampler2D tex, vec2 uv, double lifetime, double dt) {
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = stitchIt(texture1, uv, lifetime, dt);
+  frag_colour = stitchIt(imgTexture, uv, lifetime, dt);
 }
     |]
 
@@ -246,23 +279,23 @@ blurVShader =
 #version 410
 
 in vec2 texCoord;
-uniform sampler2D texture1;
-uniform double lifetime = 0;
-uniform double dt = 0;
+uniform sampler2D imgTexture;
+uniform float lifetime = 0;
+uniform float dt = 0;
 uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 float offset[3] = float[](0.0, 2.3846153846, 6.2307602308);
 float weight[3] = float[](0.2270270270, 0.3162162162, 0.0702702703);
 
-vec4 blurVertical(sampler2D tex, vec2 uv, double lifetime, double dt) {
+vec4 blurVertical(sampler2D tex, vec2 uv, float lifetime, float dt) {
   vec2 texSize = textureSize(tex, 0);
   float rtH = float(texSize.y);
 
-  vec3 c = texture2D(tex, uv).rgb * weight[0];
+  vec3 c = texture(tex, uv).rgb * weight[0];
   for (int i=1; i<3; i++) {
-    c += texture2D(tex, uv + vec2(0.0, offset[i])/rtH).rgb * weight[i];
-    c += texture2D(tex, uv - vec2(0.0, offset[i])/rtH).rgb * weight[i];
+    c += texture(tex, uv + vec2(0.0, offset[i])/rtH).rgb * weight[i];
+    c += texture(tex, uv - vec2(0.0, offset[i])/rtH).rgb * weight[i];
   }
 
   return vec4(c, 1.0);
@@ -270,7 +303,7 @@ vec4 blurVertical(sampler2D tex, vec2 uv, double lifetime, double dt) {
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = blurVertical(texture1, uv, lifetime, dt);
+  frag_colour = blurVertical(imgTexture, uv, lifetime, dt);
 }
     |]
 
@@ -282,23 +315,23 @@ blurHShader =
 #version 410
 
 in vec2 texCoord;
-uniform sampler2D texture1;
-uniform double lifetime = 0;
-uniform double dt = 0;
+uniform sampler2D imgTexture;
+uniform float lifetime = 0;
+uniform float dt = 0;
 uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 float offset[3] = float[](0.0, 2.3846153846, 6.2307602308);
 float weight[3] = float[](0.2270270270, 0.3162162162, 0.0702702703);
 
-vec4 blurHorizontal(sampler2D tex, vec2 uv, double lifetime, double dt) {
+vec4 blurHorizontal(sampler2D tex, vec2 uv, float lifetime, float dt) {
   vec2 texSize = textureSize(tex, 0);
   float rtW = float(texSize.x);
 
-  vec3 c = texture2D(tex, uv).rgb * weight[0];
+  vec3 c = texture(tex, uv).rgb * weight[0];
   for (int i=1; i<3; i++) {
-    c += texture2D(tex, uv + vec2(0.0, offset[i])/rtW).rgb * weight[i];
-    c += texture2D(tex, uv - vec2(0.0, offset[i])/rtW).rgb * weight[i];
+    c += texture(tex, uv + vec2(0.0, offset[i])/rtW).rgb * weight[i];
+    c += texture(tex, uv - vec2(0.0, offset[i])/rtW).rgb * weight[i];
   }
 
   return vec4(c, 1.0);
@@ -306,7 +339,7 @@ vec4 blurHorizontal(sampler2D tex, vec2 uv, double lifetime, double dt) {
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = blurHorizontal(texture1, uv, lifetime, dt);
+  frag_colour = blurHorizontal(imgTexture, uv, lifetime, dt);
 }
     |]
 
@@ -317,21 +350,21 @@ flashbangShader =
 #version 410
 
 in vec2 texCoord;
-uniform sampler2D texture1;
-uniform double lifetime = 0;
-uniform double dt = 0;
+uniform sampler2D imgTexture;
+uniform float lifetime = 0;
+uniform float dt = 0;
 uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
-vec4 flashbang(sampler2D tex, vec2 uv, double lifetime, double dt) {
-  vec4 c = texture2D(tex, uv);
-  double pp = 1 - (dt / lifetime);
+vec4 flashbang(sampler2D tex, vec2 uv, float lifetime, float dt) {
+  vec4 c = texture(tex, uv);
+  float pp = 1 - (dt / lifetime);
   return vec4(pp * (1 - c.x) + c.x, pp * (1 - c.y) + c.y, pp * (1 - c.z) + c.z, 1.0);
 }
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = flashbang(texture1, uv, lifetime, dt);
+  frag_colour = flashbang(imgTexture, uv, lifetime, dt);
 }
     |]
 
@@ -342,14 +375,14 @@ cycleColoursShader =
 #version 410
 
 in vec2 texCoord;
-uniform sampler2D texture1;
-uniform double lifetime = 0;
-uniform double dt = 0;
+uniform sampler2D imgTexture;
+uniform float lifetime = 0;
+uniform float dt = 0;
 uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
-vec4 cycleColours(sampler2D tex, vec2 uv, double lifetime, double dt) {
-  vec4 c = texture2D(tex, uv);
+vec4 cycleColours(sampler2D tex, vec2 uv, float lifetime, float dt) {
+  vec4 c = texture(tex, uv);
   float pp = float(dt);
   vec4 update = vec4(abs(cos(pp * c.x)), abs(sin(pp*c.y)), abs(sin(pp*c.z)*cos(pp*c.z)), 1);
   return mix(c, update, clamp(float(dt/(lifetime*0.3)), 0.0, 1.0));
@@ -357,7 +390,7 @@ vec4 cycleColours(sampler2D tex, vec2 uv, double lifetime, double dt) {
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = cycleColours(texture1, uv, lifetime, dt);
+  frag_colour = cycleColours(imgTexture, uv, lifetime, dt);
 }
     |]
 
@@ -368,21 +401,21 @@ blinkShader =
 #version 410
 
 in vec2 texCoord;
-uniform sampler2D texture1;
-uniform double lifetime = 0;
-uniform double dt = 0;
+uniform sampler2D imgTexture;
+uniform float lifetime = 0;
+uniform float dt = 0;
 uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
-vec4 blink(sampler2D tex, vec2 uv, double lifetime, double dt) {
-  vec4 c = texture2D(tex, uv);
+vec4 blink(sampler2D tex, vec2 uv, float lifetime, float dt) {
+  vec4 c = texture(tex, uv);
   float pp = float(1 - (dt / lifetime));
   return vec4(c.x - (pp * c.x), c.y - (pp * c.y), c.z - (pp * c.z), 1);
 }
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = blink(texture1, uv, lifetime, dt);
+  frag_colour = blink(imgTexture, uv, lifetime, dt);
 }
     |]
 
@@ -393,20 +426,20 @@ mirrorShader =
 #version 410
 
 in vec2 texCoord;
-uniform sampler2D texture1;
-uniform double lifetime = 0;
-uniform double dt = 0;
+uniform sampler2D imgTexture;
+uniform float lifetime = 0;
+uniform float dt = 0;
 uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
-vec4 mirror(sampler2D tex, vec2 uv, double lifetime, double dt) {
+vec4 mirror(sampler2D tex, vec2 uv, float lifetime, float dt) {
   vec2 texSize = textureSize(tex, 0);
-  return texture2D(tex, vec2(texSize.x - uv.x, uv.y));
+  return texture(tex, vec2(texSize.x - uv.x, uv.y));
 }
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = mirror(texture1, uv, lifetime, dt);
+  frag_colour = mirror(imgTexture, uv, lifetime, dt);
 }
     |]
 
@@ -416,20 +449,20 @@ invertShader =
 #version 410
 
 in vec2 texCoord;
-uniform sampler2D texture1;
-uniform double lifetime = 0;
-uniform double dt = 0;
+uniform sampler2D imgTexture;
+uniform float lifetime = 0;
+uniform float dt = 0;
 uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
-vec4 invert(sampler2D tex, vec2 uv, double lifetime, double dt) {
-  vec4 c = texture2D(tex, uv);
+vec4 invert(sampler2D tex, vec2 uv, float lifetime, float dt) {
+  vec4 c = texture(tex, uv);
   return vec4(1 - c.x, 1 - c.y, 1 - c.z, 1);
 }
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = invert(texture1, uv, lifetime, dt);
+  frag_colour = invert(imgTexture, uv, lifetime, dt);
 }
     |]
 
@@ -439,9 +472,9 @@ toonShader =
 #version 410
 
 in vec2 texCoord;
-uniform sampler2D texture1;
-uniform double lifetime = 0;
-uniform double dt = 0;
+uniform sampler2D imgTexture;
+uniform float lifetime = 0;
+uniform float dt = 0;
 uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 float levels = 8.0 - 1.0;
@@ -455,9 +488,9 @@ vec3 hsl2rgb(vec3 hsl) {
     return (hsl.z + t) * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), 2.0*t / hsl.z);
 }
 
-vec4 toonify(sampler2D tex, vec2 uv, double lifetime, double dt) {
+vec4 toonify(sampler2D tex, vec2 uv, float lifetime, float dt) {
   float colorFactor = 1.0;
-  vec4 color = texture2D(tex, uv);
+  vec4 color = texture(tex, uv);
   // BT.709 coefficients related to human perception.
   float grey = 0.21 * color.r + 0.71 * color.g + 0.07 * color.b;
   grey = clamp(grey * brightness, 0.0, 1.0);
@@ -469,7 +502,7 @@ vec4 toonify(sampler2D tex, vec2 uv, double lifetime, double dt) {
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = toonify(texture1, uv, lifetime, dt);
+  frag_colour = toonify(imgTexture, uv, lifetime, dt);
 }
     |]
 
@@ -479,23 +512,23 @@ audioShader =
 #version 410
 
 in vec2 texCoord;
-uniform sampler2D texture1;
-uniform double lifetime = 0;
-uniform double dt = 0;
-uniform double frequencies[3] = double[3](0, 0, 0);
+uniform sampler2D imgTexture;
+uniform float lifetime = 0;
+uniform float dt = 0;
+uniform float frequencies[3] = float[3](0, 0, 0);
 
 layout(location = 0) out vec4 frag_colour;
 
-vec4 applyVisualization(sampler2D tex, vec2 uv, double lifetime, double dt, double freq[3]) {
-  vec4 rgba = texture2D(tex, uv);
-  const double maxFreq = 16000;
-  double ceil = 250;
-  double fb = clamp(freq[0]*2-1, 0, ceil)/ceil;
-  double fm = clamp(freq[1]*2-1, 0, ceil)/ceil;
-  double fh = clamp(freq[2]*2-1, 0, ceil)/ceil;
-  double r = 2.4 * fb;
-  double g = 1.6 * fm;
-  double b = 1.8 * fh;
+vec4 applyVisualization(sampler2D tex, vec2 uv, float lifetime, float dt, float freq[3]) {
+  vec4 rgba = texture(tex, uv);
+  const float maxFreq = 16000;
+  float ceil = 250;
+  float fb = clamp(freq[0]*2-1, 0, ceil)/ceil;
+  float fm = clamp(freq[1]*2-1, 0, ceil)/ceil;
+  float fh = clamp(freq[2]*2-1, 0, ceil)/ceil;
+  float r = 2.4 * fb;
+  float g = 1.6 * fm;
+  float b = 1.8 * fh;
 
   float dtoc = distance(uv, vec2(0.5, 0.5));
   vec4 tint = vec4(mix(rgba.x, r, 0.4), mix(rgba.y, g, 0.5), mix(rgba.z, b, 0.6), rgba.w);
@@ -504,33 +537,9 @@ vec4 applyVisualization(sampler2D tex, vec2 uv, double lifetime, double dt, doub
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = applyVisualization(texture1, uv, lifetime, dt, frequencies);
+  frag_colour = applyVisualization(imgTexture, uv, lifetime, dt, frequencies);
 }
   |]
-
-backgroundShader :: ByteString
-backgroundShader =
-  [r|
-# version 410 core
-
-in vec2 texCoord;
-
-uniform double time = 0;
-
-layout(location = 0) out vec4 frag_colour;
-
-vec4 drawBackground(vec2 uv, double time) {
-  vec4 rgba = vec4(0.1, 0.3, 0.2, 1);
-  float dtoc = distance(uv, vec2(0.5, 0.5));
-  return vec4(rgba.x * dtoc, rgba.y * dtoc, rgba.z * dtoc, 1);
-}
-
-void main()
-{
-  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = drawBackground(uv, time);
-}
-    |]
 
 bassRealityWarp :: ByteString
 bassRealityWarp =
@@ -538,29 +547,29 @@ bassRealityWarp =
 #version 410
 
 in vec2 texCoord;
-uniform sampler2D texture1;
-uniform double lifetime = 0;
-uniform double dt = 0;
-uniform double frequencies[3] = double[3](0, 0, 0);
-uniform double rng;
+uniform sampler2D imgTexture;
+uniform float lifetime = 0;
+uniform float dt = 0;
+uniform float frequencies[3] = float[3](0, 0, 0);
+uniform float rng;
 
 layout(location = 0) out vec4 frag_colour;
 
-vec4 applyVisualization(sampler2D tex, vec2 uv, double lifetime, double dt, double freq[3]) {
-  double ceil = 350;
+vec4 applyVisualization(sampler2D tex, vec2 uv, float lifetime, float dt, float freq[3]) {
+  float ceil = 350;
   float factor = 0.00001;
-  double fr = freq[0]*2;
-  double fb = clamp(fr-1, 0, ceil)/ceil;
+  float fr = freq[0]*2;
+  float fb = clamp(fr-1, 0, ceil)/ceil;
   vec2 tuv = vec2(fr*factor*sin(float(fb*dt*rng)) + uv.x, fr*factor*cos(float(fb*dt*rng)*2) + uv.y);
-  vec4 orgba = texture2D(tex, uv);
-  vec4 rgba1 = texture2D(tex, tuv);
+  vec4 orgba = texture(tex, uv);
+  vec4 rgba1 = texture(tex, tuv);
   tuv = vec2(fr*factor*cos(float(fb*dt*rng)) + uv.x, fr*factor*sin(float(fb*dt*rng)*2) + uv.y);
-  vec4 rgba2 = texture2D(tex, tuv);
+  vec4 rgba2 = texture(tex, tuv);
   return mix(mix(orgba, rgba1, float(fb)*0.9), rgba2, float(fb)*0.3);
 }
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = applyVisualization(texture1, uv, lifetime, dt, frequencies);
+  frag_colour = applyVisualization(imgTexture, uv, lifetime, dt, frequencies);
 }
   |]
