@@ -362,7 +362,7 @@ grabHorture = do
             _hortureInitializerEnvironmentDefaultFont = mDefaultFont
           }
       logError = HL.withColog Colog.Error (logActionChan logChan)
-  void . liftIO . forkOS $ do
+  void . liftIO $ forkOS $ do
     let startScene =
           def
             { _screen = def,

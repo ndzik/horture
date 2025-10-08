@@ -6,11 +6,13 @@ module Horture.Backend.MacOS.Interface
     checkScreenPermission,
     requestScreenPermission,
     resetScreenPermission,
+    pickWindowMac,
     CaptureHandle (..),
     FrameCopy (..),
   )
 where
 
+import Control.Concurrent (newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVar, writeTVar)
 import Control.Lens
 import Control.Monad.Reader
@@ -38,6 +40,12 @@ foreign import ccall "SCShim.h sc_start_window"
     FunPtr (Ptr () -> IO ()) ->
     Ptr () ->
     IO CInt
+
+foreign import ccall safe "SCShim.h sc_pick_window"
+  c_sc_pick_window :: FunPtr (CUIntMax -> CString -> Ptr () -> IO ()) -> Ptr () -> IO CInt
+
+foreign import ccall "wrapper"
+  mkPickCB :: (CUIntMax -> CString -> Ptr () -> IO ()) -> IO (FunPtr (CUIntMax -> CString -> Ptr () -> IO ()))
 
 foreign import ccall "SCShim.h sc_stop"
   c_sc_stop :: IO ()
@@ -131,6 +139,9 @@ data CaptureHandle = CaptureHandle
     chStop :: !(IO ()) -- stop action
   }
 
+instance Show CaptureHandle where
+  show h = "CaptureHandle {chWinId = " ++ show (chWinId h) ++ ", chTitle = " ++ T.unpack (chTitle h) ++ "}"
+
 instance
   (CaptureHandle ~ hdl, HortureLogger (Horture l hdl)) =>
   WindowPoller hdl (Horture l hdl)
@@ -179,3 +190,21 @@ updateWindowTexture (Just img) = do
       0
       (PixelData BGRA UnsignedByte ptr)
     rowLength Unpack $= 0
+
+pickWindowMac :: IO (Maybe (Word64, T.Text))
+pickWindowMac = do
+  mv <- newEmptyMVar
+  cb <- mkPickCB $ \wid cstr _ -> do
+    t <- T.pack <$> peekCString cstr
+    putMVar mv (Just (fromIntegral wid, t))
+  print @String $ "Please pick a window (ESC to abort)"
+  r <- c_sc_pick_window cb nullPtr
+  if r == 0
+    then do
+      print @String $ "Window picked"
+      r <- takeMVar mv
+      print @String $ "Window picking finished"
+      pure r
+    else do
+      print @String $ "Window picking aborted"
+      pure Nothing

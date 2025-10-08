@@ -186,3 +186,77 @@ int sc_tcc_reset(const char* bundle_id_or_null) {
     }
   }
 }
+
+static CGWindowID topWindowAt(CGPoint p) {
+  CFArrayRef list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly |
+                                               kCGWindowListExcludeDesktopElements,
+                                               kCGNullWindowID);
+  if (!list) return 0;
+  CGWindowID best = 0;
+  CFIndex n = CFArrayGetCount(list);
+  for (CFIndex i = 0; i < n; ++i) {
+    CFDictionaryRef d = CFArrayGetValueAtIndex(list, i);
+    // layer 0 = normal app windows
+    int layer = 0;
+    CFNumberRef layerNum = CFDictionaryGetValue(d, kCGWindowLayer);
+    if (layerNum) CFNumberGetValue(layerNum, kCFNumberIntType, &layer);
+    if (layer != 0) continue;
+
+    CGRect r;
+    if (CGRectMakeWithDictionaryRepresentation(CFDictionaryGetValue(d, kCGWindowBounds), &r)) {
+      if (CGRectContainsPoint(r, p)) {
+        CFNumberRef widNum = CFDictionaryGetValue(d, kCGWindowNumber);
+        if (widNum) { CFNumberGetValue(widNum, kCGWindowIDCFNumberType, &best); break; }
+      }
+    }
+  }
+  CFRelease(list);
+  return best;
+}
+
+int sc_pick_window(PickCB cb, void* user) {
+  // Wait for a clean press: ensure button up first
+  while (CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft))
+    usleep(1000);
+
+  // Now wait for press
+  while (!CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft))
+    usleep(1000);
+
+  // On press, read global mouse location (top-left origin)
+  CGEventRef e = CGEventCreate(NULL);
+  if (!e) return -1;
+  CGPoint p = CGEventGetLocation(e);
+  CFRelease(e);
+
+  CGWindowID wid = topWindowAt(p);
+  if (!wid) return -1;
+
+  CFNumberRef widNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &wid);
+  if (!widNum) return -1;
+
+  // Array of one CFNumber
+  const void* vals[1] = { widNum };
+  CFArrayRef one = CFArrayCreate(kCFAllocatorDefault, vals, 1, &kCFTypeArrayCallBacks);
+
+  // Query window description(s)
+  CFArrayRef info = one ? CGWindowListCreateDescriptionFromArray(one) : NULL;
+
+  char titleBuf[512] = {0};
+  if (info && CFArrayGetCount(info) > 0) {
+    CFDictionaryRef d = CFArrayGetValueAtIndex(info, 0);
+    CFTypeRef name = d ? CFDictionaryGetValue(d, kCGWindowName) : NULL;
+    if (name && CFGetTypeID(name) == CFStringGetTypeID()) {
+      CFStringGetCString((CFStringRef)name, titleBuf, sizeof(titleBuf), kCFStringEncodingUTF8);
+    }
+  }
+
+  // Cleanup
+  if (info) CFRelease(info);
+  if (one)  CFRelease(one);
+  CFRelease(widNum);
+
+  // Use titleBuf (stable C string)
+  if (cb) cb((uint64_t)wid, titleBuf[0] ? titleBuf : "", user);
+  return 0;
+}

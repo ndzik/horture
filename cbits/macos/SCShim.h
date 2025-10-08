@@ -19,6 +19,9 @@ int sc_tcc_reset(const char *bundle_id_or_null); // 0 ok, else nonzero
 // Enumerate capturable windows
 void sc_list_windows(WindowCB cb, void *user);
 
+typedef void (*PickCB)(uint64_t wid, const char *title, void *user);
+int sc_pick_window(PickCB cb, void *user);
+
 // Start capture for a window id. Returns 0 on success.
 int sc_start_window(uint64_t wid, FrameCB fcb, StopCB on_stop, void *user);
 

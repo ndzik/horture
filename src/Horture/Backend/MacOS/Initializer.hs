@@ -4,6 +4,7 @@ import Control.Concurrent.Chan.Synchronous
 import Control.Concurrent.STM (TVar, newTVarIO)
 import Control.Lens
 import Control.Monad (forM_, void)
+import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
 import qualified Data.Map as Map
@@ -31,14 +32,26 @@ instance
   WindowGrabber hdl (HortureInitializer l hdl)
   where
   grabAnyWindow = do
-    ws <- filter (\(_, n) -> T.length n > 0) <$> liftIO listWindowsMac
-    -- liftIO . forM_ ws $ \(wid, name) -> print $ "WindowID" ++ show wid ++ " - " ++ "Name:" ++ show name
-    -- let (wid, title) = head . reverse $ ws
-    let (wid, title) = findID 1196 ws
-    liftIO $ forM_ ws print
-    liftIO . print $ "Grabbing window: " ++ T.unpack title
-    frameBuffer <- liftIO $ newTVarIO Nothing
-    return $ CaptureHandle {chStop = return (), chFrame = frameBuffer, chTitle = title, chWinId = wid}
+    liftIO pickWindowMac >>= \case
+      Nothing -> throwError (WindowEnvironmentInitializationErr "user aborted")
+      Just (wid, title) -> do
+        tv <- liftIO $ newTVarIO Nothing
+        pure
+          CaptureHandle
+            { chStop = pure (),
+              chFrame = tv,
+              chTitle = title,
+              chWinId = wid
+            }
+
+-- ws <- filter (\(_, n) -> T.length n > 0) <$> liftIO listWindowsMac
+-- -- liftIO . forM_ ws $ \(wid, name) -> print $ "WindowID" ++ show wid ++ " - " ++ "Name:" ++ show name
+-- -- let (wid, title) = head . reverse $ ws
+-- let (wid, title) = findID 1196 ws
+-- liftIO $ forM_ ws print
+-- liftIO . print $ "Grabbing window: " ++ T.unpack title
+-- frameBuffer <- liftIO $ newTVarIO Nothing
+-- return $ CaptureHandle {chStop = return (), chFrame = frameBuffer, chTitle = title, chWinId = wid}
 
 findID :: Word64 -> [(Word64, Text)] -> (Word64, Text)
 findID _def [] = (0, "No Window")
@@ -60,8 +73,8 @@ initialize ::
   Chan Event ->
   HortureInitializer l hdl ()
 initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
-  capHandle <- grabAnyWindow
   glW <- liftIO initGLFW
+  capHandle <- grabAnyWindow
   storage <- liftIO $ newTVarIO Nothing
   evBuf <- liftIO $ RingBuffer.new 4
   fftBuf <- liftIO $ RingBuffer.new 8
