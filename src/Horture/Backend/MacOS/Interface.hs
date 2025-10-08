@@ -2,19 +2,19 @@
 
 module Horture.Backend.MacOS.Interface
   ( listWindowsMac,
-    startStreamMac,
     checkScreenPermission,
     requestScreenPermission,
     resetScreenPermission,
     pickWindowMac,
     CaptureHandle (..),
-    FrameCopy (..),
   )
 where
 
 import Control.Concurrent (newEmptyMVar, putMVar, takeMVar)
-import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVar, writeTVar)
+import Control.Concurrent.STM (atomically, readTVarIO, writeTVar)
 import Control.Lens
+import Control.Monad (when)
+import qualified Control.Monad as Monad
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.IORef
@@ -22,11 +22,17 @@ import qualified Data.Text as T
 import qualified Data.Text.Foreign as TF
 import Foreign
 import Foreign.C
+import Graphics.GL (glPixelStorei)
+import Graphics.GL.Tokens
 import Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
+import Horture.Asset (HasTextureObject (textureObject))
 import Horture.Backend.Types
 import Horture.Horture
 import Horture.Logging
+import Horture.Program (HasTextureUnit (textureUnit))
+import Horture.RenderBridge
+import Horture.RenderBridge (rbPeekWidth)
 import Horture.State
 import Horture.WindowGrabber
 
@@ -90,26 +96,6 @@ listWindowsMac = do
   c_sc_list_windows cb nullPtr
   readIORef acc
 
-startStreamMac :: Word64 -> T.Text -> IO CaptureHandle
-startStreamMac wid title = do
-  tv <- newTVarIO Nothing
-
-  fcb <- mkFrameCB $ \p cw ch cs _ -> do
-    let w = fromIntegral cw
-        h = fromIntegral ch
-        st = fromIntegral cs
-        n = st * h
-    fptr <- mallocForeignPtrBytes n
-    withForeignPtr fptr $ \dst -> copyBytes dst p n
-    let fc = FrameCopy {fcWidth = w, fcHeight = h, fcStride = st, fcFmt = BGRA8Premult, fcBytes = fptr}
-    atomically $ writeTVar tv (Just fc)
-
-  scb <- mkStopCB (\_ -> pure ())
-  r <- c_sc_start_window (fromIntegral wid) fcb scb nullPtr
-  if r /= 0
-    then ioError (userError ("sc_start_window failed " ++ show r))
-    else pure CaptureHandle {chWinId = wid, chTitle = title, chFrame = tv, chStop = c_sc_stop}
-
 checkScreenPermission :: IO Bool
 checkScreenPermission = (/= 0) <$> c_sc_preflight_screen
 
@@ -135,7 +121,6 @@ data FrameCopy = FrameCopy
 data CaptureHandle = CaptureHandle
   { chWinId :: !Word64,
     chTitle :: !T.Text,
-    chFrame :: !(TVar (Maybe FrameCopy)), -- last received frame
     chStop :: !(IO ()) -- stop action
   }
 
@@ -164,32 +149,35 @@ instance
         GLFW.setWindowPos win overlaxX overlaxY
         GLFW.setWindowSize win overlayW overlayH
   nextFrame = do
-    h <- gets (^. envHandle)
-    mimg <- liftIO . atomically . readTVar $ chFrame h
-    liftIO $ updateWindowTexture mimg
+    rb <- gets (^. renderBridgeCtx)
+    texUnit <- asks (^. screenProg . textureUnit)
+    texObj <- asks (^. screenProg . textureObject)
+    sizeRef <- gets (^. dim)
+    -- Ensure the target texture is bound!
+    liftIO $ do
+      activeTexture $= texUnit
+      textureBinding Texture2D $= Just texObj
+      alloca $ \pf -> do
+        rc <- c_rb_poll rb pf
+        when (rc == 1) $ do
+          w <- rbPeekWidth pf
+          h <- rbPeekHeight pf
+          (aw, ah) <- readTVarIO sizeRef
+          when (w /= aw || h /= ah) $ do
+            -- allocate storage once or on resize
+            glPixelStorei GL_UNPACK_ALIGNMENT 1
+            texImage2D
+              Texture2D
+              NoProxy
+              0
+              GL.RGBA8
+              (TextureSize2D w h)
+              0
+              (PixelData BGRA UnsignedByte nullPtr)
+            atomically $ writeTVar sizeRef (w, h)
 
-updateWindowTexture :: Maybe FrameCopy -> IO ()
-updateWindowTexture Nothing = pure ()
-updateWindowTexture (Just img) = do
-  withForeignPtr (fcBytes img) $ \ptr -> do
-    -- let pd = PixelData BGRA UnsignedByte ptr
-    -- texSubImage2D
-    --   Texture2D
-    --   0
-    --   (TexturePosition2D 0 0)
-    --   (TextureSize2D (fromIntegral (fcWidth img)) (fromIntegral (fcHeight img)))
-    --   pd
-    rowAlignment Unpack $= 1
-    rowLength Unpack $= fromIntegral (fcStride img `div` 4)
-    texImage2D
-      Texture2D
-      NoProxy
-      0
-      GL.RGBA8
-      (TextureSize2D (fromIntegral $ fcWidth img) (fromIntegral $ fcHeight img))
-      0
-      (PixelData BGRA UnsignedByte ptr)
-    rowLength Unpack $= 0
+          _ <- c_rb_upload rb pf -- bridge sets UNPACK_ROW_LENGTH and calls glTexSubImage2D
+          c_rb_release rb pf
 
 pickWindowMac :: IO (Maybe (Word64, T.Text))
 pickWindowMac = do

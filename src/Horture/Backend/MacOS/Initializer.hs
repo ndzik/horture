@@ -3,7 +3,7 @@ module Horture.Backend.MacOS.Initializer (initialize) where
 import Control.Concurrent.Chan.Synchronous
 import Control.Concurrent.STM (TVar, newTVarIO)
 import Control.Lens
-import Control.Monad (forM_, void)
+import Control.Monad (forM_, void, when)
 import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
@@ -23,6 +23,7 @@ import Horture.Initializer
 import Horture.Loader.Asset
 import Horture.Logging
 import Horture.Program
+import Horture.RenderBridge (c_rb_create, c_rb_destroy, c_rb_start, c_rb_stop)
 import Horture.Scene hiding (assets)
 import Horture.State
 import Horture.WindowGrabber
@@ -39,7 +40,6 @@ instance
         pure
           CaptureHandle
             { chStop = pure (),
-              chFrame = tv,
               chTitle = title,
               chWinId = wid
             }
@@ -75,6 +75,13 @@ initialize ::
 initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
   glW <- liftIO initGLFW
   capHandle <- grabAnyWindow
+
+  rb <- liftIO c_rb_create
+  rc <- liftIO $ c_rb_start rb (fromIntegral $ chWinId capHandle)
+  when (rc /= 0) $
+    throwError $
+      WindowEnvironmentInitializationErr ("c_rb_start failed: " ++ show rc)
+
   storage <- liftIO $ newTVarIO Nothing
   evBuf <- liftIO $ RingBuffer.new 4
   fftBuf <- liftIO $ RingBuffer.new 8
@@ -87,19 +94,25 @@ initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
   liftIO $ GL.viewport $= (Position 0 0, Size (fromIntegral wa_width) (fromIntegral wa_height))
   -- liftIO $ GLFW.setWindowPos glW (  ) (fromIntegral . wa_y $ attr)
 
-  capHandle <- liftIO $ startStreamMac (chWinId capHandle) (chTitle capHandle)
+  sizeRef <- liftIO $ newTVarIO (wa_width, wa_height)
 
   let scene = startScene {_assetCache = dip ^. assets}
       hs =
         HortureState
-          { _envHandle = capHandle,
+          { _envHandle =
+              CaptureHandle
+                { chWinId = chWinId capHandle,
+                  chTitle = chTitle capHandle,
+                  chStop = c_rb_stop rb >> c_rb_destroy rb
+                },
+            _renderBridgeCtx = rb,
             _capture = Nothing,
             _audioRecording = Nothing,
             _audioStorage = storage,
             _audioState = AudioPlayerState,
             _frameCounter = frameCounter,
             _mvgAvg = fftBuf,
-            _dim = (fromIntegral wa_width, fromIntegral wa_height),
+            _dim = sizeRef,
             _eventList = evBuf
           }
   let ssf = Map.fromList $ map (\(fp, AudioEffect eff _) -> (eff, fp)) loadedSounds

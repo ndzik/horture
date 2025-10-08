@@ -10,6 +10,9 @@ module Horture.Render
 where
 
 import Codec.Picture.Gif
+-- import Horture.Audio.PipeWire ()
+
+import Control.Concurrent.STM (readTVarIO)
 import Control.Lens
 import Control.Monad (foldM_)
 import Control.Monad.Except
@@ -27,7 +30,6 @@ import Graphics.GLUtil.Camera3D as Util hiding (orientation)
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, rotate, scale)
 import Horture.Asset
 import Horture.Audio
--- import Horture.Audio.PipeWire ()
 import Horture.Character
 import Horture.Effect
 import Horture.Error (HortureError (HE))
@@ -229,7 +231,7 @@ renderActiveEffectText s = do
 
 renderEffectList :: (HortureLogger (Horture l hdl)) => [(Text, Int)] -> Horture l hdl ()
 renderEffectList effs = do
-  (_, top) <- gets (^. dim)
+  (_, top) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
   let height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
   go top height effs 0
   where
@@ -259,7 +261,7 @@ renderText txt posi opacity = do
       let renderCharacter :: (HortureLogger (Horture l hdl)) => Int -> Character -> Horture l hdl Int
           renderCharacter adv ch = do
             textureBinding Texture2D $= Just (ch ^. textureID)
-            (screenW, screenH) <- gets (^. dim)
+            (screenW, screenH) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
             let bearingX = fromIntegral (ch ^. bearing . _x) * baseScale
                 bearingY = round $ fromIntegral (ch ^. bearing . _y) * baseScale
                 w = round $ fromIntegral (ch ^. size . _x) * baseScale
@@ -307,7 +309,7 @@ applyScreenBehaviours fft t screen = do
 
 resetScreen :: Object -> Horture l hdl Object
 resetScreen s = do
-  dim <- gets (^. dim)
+  dim <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
   let s' = s & scale %~ \cs -> lerp 0.1 (scaleForAspectRatio dim) cs
       s'' = s' & orientation %~ \og -> slerp og (Quaternion 1.0 (V3 0 0 0)) 0.01
       s''' = s'' & pos %~ \op -> lerp 0.1 (V3 0 0 (-1)) op
@@ -328,8 +330,11 @@ projectScreen :: (HortureLogger (Horture l hdl)) => Object -> Horture l hdl Obje
 projectScreen s = do
   modelUniform <- asks (^. screenProg . modelUniform)
   projectionUniform <- asks (^. screenProg . projectionUniform)
-  (w, h) <- gets (^. dim)
-  let proj = projectionForAspectRatio (fromIntegral w, fromIntegral h)
+  (w, h) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
+  let proj = projectionForAspectRatio (w, h)
   liftIO $ m44ToGLmatrix proj >>= (uniform projectionUniform $=)
   liftIO $ m44ToGLmatrix (model s) >>= (uniform modelUniform $=)
   return s
+
+forBoth :: (a -> b) -> (a, a) -> (b, b)
+forBoth f (x, y) = (f x, f y)
