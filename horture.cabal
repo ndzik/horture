@@ -44,6 +44,8 @@ library horture-lib
                             , Horture.Audio
                             , Horture.Audio.Player
                             , Horture.CommandCenter.CommandCenter
+                            , Horture.CommandCenter.GUI
+                            , Horture.CommandCenter.InsetBoxShadow
                             , Horture.CommandCenter.Event
                             , Horture.CommandCenter.State
                             , Horture.Scene
@@ -147,6 +149,7 @@ library horture-lib
                             , wuss
                             , GLFW-b
                             , GLUtil
+                            , monomer
 
     ghc-options:            -Wall
                             -fno-warn-name-shadowing

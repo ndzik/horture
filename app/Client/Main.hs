@@ -2,6 +2,7 @@ module Main (main) where
 
 import Horture.Authorize
 import Horture.CommandCenter.CommandCenter
+import Horture.CommandCenter.GUI (runCommandCenterUI)
 import Horture.Config
 import Horture.Path
 import Options.Applicative
@@ -74,9 +75,10 @@ cmdParser =
 
 handleParams :: HortureParams -> IO ()
 handleParams (HortureParams fp mockMode wantAuth isDebug) =
-  resolvePath fp >>= parseHortureClientConfig >>= \case
-    Nothing -> if isDebug then runDebugCenter Nothing else print "invalid horture client config" >> exitFailure
-    Just cfg -> do
-      if wantAuth
-        then authorize mockMode cfg
-        else if isDebug then runDebugCenter (Just cfg) else runCommandCenter mockMode cfg
+  -- resolvePath fp >>= parseHortureClientConfig >>= \case
+  --   Nothing -> if isDebug then runDebugCenter Nothing else print "invalid horture client config" >> exitFailure
+  --   Just cfg -> do
+  --     if wantAuth
+  --       then authorize mockMode cfg
+  --       else if isDebug then runDebugCenter (Just cfg) else runCommandCenter mockMode cfg
+  runCommandCenterUI []
