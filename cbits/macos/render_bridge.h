@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdint.h>
 #ifdef __cplusplus
 extern "C" {
@@ -20,7 +21,8 @@ typedef struct {
 
 // Lifecycle + capture.
 RB *rb_create(void);
-int rb_start_capture(RB *rb, uint64_t window_id); // non-blocking start
+int rb_start_capture(unsigned long long window_id, RB *rb, char *title_buf,
+                     size_t title_cap); // non-blocking start
 void rb_stop_capture(RB *rb);
 void rb_destroy(RB *rb);
 

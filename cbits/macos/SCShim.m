@@ -66,17 +66,29 @@ int sc_get_window_rect(uint64_t wid, SCRect* out) {
 
   // Frames in global points; Y up.
   NSRect f = target.frame;
+  // TODO: Really required?
   CGFloat scaleHost = host.backingScaleFactor ?: 1.0;
 
-  int xpx = (int)llround(f.origin.x * scaleHost);
-  int wpx = (int)llround(f.size.width * scaleHost);
-  int hpx = (int)llround(f.size.height * scaleHost);
-  int ypx = (int)llround(f.origin.y * scaleHost);
+  int xpx = (int)llround(f.origin.x);
+  int wpx = (int)llround(f.size.width);
+  int hpx = (int)llround(f.size.height);
+  int ypx = (int)llround(f.origin.y);
 
-  out->x = xpx;
-  out->y = ypx;
-  out->w = wpx;
-  out->h = hpx;
+  // 1 pixel in pixel space
+  // Need a visible border inset to avoid completely occluding the target window.
+  const int inset = 1;
+  if (wpx > 2*inset && hpx > 2*inset) {
+    out->x = xpx + inset;
+    out->y = ypx + inset;
+    out->w = wpx - 2*inset;
+    out->h = hpx - 2*inset;
+  } else {
+    // fallback
+    out->x = xpx;
+    out->y = ypx;
+    out->w = wpx;
+    out->h = hpx;
+  }
   return 0;
 }
 

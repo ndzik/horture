@@ -5,49 +5,61 @@
 
 module Horture.CommandCenter.GUI (runCommandCenterUI) where
 
+import Control.Concurrent.Chan.Synchronous (Chan, newChan, writeChan)
 import Control.Lens
+import Control.Monad (void)
 import Data.Default
-import Data.List (intercalate)
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
-import GHC.Generics (Generic)
-import Horture.CommandCenter.InsetBoxShadow
+import Horture.Server
+import Horture.Server.Protocol
 import Monomer
 import Monomer.Core.Themes.BaseTheme (BaseThemeColors (..), baseTheme)
 
 data CCModel = CCModel
   { _mCapturedWin :: Maybe Text,
     _mFPS :: Double,
+    _mConn :: Maybe (Chan CCCommand),
     _mAssets :: [FilePath],
     _mSelAsset :: Int,
     _mLogLines :: [Text],
-    _mMeta :: Text,
-    _mFocusPane :: Pane
+    _mMeta :: Text
   }
-  deriving (Eq, Show, Generic)
 
 data Pane = PaneAssets | PaneLog
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Show)
 
 makeLenses 'CCModel
+
+instance Eq CCModel where
+  a == b =
+    (a ^. mCapturedWin) == (b ^. mCapturedWin)
+      && (a ^. mFPS) == (b ^. mFPS)
+      && (a ^. mAssets) == (b ^. mAssets)
+      && (a ^. mSelAsset) == (b ^. mSelAsset)
+      && (a ^. mLogLines) == (b ^. mLogLines)
+      && (a ^. mMeta) == (b ^. mMeta)
 
 instance Default CCModel where
   def =
     CCModel
       { _mCapturedWin = Nothing,
+        _mConn = Nothing,
         _mFPS = 0,
         _mAssets = [],
         _mSelAsset = 0,
         _mLogLines = [],
-        _mMeta = "No metainformation available",
-        _mFocusPane = PaneLog
+        _mMeta = "No metainformation available"
       }
 
 data CCEvent
   = EvTickFPS Double
   | EvAppendLog Text
+  | EvConnectionEstablished (Chan CCCommand)
   | EvSetAssets [FilePath]
   | EvStartCapture
+  | EvCapturedWindow Text
   | EvStopCapture
   | EvToggleES
   | EvRefreshES
@@ -55,7 +67,7 @@ data CCEvent
   | EvEnableAll
   | EvPurgeAll
   | EvExit
-  deriving (Eq, Show)
+  | EvNoop
 
 runCommandCenterUI :: [FilePath] -> IO ()
 runCommandCenterUI initialAssets = do
@@ -64,7 +76,8 @@ runCommandCenterUI initialAssets = do
           appTheme customTheme,
           appInitEvent (EvSetAssets initialAssets),
           appFontDef "Regular" "./assets/fonts/CaskaydiaMonoNerdFontMono-Regular.ttf",
-          appWindowState (MainWindowNormal (1200, 800))
+          appWindowState (MainWindowNormal (1200, 800)),
+          appDisposeEvent EvExit
         ]
   startApp def handleEvent buildUI cfg
 
@@ -92,30 +105,37 @@ headerSize = 20
 buildUI :: WidgetEnv CCModel CCEvent -> CCModel -> WidgetNode CCModel CCEvent
 buildUI _ m =
   vstack
-    [ hstack
-        [ vstack
-            [ label "CommandCenter" `styleBasic` [textSize titleSize, textCenter],
-              separatorLine `styleBasic` [paddingH 4]
-            ],
-          filler,
-          box $
-            button "Start Capture" EvStartCapture,
-          filler,
-          boxShadow $
-            (capturedWinW m)
-              `styleBasic` [bgColor mustardLight, radius 6, padding 4],
-          spacer_ [width 32],
-          boxShadow . box $
-            ( vstack
-                [ label "FPS" `styleBasic` [textSize headerSize, textCenter],
-                  separatorLine,
-                  spacer,
-                  (label (showt (m ^. mFPS))) `styleBasic` [textCenter]
-                ]
-            )
-              `styleBasic` [bgColor mustardLight, radius 6, padding 4]
-        ]
-        `styleBasic` [padding 8],
+    [ vstack
+        [ hstack
+            [ vstack
+                [ label "CommandCenter" `styleBasic` [textSize titleSize, textCenter],
+                  separatorLine `styleBasic` [paddingH 4]
+                ],
+              spacer_ [width 128],
+              box captureButton,
+              spacer,
+              box toggleEventSourceButton,
+              filler,
+              spacer_ [width 32],
+              boxShadow . box $
+                ( vstack
+                    [ label "FPS" `styleBasic` [textSize headerSize, textCenter],
+                      separatorLine,
+                      spacer,
+                      (label (showt (m ^. mFPS))) `styleBasic` [textCenter]
+                    ]
+                )
+                  `styleBasic` [bgColor mustardLight, radius 6, padding 4, width 128]
+            ]
+            `styleBasic` [padding 8],
+          hstack
+            [ filler,
+              boxShadow $
+                (capturedWinW m)
+                  `styleBasic` [bgColor mustardLight, radius 6, padding 4],
+              filler
+            ]
+        ],
       hstack
         [ boxShadow $
             box_
@@ -172,14 +192,26 @@ buildUI _ m =
         Nothing -> label "No window is captured"
         Just t -> label t
 
-mustardBase, mustardLight, mustardDark, mustardHighlight, grayBG, grayPanel, offWhite :: Color
+    captureButton =
+      case m ^. mCapturedWin of
+        Nothing ->
+          button "Start Capture" EvStartCapture
+            `styleBasic` [textSize 12]
+        Just _ ->
+          button "Stop Capture" EvStopCapture
+            `styleBasic` [bgColor softRed, textSize 12]
+
+    toggleEventSourceButton =
+      button "Toggle Event Source" EvToggleES
+        `styleBasic` [textSize 12]
+        `nodeEnabled` (isJust $ m ^. mConn)
+
+mustardBase, mustardLight, mustardDark, mustardHighlight, softRed :: Color
 mustardDark = rgbHex "#f2d279"
 mustardBase = rgbHex "#f4d88b"
 mustardLight = rgbHex "#f8e7b9"
 mustardHighlight = rgbHex "#d19f15"
-grayBG = rgbHex "#1E1E1E"
-grayPanel = rgbHex "#2A2A2A"
-offWhite = rgbHex "#F2F2F2"
+softRed = rgbHex "#f5655b"
 
 handleEvent ::
   WidgetEnv CCModel CCEvent ->
@@ -188,40 +220,72 @@ handleEvent ::
   CCEvent ->
   [EventResponse CCModel CCEvent CCModel CCEvent]
 handleEvent _ _ m = \case
-  -- init/data updates
   EvSetAssets as ->
     [Model (m & mAssets .~ as & mSelAsset .~ 0)]
   EvTickFPS fps ->
     [Model (m & mFPS .~ fps)]
   EvAppendLog t ->
-    [ Model (m & mLogLines %~ (\xs -> takeLast 500 (xs ++ [t]))),
-      Task $ pure (EvTickFPS (m ^. mFPS)) -- no-op tick; keep UI live
+    [ Model (m & mLogLines %~ (\xs -> take 500 (t : xs))),
+      Task (pure EvNoop)
     ]
-  -- commands (hook your IPC here)
-  EvStartCapture -> [Model m] -- TODO: trigger window picker/IPC
-  EvStopCapture -> [Model (m & mCapturedWin .~ Nothing)]
-  EvToggleES -> [Model m]
+  EvStartCapture -> [Model m, Producer startCaptureServer]
+  EvStopCapture ->
+    [ Model (m & mCapturedWin .~ Nothing & mConn .~ Nothing & mFPS .~ 0),
+      Task (stopCaptureServer $ m ^. mConn)
+    ]
+  EvCapturedWindow stitle -> [Model (m & mCapturedWin .~ Just stitle)]
+  EvToggleES -> [Model m, Task $ toggleEventStream (m ^. mConn)]
+  EvConnectionEstablished chan -> [Model (m & mConn ?~ chan)]
   EvRefreshES -> [Model m]
   EvDisableAll -> [Model m]
   EvEnableAll -> [Model m]
   EvPurgeAll -> [Model m]
-  EvExit -> [exitApplication]
+  EvNoop -> [Model m]
+  EvExit -> [Task $ stopCaptureServer (m ^. mConn)]
 
--- ===== Key bindings (global)
--- Add this in buildUI if you want global hotkeys:
--- keystroke
---   [ ("G", EvStartCapture), ("g", EvStartCapture)
---   , ("Q", EvStopCapture), ("q", EvStopCapture)
---   , ("S", EvToggleES), ("s", EvToggleES)
---   , ("R", EvRefreshES), ("r", EvRefreshES)
---   , ("D", EvDisableAll), ("d", EvDisableAll)
---   , ("E", EvEnableAll), ("e", EvEnableAll)
---   , ("P", EvPurgeAll), ("p", EvPurgeAll)
---   , ("Esc", EvExit)
---   ] (buildUI …)
+toggleEventStream :: Maybe (Chan CCCommand) -> IO CCEvent
+toggleEventStream Nothing = pure (EvAppendLog "Event stream channel is not available")
+toggleEventStream (Just chan) = do
+  writeChan chan CmdToggleEvents
+  pure EvNoop
 
-takeLast :: Int -> [a] -> [a]
-takeLast n xs = drop (length xs - n `max` 0) xs
+stopCaptureServer :: Maybe (Chan CCCommand) -> IO CCEvent
+stopCaptureServer Nothing = do
+  alive <- serverAlive
+  if alive
+    then do
+      void sendStop
+      pure (EvAppendLog "Capture server stopped")
+    else pure (EvAppendLog "Capture server is not running")
+stopCaptureServer (Just chan) = do
+  writeChan chan CmdStopCapture
+  pure (EvAppendLog "Sent stop command to capture server")
+
+startCaptureServer :: (CCEvent -> IO ()) -> IO ()
+startCaptureServer sendMsg = do
+  exe <- hortureExePath
+  void $ stopCaptureServer Nothing
+  print $ "Starting capture server: " <> exe
+  sendMsg $ EvAppendLog ("Starting capture server...")
+  void $ spawnServerProcess exe ["--server"]
+  cmdChan <- newChan
+  waitUntilUp 10 >>= \case
+    False -> sendMsg (EvAppendLog "Failed to start capture server")
+    True -> do
+      sendMsg (EvAppendLog "Capture server started")
+      sendMsg (EvAppendLog "Click on an application window to capture it.")
+      sendMsg (EvConnectionEstablished cmdChan)
+      interactWithHorture onReply cmdChan
+  where
+    onReply :: CCReply -> IO ()
+    onReply ROk = pure ()
+    onReply (RErr msg) = sendMsg (EvAppendLog ("Error from server: " <> msg))
+    onReply (ROut line) = sendMsg (EvAppendLog line)
+    onReply (RFPS fps) = sendMsg (EvTickFPS fps)
+    onReply (RCapturedWindow title) = do
+      sendMsg (EvAppendLog ("Captured window: " <> title))
+      sendMsg (EvCapturedWindow title)
+    onReply _ = pure ()
 
 showt :: (Show a) => a -> Text
 showt = T.pack . show

@@ -48,6 +48,8 @@ library horture-lib
                             , Horture.CommandCenter.InsetBoxShadow
                             , Horture.CommandCenter.Event
                             , Horture.CommandCenter.State
+                            , Horture.Server
+                            , Horture.Server.Protocol
                             , Horture.Scene
                             , Horture.Horture
                             , Horture.Logging
@@ -150,6 +152,7 @@ library horture-lib
                             , GLFW-b
                             , GLUtil
                             , monomer
+                            , network
 
     ghc-options:            -Wall
                             -fno-warn-name-shadowing
@@ -216,4 +219,5 @@ executable horture-client
   build-depends:          base
                           , horture-lib
                           , optparse-applicative
+                          , data-default
   default-language:       Haskell2010

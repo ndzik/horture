@@ -1,17 +1,18 @@
 module Horture.Backend.MacOS.Initializer (initialize) where
 
+import Control.Concurrent (putMVar)
 import Control.Concurrent.Chan.Synchronous
 import Control.Concurrent.STM (TVar, newTVarIO)
 import Control.Lens
-import Control.Monad (forM_, void, when)
+import Control.Monad (void, when)
 import Control.Monad.Except (MonadError (throwError))
-import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
 import qualified Data.Map as Map
 import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Word (Word64)
+import Foreign (Ptr, allocaBytes)
+import Foreign.C (CInt, peekCString)
 import Graphics.Rendering.OpenGL.GL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Horture
@@ -23,7 +24,7 @@ import Horture.Initializer
 import Horture.Loader.Asset
 import Horture.Logging
 import Horture.Program
-import Horture.RenderBridge (c_rb_create, c_rb_destroy, c_rb_start, c_rb_stop)
+import Horture.RenderBridge (RB, c_rb_create, c_rb_destroy, c_rb_start, c_rb_stop)
 import Horture.Scene hiding (assets)
 import Horture.State
 import Horture.WindowGrabber
@@ -36,7 +37,6 @@ instance
     liftIO pickWindowMac >>= \case
       Nothing -> throwError (WindowEnvironmentInitializationErr "user aborted")
       Just (wid, title) -> do
-        tv <- liftIO $ newTVarIO Nothing
         pure
           CaptureHandle
             { chStop = pure (),
@@ -44,23 +44,14 @@ instance
               chWinId = wid
             }
 
--- ws <- filter (\(_, n) -> T.length n > 0) <$> liftIO listWindowsMac
--- -- liftIO . forM_ ws $ \(wid, name) -> print $ "WindowID" ++ show wid ++ " - " ++ "Name:" ++ show name
--- -- let (wid, title) = head . reverse $ ws
--- let (wid, title) = findID 1196 ws
--- liftIO $ forM_ ws print
--- liftIO . print $ "Grabbing window: " ++ T.unpack title
--- frameBuffer <- liftIO $ newTVarIO Nothing
--- return $ CaptureHandle {chStop = return (), chFrame = frameBuffer, chTitle = title, chWinId = wid}
-
-findID :: Word64 -> [(Word64, Text)] -> (Word64, Text)
-findID _def [] = (0, "No Window")
-findID def xs = go xs
-  where
-    go [] = (def, "Default Window")
-    go (x@(wid, _) : rest)
-      | wid == def = x
-      | otherwise = go rest
+startCapture :: CaptureHandle -> HortureInitializer l hdl (Ptr RB, CInt, Text)
+startCapture capHandle = do
+  rb <- liftIO c_rb_create
+  (rc, title) <- liftIO $ allocaBytes 512 $ \buf -> do
+    rc <- c_rb_start (fromIntegral $ chWinId capHandle) rb buf 512
+    title <- T.pack <$> peekCString buf
+    pure (rc, title)
+  return (rb, rc, title)
 
 initialize ::
   forall l hdl.
@@ -76,11 +67,12 @@ initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
   glW <- liftIO initGLFW
   capHandle <- grabAnyWindow
 
-  rb <- liftIO c_rb_create
-  rc <- liftIO $ c_rb_start rb (fromIntegral $ chWinId capHandle)
+  (rb, rc, title) <- startCapture capHandle
   when (rc /= 0) $
     throwError $
       WindowEnvironmentInitializationErr ("c_rb_start failed: " ++ show rc)
+
+  asks (^. grabbedWin) >>= liftIO . flip putMVar title
 
   storage <- liftIO $ newTVarIO Nothing
   evBuf <- liftIO $ RingBuffer.new 4
@@ -92,7 +84,6 @@ initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
   liftIO $ GLFW.setFramebufferSizeCallback glW (Just resizeWindow')
   liftIO $ GLFW.setWindowSize glW (fromIntegral wa_width) (fromIntegral wa_height)
   liftIO $ GL.viewport $= (Position 0 0, Size (fromIntegral wa_width) (fromIntegral wa_height))
-  -- liftIO $ GLFW.setWindowPos glW (  ) (fromIntegral . wa_y $ attr)
 
   sizeRef <- liftIO $ newTVarIO (wa_width, wa_height)
 
@@ -129,11 +120,14 @@ initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
             _backgroundColor = Color4 0.1 0.1 0.1 1
           }
   case logChan of
-    Just chan ->
+    Just chan -> do
+      liftIO . print @Text $ "Starting with logging to channel"
       liftIO $
         runHorture hs hc (playScene @'Channel scene) >>= \case
           Left err -> writeChan chan . T.pack . show $ err
           _otherwise -> return ()
-    Nothing -> void . liftIO $ runHorture hs hc (playScene @'NoLog scene)
+    Nothing -> do
+      liftIO . print @Text $ "Starting without logging"
+      void . liftIO $ runHorture hs hc (playScene @'NoLog scene)
   liftIO $ GLFW.destroyWindow glW
   liftIO GLFW.terminate

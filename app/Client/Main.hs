@@ -1,10 +1,12 @@
 module Main (main) where
 
+import Data.Default
 import Horture.Authorize
-import Horture.CommandCenter.CommandCenter
+-- import Horture.CommandCenter.CommandCenter
 import Horture.CommandCenter.GUI (runCommandCenterUI)
 import Horture.Config
 import Horture.Path
+import Horture.Server (startServer)
 import Options.Applicative
 import System.Exit (exitFailure)
 
@@ -40,7 +42,8 @@ data HortureParams = HortureParams
   { _config :: !FilePath,
     _mock :: !Bool,
     _authorize :: !Bool,
-    _debug :: !Bool
+    _debug :: !Bool,
+    _server :: !Bool
   }
   deriving (Show)
 
@@ -72,13 +75,22 @@ cmdParser =
           <> showDefault
           <> help "Debug mode, will only run the CommandCenter."
       )
+    <*> switch
+      ( long "server"
+          <> short 's'
+          <> showDefault
+          <> help "Run the horture capture server instead of the client."
+      )
 
 handleParams :: HortureParams -> IO ()
-handleParams (HortureParams fp mockMode wantAuth isDebug) =
-  -- resolvePath fp >>= parseHortureClientConfig >>= \case
-  --   Nothing -> if isDebug then runDebugCenter Nothing else print "invalid horture client config" >> exitFailure
-  --   Just cfg -> do
-  --     if wantAuth
-  --       then authorize mockMode cfg
-  --       else if isDebug then runDebugCenter (Just cfg) else runCommandCenter mockMode cfg
-  runCommandCenterUI []
+handleParams (HortureParams _ _ _ _ True) = startServer def
+handleParams (HortureParams fp mockMode wantAuth isDebug _) =
+  resolvePath fp >>= parseHortureClientConfig >>= \case
+    Nothing -> do
+      if isDebug
+        then runCommandCenterUI []
+        else print "invalid horture client config" >> exitFailure
+    Just cfg -> do
+      if wantAuth
+        then authorize mockMode cfg
+        else runCommandCenterUI []

@@ -51,7 +51,7 @@ data Name
 data CommandCenterState = CCState
   { _ccEventChan :: !(Maybe (Chan Event)),
     _ccBrickEventChan :: !(BChan CommandCenterEvent),
-    _ccCapturedWin :: !(Maybe String),
+    _ccCapturedWin :: !(Maybe Text),
     _ccControllerChans :: !(Maybe (Chan EventControllerInput, Chan EventControllerResponse)),
     _ccLog :: !(RingBuffer.RingBuffer V.Vector Text),
     _ccLogList :: ![Text],

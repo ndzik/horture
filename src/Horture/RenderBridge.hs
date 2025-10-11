@@ -49,7 +49,7 @@ foreign import ccall safe "rbridge.h rb_create" c_rb_create :: IO (Ptr RB)
 
 foreign import ccall safe "rbridge.h rb_destroy" c_rb_destroy :: Ptr RB -> IO ()
 
-foreign import ccall safe "rbridge.h rb_start_capture" c_rb_start :: Ptr RB -> CULong -> IO CInt
+foreign import ccall safe "rbridge.h rb_start_capture" c_rb_start :: CULong -> Ptr RB -> CString -> CSize -> IO CInt
 
 foreign import ccall safe "rbridge.h rb_stop_capture" c_rb_stop :: Ptr RB -> IO ()
 

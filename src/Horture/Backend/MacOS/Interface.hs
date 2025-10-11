@@ -13,8 +13,7 @@ where
 import Control.Concurrent (newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.STM (atomically, readTVarIO, writeTVar)
 import Control.Lens
-import Control.Monad (when)
-import qualified Control.Monad as Monad
+import Control.Monad (forM_, when)
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.IORef
@@ -27,25 +26,15 @@ import Graphics.GL.Tokens
 import Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Horture.Asset (HasTextureObject (textureObject))
-import Horture.Backend.Types
 import Horture.Horture
 import Horture.Logging
-import Horture.Program (HasTextureUnit (textureUnit))
+import Horture.Program (HasBackTextureObject (backTextureObject), HasShader (shader), HasTextureUnit (textureUnit), HasUVInsetUniform (uVInsetUniform))
 import Horture.RenderBridge
-import Horture.RenderBridge (rbPeekWidth)
 import Horture.State
 import Horture.WindowGrabber
 
 foreign import ccall "SCShim.h sc_list_windows"
   c_sc_list_windows :: FunPtr (CUIntMax -> CString -> Ptr () -> IO ()) -> Ptr () -> IO ()
-
-foreign import ccall "SCShim.h sc_start_window"
-  c_sc_start_window ::
-    CUIntMax ->
-    FunPtr (Ptr Word8 -> CInt -> CInt -> CInt -> Ptr () -> IO ()) ->
-    FunPtr (Ptr () -> IO ()) ->
-    Ptr () ->
-    IO CInt
 
 foreign import ccall safe "SCShim.h sc_pick_window"
   c_sc_pick_window :: FunPtr (CUIntMax -> CString -> Ptr () -> IO ()) -> Ptr () -> IO CInt
@@ -53,17 +42,8 @@ foreign import ccall safe "SCShim.h sc_pick_window"
 foreign import ccall "wrapper"
   mkPickCB :: (CUIntMax -> CString -> Ptr () -> IO ()) -> IO (FunPtr (CUIntMax -> CString -> Ptr () -> IO ()))
 
-foreign import ccall "SCShim.h sc_stop"
-  c_sc_stop :: IO ()
-
 foreign import ccall "wrapper"
   mkWinCB :: (CUIntMax -> CString -> Ptr () -> IO ()) -> IO (FunPtr (CUIntMax -> CString -> Ptr () -> IO ()))
-
-foreign import ccall "wrapper"
-  mkFrameCB :: (Ptr Word8 -> CInt -> CInt -> CInt -> Ptr () -> IO ()) -> IO (FunPtr (Ptr Word8 -> CInt -> CInt -> CInt -> Ptr () -> IO ()))
-
-foreign import ccall "wrapper"
-  mkStopCB :: (Ptr () -> IO ()) -> IO (FunPtr (Ptr () -> IO ()))
 
 foreign import ccall "sc_preflight_screen"
   c_sc_preflight_screen :: IO CInt
@@ -109,15 +89,6 @@ resetScreenPermission mBid =
     Nothing -> c_sc_tcc_reset nullPtr >>= pure . fromIntegral
     Just bid -> withCString bid (\c -> c_sc_tcc_reset c) >>= pure . fromIntegral
 
--- Frame copy that survives callback
-data FrameCopy = FrameCopy
-  { fcWidth :: !Int,
-    fcHeight :: !Int,
-    fcStride :: !Int,
-    fcFmt :: !PixelFmt,
-    fcBytes :: !(ForeignPtr Word8) -- owns the pixels
-  }
-
 data CaptureHandle = CaptureHandle
   { chWinId :: !Word64,
     chTitle :: !T.Text,
@@ -140,23 +111,18 @@ instance
       if r == 0 then Just <$> peek p else pure Nothing
     case rc of
       Nothing -> pure ()
-      Just (SCRect x y w h) -> liftIO $ do
-        let gap = 1
-            overlaxX = fromIntegral $ x + gap
-            overlaxY = fromIntegral $ y + gap
-            overlayW = fromIntegral $ w - 2 * gap
-            overlayH = fromIntegral $ h - 2 * gap
-        GLFW.setWindowPos win overlaxX overlaxY
-        GLFW.setWindowSize win overlayW overlayH
+      Just (SCRect x y w h) -> do
+        liftIO $ do
+          GLFW.setWindowPos win (fromIntegral x) (fromIntegral y)
+          GLFW.setWindowSize win (fromIntegral w) (fromIntegral h)
   nextFrame = do
     rb <- gets (^. renderBridgeCtx)
     texUnit <- asks (^. screenProg . textureUnit)
     texObj <- asks (^. screenProg . textureObject)
+    backTexObj <- asks (^. screenProg . backTextureObject)
     sizeRef <- gets (^. dim)
     -- Ensure the target texture is bound!
     liftIO $ do
-      activeTexture $= texUnit
-      textureBinding Texture2D $= Just texObj
       alloca $ \pf -> do
         rc <- c_rb_poll rb pf
         when (rc == 1) $ do
@@ -165,15 +131,18 @@ instance
           (aw, ah) <- readTVarIO sizeRef
           when (w /= aw || h /= ah) $ do
             -- allocate storage once or on resize
-            glPixelStorei GL_UNPACK_ALIGNMENT 1
-            texImage2D
-              Texture2D
-              NoProxy
-              0
-              GL.RGBA8
-              (TextureSize2D w h)
-              0
-              (PixelData BGRA UnsignedByte nullPtr)
+            activeTexture $= texUnit
+            forM_ [texObj, backTexObj] $ \to -> do
+              textureBinding Texture2D $= Just to
+              glPixelStorei GL_UNPACK_ALIGNMENT 1
+              texImage2D
+                Texture2D
+                NoProxy
+                0
+                GL.RGBA8
+                (TextureSize2D w h)
+                0
+                (PixelData BGRA UnsignedByte nullPtr)
             atomically $ writeTVar sizeRef (w, h)
 
           _ <- c_rb_upload rb pf -- bridge sets UNPACK_ROW_LENGTH and calls glTexSubImage2D

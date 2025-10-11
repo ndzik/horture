@@ -16,7 +16,7 @@ import Horture.Horture
 import Horture.State
 import Prelude hiding (log)
 
-class Monad m => HortureLogger m where
+class (Monad m) => HortureLogger m where
   logEvent :: Event -> m ()
   logInfo :: Text -> m ()
   logError :: Text -> m ()
@@ -39,14 +39,14 @@ instance HortureLogger (Horture 'NoLog hdl) where
 logEvent' :: Event -> Text
 logEvent' = pack . show
 
-withColog :: Monad m => Severity -> LogAction m Text -> Text -> m ()
+withColog :: (Monad m) => Severity -> LogAction m Text -> Text -> m ()
 withColog s target = usingLoggerT (cmap fmtMessage target) . log s
 
 -- | logDummy is a dummy log which does nothing.
-logDummy :: Monad m => LogAction m t
+logDummy :: (Monad m) => LogAction m t
 logDummy = LogAction $ \_ -> return ()
 
 -- | logChannel is a logging action writing its output to a channel handle.
-logChannel :: MonadIO m => Maybe (Chan t) -> LogAction m t
+logChannel :: (MonadIO m) => Maybe (Chan t) -> LogAction m t
 logChannel (Just chan) = LogAction $ liftIO . asyncWriteChan chan
 logChannel _ = logDummy

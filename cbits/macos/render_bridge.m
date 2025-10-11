@@ -91,8 +91,8 @@ void rb_destroy(RB* rb) {
   free(rb);
 }
 
-int rb_start_capture(RB* rb, unsigned long long window_id) {
-  if (!rb) return -1;
+int rb_start_capture(unsigned long long window_id, RB* rb, char* title_buf, size_t title_cap) {
+  if (!rb || !title_buf || title_cap == 0) return -1;
   __block int rc = 0;
   runOnMainSync(^{
     NSError* err = nil;
@@ -102,6 +102,23 @@ int rb_start_capture(RB* rb, unsigned long long window_id) {
     SCWindow* target = nil;
     for (SCWindow* w in content.windows) if ((uint64_t)w.windowID == window_id) { target = w; break; }
     if (!target) { rc = -3; return; }
+
+    // Build title with fallbacks
+    NSString *title = target.title;
+    if (title.length == 0) {
+      title = target.owningApplication.applicationName ?: @"unknown";
+    }
+    // Copy UTF-8 safely
+    BOOL ok = [title getCString:title_buf
+                      maxLength:title_cap
+                       encoding:NSUTF8StringEncoding];
+    if (!ok) {
+      // truncate manually if needed
+      NSData *d = [title dataUsingEncoding:NSUTF8StringEncoding] ?: [NSData data];
+      size_t n = MIN((size_t)d.length, title_cap ? title_cap - 1 : 0);
+      memcpy(title_buf, d.bytes, n);
+      title_buf[n] = 0;
+    }
 
     NSScreen* host = screenForWindow(target);
     CGFloat scale = host.backingScaleFactor ?: 1.0;
@@ -153,9 +170,13 @@ int rb_poll_frame(RB* rb, RBFrame* out) {
   CVPixelBufferRef pb = atomic_exchange_explicit(&rb->out->latest, (CVPixelBufferRef)NULL, memory_order_acq_rel);
   if (!pb) return 0;
 
-  size_t w = CVPixelBufferGetWidth(pb);
-  size_t h = CVPixelBufferGetHeight(pb);
+  const int g = 1;
+  size_t w0 = CVPixelBufferGetWidth(pb);
+  size_t h0 = CVPixelBufferGetHeight(pb);
   OSType fmt = CVPixelBufferGetPixelFormatType(pb);
+
+  size_t w = (w0 > 2*g) ? (w0 - 2*g) : 0;
+  size_t h = (h0 > 2*g) ? (h0 - 2*g) : 0;
 
   IOSurfaceRef surf = CVPixelBufferGetIOSurface(pb);
   if (surf && fmt == kCVPixelFormatType_32BGRA) {

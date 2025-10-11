@@ -6,6 +6,7 @@
 module Horture.Shader.Shader
   ( passthroughVertexShader,
     mvpVertexShader,
+    aiIsWonderful,
     displayShader,
     imageFragmentShader,
     fontFragmentShader,
@@ -24,6 +25,7 @@ module Horture.Shader.Shader
     backgroundShader,
     audioShader,
     bassRealityWarp,
+    kaleidoscopeShader,
   )
 where
 
@@ -124,6 +126,7 @@ in vec2 texCoord;
 
 uniform float dt;
 uniform sampler2D imgTexture;
+uniform vec2 uvInset;
 
 out vec4 frag_colour;
 
@@ -133,6 +136,10 @@ out vec4 frag_colour;
 void main() {
   vec4 col = texture(imgTexture, texCoord);
   frag_colour = vec4(col.x, col.y, col.z, 1.0);
+  // vec2 lo = uvInset;
+  // vec2 hi = vec2(1.0) - uvInset;
+  // vec2 uv = lo + texCoord * (hi - lo);
+  // frag_colour = texture(imgTexture, uv);
 }
   |]
 
@@ -239,30 +246,127 @@ uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 vec4 stitchIt(sampler2D tex, vec2 uv, float lifetime, float dt) {
-  vec2 texSize = textureSize(tex, 0);
-  float rtW = float(texSize.x);
-  float rtH = float(texSize.y);
-  vec4 c = vec4(0, 0, 0, 1);
-  float size = stitchSize;
-  vec2 cpos = uv * vec2(rtW, rtH);
-  vec2 tlpos = floor(cpos / vec2(size, size));
-  tlpos *= size;
-  int remx = int(mod(cpos.x, size));
-  int remy = int(mod(cpos.y, size));
-  if (remx == 0 && remy == 0) tlpos = cpos;
-  vec2 blpos = tlpos;
-  blpos.y += (size - 1.0);
-  if ((remx == remy) || (((int(cpos.x) - int(blpos.x)) == (int(blpos.y) - int(cpos.y))))) {
-    c = texture(tex, tlpos * vec2(1.0/rtW, 1.0/rtH)) * 0.8;
-  } else {
-    c = vec4(0.2, 0.15, 0.05, 0.5);
-  }
-  return c;
+  // Texture metrics
+  vec2 texSize = vec2(textureSize(tex, 0));
+  vec2 invTex  = 1.0 / texSize;
+
+  // Guard + subtle temporal wobble to avoid static alias
+  float size = max(1.0, stitchSize);
+  float j = 0.07 * sin(dt*3.1 + uv.y*50.0) * (0.25 + 0.75*clamp(frequencies.x,0.0,1.0));
+  size = max(1.0, size + j);
+
+  // Pixel space
+  vec2 px = uv * texSize;
+
+  // Cell origin (top-left) in pixel space
+  vec2 cellTL = floor(px / size) * size;
+
+  // Local coord inside the cell [0,size)
+  vec2 local = px - cellTL;
+
+  // Sample base colour once per cell (top-left texel of cell)
+  vec2 baseUV = (cellTL + 0.5) * invTex;
+  vec4 baseCol = texture(tex, baseUV);
+
+  // Thread pattern: two diagonals per cell to mimic cross-stitch
+  // Distance to the two diagonals within the cell
+  float d1 = abs(local.y - local.x);
+  float d2 = abs((size - local.y) - local.x);
+
+  // Thickness scales with size; 1.0 px at size=6
+  float thick = clamp(size * (1.0/6.0), 0.75, 1.5);
+
+  // Anti-aliased lines using fwidth
+  float aa = fwidth(d1) + 0.0001;
+  float l1 = 1.0 - smoothstep(thick - aa, thick + aa, d1);
+  aa = fwidth(d2) + 0.0001;
+  float l2 = 1.0 - smoothstep(thick - aa, thick + aa, d2);
+
+  // Combine threads; slight priority to the current dominant diagonal
+  float bias = step(0.5, fract(dot(frequencies, vec3(0.31,0.47,0.22))*10.0 + floor(cellTL.x+cellTL.y)));
+  float thread = mix(l1, l2, bias);
+
+  // Make stitches fade towards cell edges (rounded ends)
+  vec2 edge = abs(local - size*0.5) / (size*0.5);
+  float cap = smoothstep(1.2, 0.6, max(edge.x, edge.y)); // 0..1 cap mask
+  thread *= cap;
+
+  // Thread color slightly tinted from base, with “cotton” highlight
+  vec3 threadTint = mix(baseCol.rgb, vec3(0.85, 0.78, 0.65), 0.35);
+  // Directional sheen (depends on diagonal chosen)
+  vec2 dir = normalize(vec2(1.0, bias>0.5 ? -1.0 : 1.0));
+  float sheen = 0.25 + 0.75 * pow(abs(dot(normalize(local - size*0.5), dir)), 8.0);
+  vec3 threadCol = clamp(threadTint * (0.85 + 0.15*sheen), 0.0, 1.0);
+
+  // Background dark fabric look from base sample
+  vec3 fabric = baseCol.rgb * 0.85;
+
+  // Mix: thread alpha from thread coverage
+  vec3 c = mix(fabric, threadCol, clamp(thread, 0.0, 1.0));
+  return vec4(c, 1.0);
+}
+
+void main() {
+  vec2 uv = vec2(texCoord.x, 1.0 - texCoord.y);
+  frag_colour = stitchIt(imgTexture, uv, lifetime, 1.0);
+}
+    |]
+
+aiIsWonderful :: ByteString
+aiIsWonderful =
+  [r|
+#version 410 core
+
+in vec2 texCoord;
+
+uniform sampler2D imgTexture;
+uniform float dt;   // seconds
+uniform float rng;     // 0..1 per scene or per event
+
+layout(location = 0) out vec4 frag_colour;
+
+// hash without branches
+float hash21(vec2 p) {
+  p = fract(p*vec2(123.34, 345.45));
+  p += dot(p, p+34.345);
+  return fract(p.x*p.y);
 }
 
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = stitchIt(imgTexture, uv, lifetime, dt);
+
+  // time knobs
+  float t  = dt;
+  float rt = t * (1.3 + 2.0*rng);
+
+  // mild wobble (tube-like)
+  uv += 0.003 * vec2(
+      sin(uv.y*12.0 + rt*1.7),
+      sin(uv.x*10.0 - rt*1.2)
+  );
+
+  // horizontal scanline darkening
+  float scan = 0.06 * sin(uv.y*800.0 + rt*20.0);
+  float vign = smoothstep(0.95, 0.2, length(uv-0.5));
+
+  // rare glitch stripes
+  float gGate = step(0.985, hash21(vec2(floor(t*8.0), rng)));
+  float gBand = smoothstep(0.0, 1.0, abs(sin(uv.y*40.0 + floor(t*8.0)))) * gGate;
+  float gShift = 0.006 * gBand;
+
+  // chromatic aberration + glitch shift
+  vec2 off = vec2(0.002 + 0.002*sin(rt*0.7), 0.0) + vec2(gShift, 0.0);
+  float r = texture(imgTexture, uv + off).r;
+  float g = texture(imgTexture, uv).g;
+  float b = texture(imgTexture, uv - off).b;
+
+  vec3 col = vec3(r,g,b);
+
+  // film grain
+  float grain = hash21(uv*vec2(1920.0,1080.0) + rt) * 0.03;
+  col = col * (1.0 - scan) * (1.0 - 0.25*vign) + grain;
+
+  frag_colour = vec4(col, 1.0);
 }
     |]
 
@@ -330,8 +434,8 @@ vec4 blurHorizontal(sampler2D tex, vec2 uv, float lifetime, float dt) {
 
   vec3 c = texture(tex, uv).rgb * weight[0];
   for (int i=1; i<3; i++) {
-    c += texture(tex, uv + vec2(0.0, offset[i])/rtW).rgb * weight[i];
-    c += texture(tex, uv - vec2(0.0, offset[i])/rtW).rgb * weight[i];
+    c += texture(tex, uv + vec2(offset[i], 0.0)/rtW).rgb * weight[i];
+    c += texture(tex, uv - vec2(offset[i], 0.0)/rtW).rgb * weight[i];
   }
 
   return vec4(c, 1.0);
@@ -340,6 +444,68 @@ vec4 blurHorizontal(sampler2D tex, vec2 uv, float lifetime, float dt) {
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
   frag_colour = blurHorizontal(imgTexture, uv, lifetime, dt);
+}
+    |]
+
+kaleidoscopeShader :: ByteString
+kaleidoscopeShader =
+  [r|
+    #version 410 core
+
+in vec2 texCoord;
+
+uniform sampler2D imgTexture;
+uniform float dt;
+uniform float segments = 7.2;    // e.g. 6.0 .. 12.0
+uniform float swirl = 0.6;
+uniform float aberration = 0.002;
+
+layout(location = 0) out vec4 frag_colour;
+
+float PI = 3.14159265359;
+
+vec2 kaleido(vec2 uv, float seg, float t, float k) {
+  // center and go polar
+  vec2 p = uv - 0.5;
+  float r = length(p);
+  float a = atan(p.y, p.x);
+
+  // fold angle into 2*pi/seg wedge and mirror it
+  float wedge = 2.0 * PI / seg;
+  a = mod(a, wedge);
+  a = abs(a - wedge * 0.5);
+
+  // dt-based swirl (stronger near center)
+  a += k * (1.0 - smoothstep(0.0, 0.7, r)) * sin(2.0*t + r*14.0);
+
+  // back to cartesian, recentre
+  vec2 q = vec2(cos(a), sin(a)) * r + 0.5;
+  return q;
+}
+
+void main() {
+  // base kaleidoscoped coords
+  vec2 uv = kaleido(texCoord, max(3.0, segments), dt, swirl);
+
+  // mild breathing zoom to excite motion
+  float zoom = 0.02 * sin(dt*0.8);
+  uv = (uv - 0.5) * (1.0 - zoom) + 0.5;
+
+  // chromatic aberration: sample channels at tiny radial offsets
+  vec2 dir = normalize(uv - 0.5);
+  vec3 col;
+  col.r = texture(imgTexture, uv + dir * aberration).r;
+  col.g = texture(imgTexture, uv).g;
+  col.b = texture(imgTexture, uv - dir * aberration).b;
+
+  // soft vignette
+  float d = distance(uv, vec2(0.5));
+  float vig = smoothstep(0.9, 0.35, d); // falls off toward edges
+
+  // slight contrast pop
+  col = mix(col, col*1.15, 0.25);
+
+  frag_colour = vec4(col * vig, 1.0);
 }
     |]
 
@@ -358,7 +524,7 @@ layout(location = 0) out vec4 frag_colour;
 
 vec4 flashbang(sampler2D tex, vec2 uv, float lifetime, float dt) {
   vec4 c = texture(tex, uv);
-  float pp = 1 - (dt / lifetime);
+  float pp = clamp(1 - (dt / lifetime), 0.0, 1.0);
   return vec4(pp * (1 - c.x) + c.x, pp * (1 - c.y) + c.y, pp * (1 - c.z) + c.z, 1.0);
 }
 
@@ -433,8 +599,7 @@ uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
 vec4 mirror(sampler2D tex, vec2 uv, float lifetime, float dt) {
-  vec2 texSize = textureSize(tex, 0);
-  return texture(tex, vec2(texSize.x - uv.x, uv.y));
+  return texture(tex, vec2(1.0 - uv.x, uv.y));
 }
 
 void main() {

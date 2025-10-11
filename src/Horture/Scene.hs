@@ -19,7 +19,7 @@ data Scene = Scene
   { _screen :: !Object,
     _assets :: !(Map.Map AssetIndex [ActiveAsset]),
     _assetCache :: !(Map.Map FilePath HortureAsset),
-    _shaders :: ![(ShaderEffect, Double, Lifetime)],
+    _shaders :: ![(ShaderEffect, Float, Lifetime)],
     _audio :: ![Sound StaticSoundEffect]
   }
 
@@ -44,7 +44,7 @@ makeLenses ''ActiveAsset
 
 -- apply applies the given effect at the time given using the elapsed time
 -- since the last frame to the scene.
-apply :: Double -> Double -> Effect -> Scene -> Scene
+apply :: Float -> Float -> Effect -> Scene -> Scene
 apply _timeNow _dt Noop s = s
 apply timeNow _dt (AddAsset i lt pos bs) s = addGif i timeNow lt (zip3 bs (repeat timeNow) (repeat lt)) pos s
 apply timeNow _dt (AddScreenBehaviour lt bs) s = addScreenBehaviour timeNow lt (zip3 bs (repeat timeNow) (repeat lt)) s
@@ -55,34 +55,36 @@ apply _timeNow _dt (RemoveShaderEffect seed) s = removeShaderEffect seed s
 
 removeScreenBehaviour :: Int -> Scene -> Scene
 removeScreenBehaviour seed s =
-  s & screen . behaviours %~ \bs ->
-    let g = mkStdGen seed
-        (i, _) = uniformR (0, length bs - 1) g
-     in dropIndex i bs
+  s
+    & screen . behaviours %~ \bs ->
+      let g = mkStdGen seed
+          (i, _) = uniformR (0, length bs - 1) g
+       in dropIndex i bs
 
 removeShaderEffect :: Int -> Scene -> Scene
 removeShaderEffect seed s =
-  s & shaders %~ \ss ->
-    let g = mkStdGen seed
-        (i, _) = uniformR (0, length ss - 1) g
-     in dropIndex i ss
+  s
+    & shaders %~ \ss ->
+      let g = mkStdGen seed
+          (i, _) = uniformR (0, length ss - 1) g
+       in dropIndex i ss
 
 dropIndex :: Int -> [a] -> [a]
 dropIndex i xs = go i xs []
   where
     go _ [] rs = reverse rs
     go 0 (_ : xs) rs = reverse rs ++ xs
-    go i (x : xs) rs = go (i -1) xs (x : rs)
+    go i (x : xs) rs = go (i - 1) xs (x : rs)
 
 addAudio :: [Sound StaticSoundEffect] -> Scene -> Scene
 addAudio audioL s = s & audio %~ (++ audioL)
 
 -- applyAll composes all given effects at the given time using the time
 -- since the last frame as a progression point.
-applyAll :: [Effect] -> Double -> Double -> Scene -> Scene
+applyAll :: [Effect] -> Float -> Float -> Scene -> Scene
 applyAll effs timeNow dt s = foldr (apply timeNow dt) s (Noop : effs)
 
-addGif :: AssetIndex -> Double -> Lifetime -> [(Behaviour, Double, Lifetime)] -> V3 Float -> Scene -> Scene
+addGif :: AssetIndex -> Float -> Lifetime -> [(Behaviour, Float, Lifetime)] -> V3 Float -> Scene -> Scene
 addGif i timeNow lt bs pos s =
   let loadedAssets = _assetCache s
       hAsset = Map.lookup i loadedAssets
@@ -103,19 +105,19 @@ addGif i timeNow lt bs pos s =
         Nothing -> s
         Just hasset -> s {_assets = Map.insertWith (++) i [ActiveAsset hasset newAsset] . _assets $ s}
 
-addScreenBehaviour :: Double -> Lifetime -> [(Behaviour, Double, Lifetime)] -> Scene -> Scene
+addScreenBehaviour :: Float -> Lifetime -> [(Behaviour, Float, Lifetime)] -> Scene -> Scene
 addScreenBehaviour _timeNow _lt bs scene =
   let s = scene & screen . behaviours %~ (++ bs)
    in s
 
-addShaderEffect :: Double -> Lifetime -> ShaderEffect -> Scene -> Scene
+addShaderEffect :: Float -> Lifetime -> ShaderEffect -> Scene -> Scene
 addShaderEffect timeNow lt eff scene =
   let s = scene & shaders %~ ((eff, timeNow, lt) :)
    in s
 
 -- | purge purges the given scene using timenow by removing all transient
 -- objects and effects that died off.
-purge :: Double -> Scene -> Scene
+purge :: Float -> Scene -> Scene
 purge timeNow scene =
   let s = scene & assets %~ Map.map (filter (\(ActiveAsset _ o) -> isStillAlive timeNow (o ^. lifetime) (o ^. birth)))
       s' = s & screen . behaviours %~ filter (\(_, tob, lt) -> isStillAlive timeNow lt tob)

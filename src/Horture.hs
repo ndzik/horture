@@ -59,7 +59,7 @@ import System.Exit
 hortureName :: String
 hortureName = "horture"
 
-frameTime :: Double
+frameTime :: Float
 frameTime = 1 / 60
 
 -- | playScene plays the given scene in a Horture context.
@@ -73,17 +73,17 @@ playScene s = do
       logInfo "horture stopped"
     go lt (Just s) = do
       let action = do
-            dt <- deltaTime 0
+            (_, timeSince) <- deltaTime 0
             clearView
             renderBackground lt
-            s <- renderScene dt s
-            -- renderAssets dt . _assets $ s
+            s <- renderScene timeSince s
+            -- renderAssets timeSince . _assets $ s
             -- renderActiveEffectText s
-            -- renderEventList dt
+            -- renderEventList timeSince
             updateView
             countFrame
             timeNow <- getTime
-            pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
+            pollEvents s timeNow timeSince >>= processAudio <&> (purge timeNow <$>)
       s <-
         action
           `catchError` ( \err -> do
@@ -91,7 +91,7 @@ playScene s = do
                            logWarn "resetting scene & continuing..."
                            return $ Just s
                        )
-      deltaTime lt >>= \timeSinceFrame ->
+      deltaTime lt >>= \(timeSinceFrame, _) ->
         when (timeSinceFrame < frameTime) $
           liftIO . threadDelay . round $
             (frameTime - timeSinceFrame) * 1000 * 1000
@@ -119,7 +119,7 @@ clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
 updateView :: Horture l hdl ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
 
-pollEvents :: (HortureEffects hdl l) => Scene -> Double -> Double -> Horture l hdl (Maybe Scene)
+pollEvents :: (HortureEffects hdl l) => Scene -> Float -> Float -> Horture l hdl (Maybe Scene)
 pollEvents s timeNow dt = do
   pollGLFWEvents
   pollWindowEnvironment
@@ -128,18 +128,18 @@ pollEvents s timeNow dt = do
 pollGLFWEvents :: Horture l hdl ()
 pollGLFWEvents = liftIO GLFW.pollEvents
 
-deltaTime :: Double -> Horture l hdl Double
+deltaTime :: Float -> Horture l hdl (Float, Float)
 deltaTime startTime =
-  getTime >>= \currentTime -> return $ currentTime - startTime
+  getTime >>= \currentTime -> return $ (currentTime - startTime, currentTime)
 
-setTime :: Double -> Horture l hdl ()
-setTime = liftIO . GLFW.setTime
+setTime :: Float -> Horture l hdl ()
+setTime = liftIO . GLFW.setTime . realToFrac
 
-getTime :: Horture l hdl Double
+getTime :: Horture l hdl Float
 getTime =
   liftIO GLFW.getTime >>= \case
     Nothing -> throwError . HE $ "GLFW not running or initialized"
-    Just t -> return t
+    Just t -> return $ realToFrac t
 
 verts :: [Float]
 verts = [-1, -1, 0, 0, 1, -1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, -1, 0, 1, 1]
@@ -227,8 +227,10 @@ initShaderEffects = do
       let shaderProgs =
             [ (Barrel, [barrelShader]),
               (Stitch, [stitchShader]),
+              (Glitch, [aiIsWonderful]),
               (Blur, [blurVShader, blurHShader]),
               (Flashbang, [flashbangShader]),
+              (Kaleidoscope, [kaleidoscopeShader]),
               (Cycle, [cycleColoursShader]),
               (Blink, [blinkShader]),
               (Mirror, [mirrorShader]),
@@ -241,12 +243,14 @@ initShaderEffects = do
             hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])
             lifetimeUniform <- uniformLocation hsp "lifetime"
             dtUniform <- uniformLocation hsp "dt"
+            timeSinceUniform <- uniformLocation hsp "timeSinceStart"
             dominatingFreqUniform <- uniformLocation hsp "frequencies"
             randomUniform <- uniformLocation hsp "rng"
             return
               HortureShaderProgram
                 { _hortureShaderProgramShader = hsp,
                   _hortureShaderProgramLifetimeUniform = lifetimeUniform,
+                  _hortureShaderProgramTimeSinceUniform = timeSinceUniform,
                   _hortureShaderProgramDtUniform = dtUniform,
                   _hortureShaderProgramFrequenciesUniform = dominatingFreqUniform,
                   _hortureShaderProgramRandomUniform = randomUniform
@@ -323,6 +327,9 @@ initHortureScreenProgram (w, h) effs = do
   timeUniform <- uniformLocation prog "dt"
   uniform timeUniform $= (0 :: Float)
 
+  uvInsetUniform <- uniformLocation prog "uvInset"
+  uniform uvInsetUniform $= (Vertex2 1 1 :: Vertex2 GLfloat)
+
   bindFramebuffer Framebuffer $= defaultFramebufferObject
 
   return $
@@ -332,6 +339,7 @@ initHortureScreenProgram (w, h) effs = do
         _hortureScreenProgramModelUniform = modelUniform,
         _hortureScreenProgramProjectionUniform = projectionUniform,
         _hortureScreenProgramTextureUniform = screenTexUniform,
+        _hortureScreenProgramUVInsetUniform = uvInsetUniform,
         _hortureScreenProgramViewUniform = viewUniform,
         _hortureScreenProgramTimeUniform = timeUniform,
         _hortureScreenProgramFramebuffer = fb,

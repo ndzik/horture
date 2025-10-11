@@ -56,6 +56,16 @@ runStaticEffectRandomizer = interpret $ \case
     BehaviourMoveTo -> mkRandomScreenEffect <*> ((: []) <$> newRandomMoveToScreen)
     BehaviourRotate -> mkRandomScreenEffect <*> ((: []) <$> newRandomRotate)
     BehaviourAudiophile -> mkRandomScreenEffect <*> ((: []) <$> newRandomAudiophile)
+    BehaviourFlipX -> mkRandomScreenEffect <*> ((: []) <$> newRandomFlipX)
+    BehaviourEaseTo -> mkRandomScreenEffect <*> ((: []) <$> newRandomEaseTo)
+    BehaviourJitter -> mkRandomScreenEffect <*> ((: []) <$> newRandomJitter)
+    BehaviourBreathe -> mkRandomScreenEffect <*> ((: []) <$> newRandomBreathe)
+    BehaviourOrbit -> mkRandomScreenEffect <*> ((: []) <$> newRandomOrbit)
+    BehaviourSpiralTo -> mkRandomScreenEffect <*> ((: []) <$> newRandomSpiralTo)
+    BehaviourWobble -> mkRandomScreenEffect <*> ((: []) <$> newRandomWobble)
+    BehaviourSway -> mkRandomScreenEffect <*> ((: []) <$> newRandomSway)
+    BehaviourBounce -> mkRandomScreenEffect <*> ((: []) <$> newRandomBounce)
+    BehaviourBob -> mkRandomScreenEffect <*> ((: []) <$> newRandomBob)
   RandomizeEffect AddScreenBehaviour {} -> newRandomScreenEffect
   RandomizeEffect (AddShaderEffect _ se _) -> randomizeShaderEffect se
   RandomizeEffect AddRapidFire {} -> newRapidFireEffect
@@ -123,67 +133,104 @@ randomizeShaderEffect Invert = newRandomInvertShader
 randomizeShaderEffect Toonify = newRandomToonShader
 randomizeShaderEffect Audiophile = newRandomAudioShader
 randomizeShaderEffect BassRealityWarp = newRandomBassRealityWarpShader
+randomizeShaderEffect Glitch = newRandomGlitchShader
+randomizeShaderEffect Kaleidoscope = newRandomKaleidoscopeShader
+
+newRandomKaleidoscopeShader :: (LastMember IO effs) => Eff effs Effect
+newRandomKaleidoscopeShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 26 36)
+    <*> return Kaleidoscope
+    <*> return []
+
+newRandomGlitchShader :: (LastMember IO effs) => Eff effs Effect
+newRandomGlitchShader =
+  AddShaderEffect
+    <$> (Limited <$> uniformRM' 26 36)
+    <*> return Glitch
+    <*> return []
 
 newRandomAudioShader :: (LastMember IO effs) => Eff effs Effect
 newRandomAudioShader =
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 26 36) <*> return Audiophile <*> return []
+    <$> (Limited <$> uniformRM' 26 36)
+    <*> return Audiophile
+    <*> return []
 
 newRandomBassRealityWarpShader :: (LastMember IO effs) => Eff effs Effect
 newRandomBassRealityWarpShader =
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 26 36) <*> return BassRealityWarp <*> return []
+    <$> (Limited <$> uniformRM' 26 36)
+    <*> return BassRealityWarp
+    <*> return []
 
 newRandomToonShader :: (LastMember IO effs) => Eff effs Effect
 newRandomToonShader =
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 6 12) <*> return Toonify <*> return []
+    <$> (Limited <$> uniformRM' 6 12)
+    <*> return Toonify
+    <*> return []
 
 newRandomInvertShader :: (LastMember IO effs) => Eff effs Effect
 newRandomInvertShader =
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 6 12) <*> return Invert <*> return []
+    <$> (Limited <$> uniformRM' 6 12)
+    <*> return Invert
+    <*> return []
 
 newRandomMirrorShader :: (LastMember IO effs) => Eff effs Effect
 newRandomMirrorShader =
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 6 12) <*> return Mirror <*> return []
+    <$> (Limited <$> uniformRM' 6 12)
+    <*> return Mirror
+    <*> return []
 
 newRandomBarrelShader :: (LastMember IO effs) => Eff effs Effect
 newRandomBarrelShader =
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 6 12) <*> return Barrel <*> return []
+    <$> (Limited <$> uniformRM' 6 12)
+    <*> return Barrel
+    <*> return []
 
 newRandomBlurShader :: (LastMember IO effs) => Eff effs Effect
 newRandomBlurShader =
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 6 12) <*> return Blur <*> return []
+    <$> (Limited <$> uniformRM' 6 12)
+    <*> return Blur
+    <*> return []
 
 newRandomStitchShader :: (LastMember IO effs) => Eff effs Effect
 newRandomStitchShader =
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 6 12) <*> return Stitch <*> return []
+    <$> (Limited <$> uniformRM' 6 12)
+    <*> return Stitch
+    <*> return []
 
 newRandomFlashbangShader :: (LastMember IO effs) => Eff effs Effect
 newRandomFlashbangShader = do
   pitchPeep <- randomRM' 0.1 0.6
   pitchBang <- randomRM' 0.7 1.2
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 1 3) <*> return Flashbang
-      <*> return
-        [ StaticSound pitchPeep FlashbangPeep,
-          StaticSound pitchBang FlashbangBang
-        ]
+    <$> (Limited <$> uniformRM' 1 3)
+    <*> return Flashbang
+    <*> return
+      [ StaticSound pitchPeep FlashbangPeep,
+        StaticSound pitchBang FlashbangBang
+      ]
 
 newRandomCycleShader :: (LastMember IO effs) => Eff effs Effect
 newRandomCycleShader =
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 6 12) <*> return Cycle <*> return []
+    <$> (Limited <$> uniformRM' 6 12)
+    <*> return Cycle
+    <*> return []
 
 newRandomBlinkShader :: (LastMember IO effs) => Eff effs Effect
 newRandomBlinkShader =
   AddShaderEffect
-    <$> (Limited <$> uniformRM' 1 3) <*> return Blink <*> return []
+    <$> (Limited <$> uniformRM' 1 3)
+    <*> return Blink
+    <*> return []
 
 -- | Generate a random value uniformly distributed over the given range.
 uniformRM' :: (UniformRange a, LastMember IO effs) => a -> a -> Eff effs a
@@ -210,18 +257,10 @@ newRandomEffect ::
   Eff effs Effect
 newRandomEffect =
   randomM' @_ @Float >>= \r ->
-    if r < 0.3
-      then newRandomAsset
-      else
-        if r < 0.5
-          then newRandomScreenEffect
-          else
-            if r < 0.8
-              then newRandomShaderEffect
-              else
-                if r < 0.5
-                  then newRandomPurgeEffect
-                  else newRandomRapidFireEffect
+    let effects = [newRandomAsset, newRandomScreenEffect, newRandomShaderEffect, newRandomPurgeEffect, newRandomRapidFireEffect]
+        n = length effects
+        idx = floor (r * fromIntegral n) `mod` n
+     in effects !! idx
 
 newRandomPurgeEffect ::
   (Members '[Reader StaticEffectRandomizerListEnv] effs, LastMember IO effs) =>
@@ -300,6 +339,36 @@ newRandomShake = shake <$> randomM' <*> uniformRM' 80 160 <*> randomM'
 
 newRandomRotate :: (LastMember IO effs) => Eff effs Behaviour
 newRandomRotate = rotate <$> randomRM' (-1) 1
+
+newRandomFlipX :: (LastMember IO effs) => Eff effs Behaviour
+newRandomFlipX = flipXPulse <$> randomM'
+
+newRandomEaseTo :: (LastMember IO effs) => Eff effs Behaviour
+newRandomEaseTo = easeTo <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM')) <*> (uniformRM' 2 6)
+
+newRandomJitter :: (LastMember IO effs) => Eff effs Behaviour
+newRandomJitter = jitter <$> randomM' <*> uniformRM' 20 80
+
+newRandomBreathe :: (LastMember IO effs) => Eff effs Behaviour
+newRandomBreathe = breathe <$> randomM' <*> uniformRM' 1 3
+
+newRandomOrbit :: (LastMember IO effs) => Eff effs Behaviour
+newRandomOrbit = orbit <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM')) <*> uniformRM' 1 3 <*> uniformRM' 1 3
+
+newRandomSpiralTo :: (LastMember IO effs) => Eff effs Behaviour
+newRandomSpiralTo = spiralTo <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM')) <*> uniformRM' 1 3 <*> uniformRM' 1 3
+
+newRandomWobble :: (LastMember IO effs) => Eff effs Behaviour
+newRandomWobble = wobble <$> randomM' <*> uniformRM' 20 80 <*> randomM'
+
+newRandomSway :: (LastMember IO effs) => Eff effs Behaviour
+newRandomSway = sway <$> uniformRM' 1 90 <*> uniformRM' 1 3
+
+newRandomBounce :: (LastMember IO effs) => Eff effs Behaviour
+newRandomBounce = bounce <$> randomM' <*> uniformRM' 1 3
+
+newRandomBob :: (LastMember IO effs) => Eff effs Behaviour
+newRandomBob = bob <$> randomM' <*> uniformRM' 1 3
 
 newRandomMoveTo :: (LastMember IO effs) => Eff effs Behaviour
 newRandomMoveTo = moveTo <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM'))

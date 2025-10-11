@@ -19,16 +19,16 @@ import Control.Concurrent.STM (TVar, atomically, modifyTVar, newTVarIO, readTVar
 import Control.Lens
 import Control.Monad (forever, void)
 import Control.Monad.Catch
-import Control.Monad.Except
 import Control.Monad.IO.Class (liftIO)
 import Data.Default
 import Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text, pack)
-import Graphics.Vty hiding (Config, Event)
+import Graphics.Vty hiding (Event)
 import Graphics.Vty.Platform.Unix (mkVty)
 import Horture.Backend as Backend
+import Horture.Behaviour (identityDelta)
 import Horture.Command
 import Horture.CommandCenter.Event
 import Horture.CommandCenter.State
@@ -118,9 +118,9 @@ drawUI cs =
           ]
       ]
 
-currentCaptureUI :: Maybe String -> Widget Name
+currentCaptureUI :: Maybe Text -> Widget Name
 currentCaptureUI Nothing = center (str "No window is captured")
-currentCaptureUI (Just s) = center (str s)
+currentCaptureUI (Just s) = center (txt s)
 
 fpsUI :: Float -> Widget Name
 fpsUI = str . show
@@ -198,9 +198,7 @@ appEvent _else = return ()
 
 toggleEventSource :: Maybe (TVar Bool) -> EventM Name CommandCenterState ()
 toggleEventSource Nothing = logWarn "No eventsource is running"
-toggleEventSource (Just tv) = do
-  liftIO . atomically . modifyTVar tv $ not
-  logInfo "EventSource toggled"
+toggleEventSource (Just tv) = liftIO . atomically . modifyTVar tv $ not
 
 handleCCEvent :: CommandCenterEvent -> EventM Name CommandCenterState ()
 handleCCEvent (CCLog msg) = constructLogFromBuffer msg
@@ -275,7 +273,7 @@ deriveBaseEventsCC = deriveBaseEvents <$> gets (^. ccEventBaseCost)
 deriveBaseEvents :: Int -> [(Text, Effect, Int)]
 deriveBaseEvents baseCost = do
   let shaderEffs = map (\v -> AddShaderEffect Forever v []) . enumFrom $ minBound
-      behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> o)) . enumFrom $ minBound
+      behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> identityDelta)) . enumFrom $ minBound
       counterEffs = [RemoveScreenBehaviour 0, RemoveShaderEffect 0]
       allEffs =
         behaviourEffs
@@ -379,8 +377,8 @@ grabHorture = do
 
   res <-
     liftIO (readMVar mv) >>= \case
-      Nothing -> throwM UserAvoidedWindowSelection
-      Just res -> return res
+      "" -> throwM UserAvoidedWindowSelection
+      res -> return res
   modify $ \ccs ->
     ccs
       { _ccEventChan = Just evChan,

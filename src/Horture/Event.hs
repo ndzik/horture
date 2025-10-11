@@ -11,7 +11,7 @@ data Event
 
 data PastEvent
   = -- | PastEvent describes a past event together with its birthtime in seconds
-    PastEvent !Double !Text !Effect
+    PastEvent !Float !Text !Effect
 
 instance Show PastEvent where
   show (PastEvent _ name eff) = unwords [unpack $ name <> ":", unpack . toTitle $ eff]
