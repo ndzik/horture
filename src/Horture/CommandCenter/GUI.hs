@@ -9,9 +9,12 @@ import Control.Concurrent.Chan.Synchronous (Chan, newChan, writeChan)
 import Control.Lens
 import Control.Monad (void)
 import Data.Default
+import Data.List (intersperse)
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
+import Horture.Effect (ShaderEffect)
+import Horture.Object (BehaviourType, Lifetime (Limited))
 import Horture.Server
 import Horture.Server.Protocol
 import Monomer
@@ -39,6 +42,7 @@ instance Eq CCModel where
       && (a ^. mAssets) == (b ^. mAssets)
       && (a ^. mSelAsset) == (b ^. mSelAsset)
       && (a ^. mLogLines) == (b ^. mLogLines)
+      && (isJust (a ^. mConn) == isJust (b ^. mConn))
       && (a ^. mMeta) == (b ^. mMeta)
 
 instance Default CCModel where
@@ -58,8 +62,10 @@ data CCEvent
   | EvAppendLog Text
   | EvConnectionEstablished (Chan CCCommand)
   | EvSetAssets [FilePath]
+  | EvConnectApplication
   | EvStartCapture
   | EvCapturedWindow Text
+  | EvSendEffect EffectRequest
   | EvStopCapture
   | EvToggleES
   | EvRefreshES
@@ -115,6 +121,8 @@ buildUI _ m =
               box captureButton,
               spacer,
               box toggleEventSourceButton,
+              spacer,
+              box toggleActiveCaptureButton,
               filler,
               spacer_ [width 32],
               boxShadow . box $
@@ -173,7 +181,42 @@ buildUI _ m =
             ]
             `styleBasic` []
         )
-          `styleBasic` [bgColor mustardLight, padding 8, radius 6]
+          `styleBasic` [bgColor mustardLight, padding 8, radius 6],
+      spacer,
+      scroll_ [wheelRate 40] $
+        vstack
+          [ boxShadow . box_ [expandContent] $
+              vstack
+                [ label "Screen Effects" `styleBasic` [textSize headerSize, textCenter],
+                  separatorLine `styleBasic` [padding 4],
+                  spacer,
+                  buttonGrid
+                    6
+                    ( map
+                        behaviourButton
+                        [ minBound
+                          .. maxBound :: BehaviourType
+                        ]
+                    )
+                ]
+                `styleBasic` [bgColor mustardLight, padding 4, radius 6],
+            spacer,
+            boxShadow . box_ [expandContent] $
+              vstack
+                [ label "Shader Effects" `styleBasic` [textSize headerSize, textCenter],
+                  separatorLine `styleBasic` [padding 4],
+                  spacer,
+                  buttonGrid
+                    6
+                    ( map
+                        shaderButton
+                        [ minBound
+                          .. maxBound :: ShaderEffect
+                        ]
+                    )
+                ]
+                `styleBasic` [bgColor mustardLight, padding 4, radius 6]
+          ]
     ]
     `styleBasic` [bgColor mustardBase]
   where
@@ -195,16 +238,41 @@ buildUI _ m =
     captureButton =
       case m ^. mCapturedWin of
         Nothing ->
-          button "Start Capture" EvStartCapture
+          button "Connect Application" EvConnectApplication
             `styleBasic` [textSize 12]
         Just _ ->
           button "Stop Capture" EvStopCapture
             `styleBasic` [bgColor softRed, textSize 12]
 
+    toggleActiveCaptureButton =
+      button "Start Capture" EvStartCapture
+        `styleBasic` [textSize 12]
+        `nodeEnabled` (isJust $ m ^. mConn)
+
     toggleEventSourceButton =
       button "Toggle Event Source" EvToggleES
         `styleBasic` [textSize 12]
         `nodeEnabled` (isJust $ m ^. mConn)
+
+defaultLifetime :: Lifetime
+defaultLifetime = Limited 2
+
+behaviourButton :: BehaviourType -> WidgetNode CCModel CCEvent
+behaviourButton bt =
+  button (T.pack $ show bt) (EvSendEffect (ERBehaviour bt defaultLifetime))
+
+shaderButton :: ShaderEffect -> WidgetNode CCModel CCEvent
+shaderButton se =
+  button (T.pack $ show se) (EvSendEffect (ERShader se defaultLifetime))
+
+buttonGrid :: Int -> [WidgetNode CCModel CCEvent] -> WidgetNode CCModel CCEvent
+buttonGrid cols btns =
+  vstack (map (hstack . intersperse filler) (chunk cols btns)) `styleBasic` [padding 4]
+  where
+    chunk _ [] = []
+    chunk n xs =
+      let (ys, zs) = splitAt n xs
+       in ys : chunk n zs
 
 mustardBase, mustardLight, mustardDark, mustardHighlight, softRed :: Color
 mustardDark = rgbHex "#f2d279"
@@ -220,28 +288,31 @@ handleEvent ::
   CCEvent ->
   [EventResponse CCModel CCEvent CCModel CCEvent]
 handleEvent _ _ m = \case
-  EvSetAssets as ->
-    [Model (m & mAssets .~ as & mSelAsset .~ 0)]
-  EvTickFPS fps ->
-    [Model (m & mFPS .~ fps)]
-  EvAppendLog t ->
-    [ Model (m & mLogLines %~ (\xs -> take 500 (t : xs))),
-      Task (pure EvNoop)
-    ]
-  EvStartCapture -> [Model m, Producer startCaptureServer]
+  EvSetAssets as -> [Model (m & mAssets .~ as & mSelAsset .~ 0)]
+  EvTickFPS fps -> [Model (m & mFPS .~ fps)]
+  EvAppendLog t -> [Model (m & mLogLines %~ (\xs -> take 500 (t : xs)))]
+  EvConnectApplication -> [Producer connectCaptureServer]
+  EvStartCapture -> [Task $ startCapturing (m ^. mConn)]
   EvStopCapture ->
-    [ Model (m & mCapturedWin .~ Nothing & mConn .~ Nothing & mFPS .~ 0),
-      Task (stopCaptureServer $ m ^. mConn)
+    [ Task (stopCaptureServer $ m ^. mConn),
+      Model (m & mCapturedWin .~ Nothing & mConn .~ Nothing & mFPS .~ 0)
     ]
   EvCapturedWindow stitle -> [Model (m & mCapturedWin .~ Just stitle)]
-  EvToggleES -> [Model m, Task $ toggleEventStream (m ^. mConn)]
+  EvSendEffect effReq -> [Task $ sendEffectRequest (m ^. mConn) effReq]
+  EvToggleES -> [Task $ toggleEventStream (m ^. mConn)]
   EvConnectionEstablished chan -> [Model (m & mConn ?~ chan)]
-  EvRefreshES -> [Model m]
-  EvDisableAll -> [Model m]
-  EvEnableAll -> [Model m]
-  EvPurgeAll -> [Model m]
-  EvNoop -> [Model m]
+  EvRefreshES -> []
+  EvDisableAll -> []
+  EvEnableAll -> []
+  EvPurgeAll -> []
+  EvNoop -> []
   EvExit -> [Task $ stopCaptureServer (m ^. mConn)]
+
+sendEffectRequest :: Maybe (Chan CCCommand) -> EffectRequest -> IO CCEvent
+sendEffectRequest Nothing _ = pure (EvAppendLog "Effect request failed: no connection to server")
+sendEffectRequest (Just chan) effReq = do
+  writeChan chan (CmdTriggerEffect effReq)
+  pure EvNoop
 
 toggleEventStream :: Maybe (Chan CCCommand) -> IO CCEvent
 toggleEventStream Nothing = pure (EvAppendLog "Event stream channel is not available")
@@ -261,8 +332,8 @@ stopCaptureServer (Just chan) = do
   writeChan chan CmdStopCapture
   pure (EvAppendLog "Sent stop command to capture server")
 
-startCaptureServer :: (CCEvent -> IO ()) -> IO ()
-startCaptureServer sendMsg = do
+connectCaptureServer :: (CCEvent -> IO ()) -> IO ()
+connectCaptureServer sendMsg = do
   exe <- hortureExePath
   void $ stopCaptureServer Nothing
   print $ "Starting capture server: " <> exe
@@ -272,9 +343,10 @@ startCaptureServer sendMsg = do
   waitUntilUp 10 >>= \case
     False -> sendMsg (EvAppendLog "Failed to start capture server")
     True -> do
+      sendMsg (EvConnectionEstablished cmdChan)
       sendMsg (EvAppendLog "Capture server started")
       sendMsg (EvAppendLog "Click on an application window to capture it.")
-      sendMsg (EvConnectionEstablished cmdChan)
+      sendMsg (EvAppendLog "Connected to capture server")
       interactWithHorture onReply cmdChan
   where
     onReply :: CCReply -> IO ()
@@ -286,6 +358,12 @@ startCaptureServer sendMsg = do
       sendMsg (EvAppendLog ("Captured window: " <> title))
       sendMsg (EvCapturedWindow title)
     onReply _ = pure ()
+
+startCapturing :: Maybe (Chan CCCommand) -> IO CCEvent
+startCapturing Nothing = pure (EvAppendLog "Cannot start capture: no connection to server")
+startCapturing (Just chan) = do
+  writeChan chan CmdStartCapture
+  pure (EvAppendLog "Sent start capture command to server")
 
 showt :: (Show a) => a -> Text
 showt = T.pack . show

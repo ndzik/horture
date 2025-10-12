@@ -50,6 +50,7 @@ library horture-lib
                             , Horture.CommandCenter.State
                             , Horture.Server
                             , Horture.Server.Protocol
+                            , Horture.Server.Env
                             , Horture.Scene
                             , Horture.Horture
                             , Horture.Logging

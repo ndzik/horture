@@ -178,18 +178,16 @@ applySceneShaders fft t scene = do
   -- Set custom framebuffer as target for read&writes.
   bindFramebuffer Framebuffer $= fb
   -- Fronttexture here already has the captured window texture.
-  frontTexture <- asks (^. screenProg . textureObject)
-  backTexture <- asks (^. screenProg . backTextureObject)
-  -- Use tmp texture with correct dimensions to enable ping-ponging.
-  textureBinding Texture2D $= Just backTexture
+  readTexture <- asks (^. screenProg . textureObject)
+  writeTexture <- asks (^. screenProg . backTextureObject)
   let effs = scene ^. shaders
-  (finishedTex, _) <- foldrM (applyShaderEffect fft t) (frontTexture, backTexture) effs
+  (finishedTex, _) <- foldrM (applyShaderEffect fft t) (readTexture, writeTexture) effs
+  -- (r, w) -> (w, r) -> (r, w)
   -- Unbind post-processing framebuffer and bind default framebuffer for
   -- on-screen rendering.
   bindFramebuffer Framebuffer $= defaultFramebufferObject
   -- Bind final texture for final rendering.
   textureBinding Texture2D $= Just finishedTex
-  liftIO $ generateMipmap' Texture2D
 
 applyShaderEffect ::
   (HortureLogger (Horture l hdl)) =>
@@ -209,7 +207,6 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
     go (w, h) prog (readTexture, writeTexture) = do
       -- Read from texture r.
       textureBinding Texture2D $= Just readTexture
-      -- genMipMap -- Mipmap generation has to happen for everyframe.
       -- Write to texture w.
       liftIO $ do
         framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D writeTexture 0
@@ -220,7 +217,6 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
       uniform @Float (prog ^. dtUniform) $= (realToFrac $ t - birth)
       newRandomNumber >>= (uniform (prog ^. randomUniform) $=)
       drawBaseQuad
-      -- genMipMap
       currentProgram $= Nothing
       -- Flip textures for next effect. Read from written texture `w` and write to
       -- read from texture `r`.

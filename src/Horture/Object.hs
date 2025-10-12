@@ -1,7 +1,12 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+
 module Horture.Object where
 
 import Control.Lens.TH
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Default
+import GHC.Generics (Generic)
 import Horture.Audio
 import Linear.Matrix
 import Linear.Quaternion
@@ -10,7 +15,14 @@ import Linear.V4
 
 -- | Lifetime describes for how long an object can live. Either forever or for
 -- a limited time. Limited defines the lifetime in seconds.
-data Lifetime = Forever | Limited !Float deriving (Show, Eq)
+data Lifetime = Forever | Limited !Float
+  deriving
+    ( Show,
+      Eq,
+      Generic,
+      FromJSON,
+      ToJSON
+    )
 
 -- | Object is a horture object which forms the basis for all objects in a
 -- horture scene, which can have effects applied to them and rendered.
@@ -80,7 +92,7 @@ data BehaviourType
   | BehaviourJitter
   | BehaviourEaseTo
   | BehaviourFlipX
-  deriving (Show, Eq, Enum, Bounded)
+  deriving (Show, Eq, Enum, Bounded, Generic, FromJSON, ToJSON)
 
 -- | Each object can have multiple behaviours attached to it. The behaviour
 -- decides how this object will be displayed during its lifetime depending on

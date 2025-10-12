@@ -1,3 +1,6 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+
 module Horture.Effect
   ( Effect (..),
     ShaderEffect (..),
@@ -11,7 +14,9 @@ module Horture.Effect
   )
 where
 
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Text (Text)
+import GHC.Generics (Generic)
 import Horture.Audio.Player
 import Horture.Behaviour (identityDelta)
 import Horture.Object
@@ -127,7 +132,16 @@ data ShaderEffect
   | Audiophile
   | BassRealityWarp
   | Kaleidoscope
-  deriving (Eq, Ord, Show, Enum, Bounded)
+  deriving
+    ( Eq,
+      Ord,
+      Show,
+      Enum,
+      Bounded,
+      Generic,
+      FromJSON,
+      ToJSON
+    )
 
 instance Show Effect where
   show (AddAsset fp lt pos _) = unwords ["AddImage", takeFileName fp, show lt, show pos]
