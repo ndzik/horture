@@ -79,7 +79,7 @@ initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
   fftBuf <- liftIO $ RingBuffer.new 8
   let wa_width = 1028
       wa_height = 720
-  (hsp, dip, hbp, ftp) <- liftIO $ initResources (wa_width, wa_height) [] Nothing
+  (hsp, dip, hbp, ftp) <- liftIO $ initResources (wa_width, wa_height) loadedImages Nothing
 
   liftIO $ GLFW.setFramebufferSizeCallback glW (Just resizeWindow')
   liftIO $ GLFW.setWindowSize glW (fromIntegral wa_width) (fromIntegral wa_height)
@@ -106,8 +106,7 @@ initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
             _dim = sizeRef,
             _eventList = evBuf
           }
-  let ssf = Map.fromList $ map (\(fp, AudioEffect eff _) -> (eff, fp)) loadedSounds
-      hc =
+  let hc =
         HortureStatic
           { _screenProg = hsp,
             _dynamicImageProg = dip,

@@ -48,8 +48,12 @@ loadDirectory fp = listDirectory fp <&> map ((fp ++ "/") ++)
 -- TODO: Properly handle audio files in own directory?
 readAssets :: FilePath -> FilePreloader (FilePath, Asset)
 readAssets fp = case takeExtension fp of
-  ".gif" -> readImagesAndMetadata fp
-  ".png" -> readPngImage fp
+  ".gif" -> do
+    liftIO . print $ "Loading gif: " ++ fp
+    readImagesAndMetadata fp
+  ".png" -> do
+    liftIO . print $ "Loading png: " ++ fp
+    readPngImage fp
   ".wav" -> readAudioAsset fp
   ".mp3" -> readAudioAsset fp
   _else -> throwError . LoaderUnsupportedAssetType $ fp

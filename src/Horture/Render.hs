@@ -25,6 +25,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text, unpack)
+import qualified Data.Text as T
 import Foreign hiding (rotate, void)
 import Graphics.GLUtil.Camera3D as Util hiding (orientation)
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, rotate, scale)

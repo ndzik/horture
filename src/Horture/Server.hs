@@ -32,6 +32,8 @@ import Horture.Event
 import Horture.EventSource.Local (hortureLocalEventSource)
 import Horture.Horture
 import Horture.Initializer
+import Horture.Loader
+import Horture.Loader.Asset (Asset)
 import Horture.Object
 import Horture.Scene (Scene (..))
 import Horture.Server.Env
@@ -64,8 +66,13 @@ startServer (ServerCfg host port) = do
   esEnabled <- newTVarIO False
   fpsTvar <- newTVarIO 0
   evChan <- newChan @Event
+  let imagesDir = "./assets/images/"
+  preloadedImages <-
+    runPreloader (PLC $ imagesDir) loadAssetsInMemory >>= \case
+      Left _ -> pure []
+      Right pli -> pure pli
   void . forkIO $ runServer fpsTvar evChan writerPumpChan hortureTID logChan mv esEnabled
-  _run fpsTvar evChan logChan mv esEnabled
+  _run fpsTvar evChan logChan mv esEnabled preloadedImages
   where
     runServer fpsTvar evChan writerPumpChan tid logChan mv enabledTvar = do
       let env =
@@ -100,25 +107,19 @@ wsApp env pending = do
     pumpLoop :: Chan CCReply -> Connection -> IO ()
     pumpLoop writeChan conn = forever $ do
       -- Wait for mvar to be filled and send CaptureWindow message
-      print @Text "Writer thread waiting for initial window"
       mWindow <- readMVar (env ^. wsAppEnvMV)
       WS.sendTextData conn (encode (RCapturedWindow mWindow))
       forever $ do
-        print @Text "Writer thread waiting for message"
         msg <- readChan writeChan
-        print @Text $ "Writer: " <> (T.pack . show $ msg)
         WS.sendTextData conn (encode msg)
     logLoop :: Chan Text -> Chan CCReply -> IO ()
     logLoop logChan writeChan = forever $ do
-      print @Text "Log thread waiting for message"
       msg <- readChan logChan
-      print @Text $ "Log: " <> msg
       enqueue writeChan . ROut $ msg
     mainLoop :: WSClientEnv -> IO ()
     mainLoop clientEnv = do
       let conn = clientEnv ^. wsAppEnvConn
       raw <- WS.receiveData conn
-      print @Text $ "Received message: " <> (T.pack . show $ raw)
       case eitherDecode raw of
         Left _ -> WS.sendTextData conn (encode (RErr "bad json"))
         Right CmdPing -> WS.sendTextData conn (encode RPong)
@@ -183,17 +184,16 @@ fpsTicker :: TVar Int -> Connection -> IO ()
 fpsTicker fpsTVar conn = go 0
   where
     go lastFrameCount = do
-      print @Text "FPS ticker tick"
       threadDelay $ 1 * 1000 * 1000 -- 1 second
       currentFrameCount <- readTVarIO fpsTVar
       let fps = currentFrameCount - lastFrameCount
       WS.sendTextData conn (encode (RFPS $ fromIntegral fps))
       go currentFrameCount
 
-_run :: TVar Int -> Chan Event -> Chan Text -> MVar Text -> TVar Bool -> IO ()
-_run fpsTvar evChan logChan mv enabledTVar = do
-  let timeout = round $ (0.2 * 1000.0 * 1000.0 :: Double)
-      images = []
+_run :: TVar Int -> Chan Event -> Chan Text -> MVar Text -> TVar Bool -> [(FilePath, Asset)] -> IO ()
+_run fpsTvar evChan logChan mv enabledTVar preloadedImages = do
+  let timeout = round $ (1.0 * 1000.0 * 1000.0 :: Double)
+      images = map fst preloadedImages
   esTID <- forkIO $ hortureLocalEventSource timeout evChan images enabledTVar
   let env =
         HortureInitializerEnvironment
@@ -209,7 +209,7 @@ _run fpsTvar evChan logChan mv enabledTVar = do
                 { _behaviours = []
                 }
           }
-      action = Backend.initialize @'Channel startScene [] [] fpsTvar (Just logChan) evChan
+      action = Backend.initialize @'Channel startScene preloadedImages [] fpsTvar (Just logChan) evChan
   res <- runHortureInitializer env action
   killThread esTID
   print res
@@ -251,15 +251,11 @@ connectServer action chan = do
 sendStop :: IO Bool
 sendStop = do
   r :: Either SomeException Bool <- try $ WS.runClient (scHost def) (scPort def) "/" $ \c -> do
-    print @Text "Connected to capture server, sending stop command"
     WS.sendTextData c (encode CmdStopCapture)
-    print @Text "Sent stop command, waiting for reply"
     msg <- WS.receiveData c
-    print ("Received reply: " ++ show msg)
     case eitherDecode msg of
       Right ROk -> pure True
       _ -> pure False
-  print ("sendStop result: " ++ show r)
   pure (either (const False) id r)
 
 spawnServerProcess :: FilePath -> [String] -> IO ProcessHandle

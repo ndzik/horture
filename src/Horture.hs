@@ -77,9 +77,9 @@ playScene s = do
             clearView
             renderBackground lt
             s <- renderScene timeSince s
-            -- renderAssets timeSince . _assets $ s
-            -- renderActiveEffectText s
-            -- renderEventList timeSince
+            renderAssets timeSince . _assets $ s
+            renderActiveEffectText s
+            renderEventList timeSince
             updateView
             countFrame
             timeNow <- getTime
