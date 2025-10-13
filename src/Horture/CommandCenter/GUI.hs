@@ -255,7 +255,7 @@ buildUI _ m =
         `nodeEnabled` (isJust $ m ^. mConn)
 
 defaultLifetime :: Lifetime
-defaultLifetime = Limited 2
+defaultLifetime = Limited 10
 
 behaviourButton :: BehaviourType -> WidgetNode CCModel CCEvent
 behaviourButton bt =

@@ -37,8 +37,8 @@ import Graphics.GLUtil.Camera3D as Cam3D
 import Graphics.Rendering.OpenGL as GL hiding (Color, Invert, flush)
 import qualified Graphics.UI.GLFW as GLFW
 import Horture.Audio
--- import Horture.Audio.PipeWire ()
 import Horture.Audio.Player.Horture ()
+import Horture.Audio.Recorder.Horture ()
 import Horture.Constraints
 import Horture.Effect
 import Horture.Error
@@ -66,8 +66,9 @@ frameTime = 1 / 60
 playScene :: forall l hdl. (HortureEffects hdl l) => Scene -> Horture l hdl ()
 playScene s = do
   setTime 0
+  -- void . go 0 . Just $ s
   -- void . withRecording . withAudio . go 0 . Just $ s
-  void . go 0 . Just $ s
+  void . withRecording . go 0 . Just $ s
   where
     go _ Nothing = do
       logInfo "horture stopped"
@@ -75,8 +76,10 @@ playScene s = do
       let action = do
             (_, timeSince) <- deltaTime 0
             clearView
+            fft <- calcCurrentFFTPeak
+            liftIO $ print $ "FFT: " ++ show fft
             renderBackground lt
-            s <- renderScene timeSince s
+            s <- renderScene timeSince fft s
             renderAssets timeSince . _assets $ s
             renderActiveEffectText s
             renderEventList timeSince
@@ -103,6 +106,47 @@ playScene s = do
     handleHortureError ase@(AudioSinkUnavailableErr _) = logError . pack . show $ ase
     handleHortureError asi@AudioSinkInitializationErr = logError . pack . show $ asi
     handleHortureError asp@(AudioSinkPlayErr _) = logError . pack . show $ asp
+
+calcCurrentFFTPeak :: (HortureLogger (Horture l hdl), AudioRecorder (Horture l hdl)) => Horture l hdl (Float, Float, Float)
+calcCurrentFFTPeak = do
+  (b, m, h) <- currentFFTPeak
+  (bNorm, bst') <- stepBand (realToFrac b) <$> gets (^. audioBandState . abBass)
+  (mNorm, mst') <- stepBand (realToFrac m) <$> gets (^. audioBandState . abMid)
+  (hNorm, hst') <- stepBand (realToFrac h) <$> gets (^. audioBandState . abHigh)
+  audioBandState . abBass .= bst'
+  audioBandState . abMid .= mst'
+  audioBandState . abHigh .= hst'
+  return (bNorm, mNorm, hNorm)
+
+-- stepBand: input in dBFS, output normalized 0..1 (bigger = louder vs baseline)
+stepBand :: Float -> BandState -> (Float, BandState)
+stepBand x (BandState s l p) =
+  let -- EMA params
+      αs = 0.25 -- short EMA (fast)
+      αL_up = 0.01 -- long EMA rises *slowly*
+      αL_down = 0.08 -- long EMA falls faster (prevents “fade-out”)
+      peakHold = 0.985 -- decay per step
+
+      -- update short EMA
+      s' = s + αs * (x - s)
+
+      -- asymmetric long EMA
+      αL = if x > l then αL_up else αL_down
+      l' = l + αL * (x - l)
+
+      -- optional peak-hold (unused in norm below, but handy for UI)
+      p' = max x (p * peakHold)
+
+      -- normalize:
+      -- use dB *difference* with small dead-zone, then scale to 0..1
+      dead = 1.5 -- dB that we ignore
+      delta = max 0 (s' - l' - dead) -- dB above baseline
+      scale = 8.0 -- ~how many dB map to full scale
+      norm = clamp01 (delta / scale)
+   in (norm, BandState s' l' p')
+
+clamp01 :: Float -> Float
+clamp01 = max 0 . min 1
 
 processAudio :: (HortureEffects hdl l) => Maybe Scene -> Horture l hdl (Maybe Scene)
 processAudio Nothing = return Nothing

@@ -25,7 +25,6 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text, unpack)
-import qualified Data.Text as T
 import Foreign hiding (rotate, void)
 import Graphics.GLUtil.Camera3D as Util hiding (orientation)
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, rotate, scale)
@@ -150,8 +149,13 @@ renderBackground dt = do
 
 -- | renderScene renders the captured application window. It is assumed that
 -- the horture texture was already initialized at this point.
-renderScene :: (HortureLogger (Horture l hdl), WindowPoller hdl (Horture l hdl)) => Float -> Scene -> Horture l hdl Scene
-renderScene t scene = do
+renderScene ::
+  ( HortureLogger (Horture l hdl),
+    WindowPoller hdl (Horture l hdl),
+    AudioRecorder (Horture l hdl)
+  ) =>
+  Float -> FFTSnapshot -> Scene -> Horture l hdl Scene
+renderScene t fft scene = do
   let s = scene ^. screen
   screenP <- asks (^. screenProg . shader)
   screenTexUnit <- asks (^. screenProg . textureUnit)
@@ -162,8 +166,6 @@ renderScene t scene = do
   -- Fetch the next frame.
   nextFrame
   -- Apply shaders to captured texture.
-  -- fft <- currentFFTPeak
-  let fft = (0, 0, 0) -- Disable audio-reactive effects for now.
   applySceneShaders fft t scene
   -- Final renderpass rendering scene.
   currentProgram $= Just screenP
@@ -327,33 +329,36 @@ applyScreenBehaviours ::
   (HortureLogger (Horture l hdl)) =>
   FFTSnapshot -> Float -> Object -> Horture l hdl Object
 applyScreenBehaviours fft t screen = do
+  dim <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
+
+  -- accumulate deltas
   let foldOne (Behaviour _ f, bt, lt) acc =
         let τ = case lt of Limited d | d > 0 -> clamp01 ((t - bt) / d); _ -> t
-         in acc <> f fft τ screen
-      delta = foldr foldOne mempty (screen ^. behaviours)
-  resetScreen (applyDelta delta screen)
+         in acc <> f fft τ screen -- f returns a delta; object arg unused
+      BehaviourDelta dp ds dq = foldr foldOne mempty (screen ^. behaviours)
+
+      baseScale = scaleForAspectRatio dim
+      targetScale :: M44 Float = baseScale !*! matScale ds
+      targetPos = V3 0 0 (-1) ^+^ dp
+      targetOri = dq * Quaternion 1 (V3 0 0 0)
+
+      α :: Float = 0.82 -- relax factor; smaller = more inertia
+      s' =
+        screen
+          & scale %~ (\cur -> lerp (v4FromA α) targetScale cur)
+          & pos %~ (\cur -> lerp α targetPos cur)
+          & orientation %~ (\cur -> slerp cur targetOri α)
+
+  pure s'
   where
     clamp01 = max 0 . min 1
-    applyDelta (BehaviourDelta dp ds dq) o =
-      o
-        & scale %~ (!*! matScale ds)
-        & orientation %~ (dq *)
-        & pos %~ (^+^ dp)
-
+    v4FromA a = V4 a a a a
     matScale (V3 sx sy sz) =
       V4
         (V4 sx 0 0 0)
         (V4 0 sy 0 0)
         (V4 0 0 sz 0)
         (V4 0 0 0 1)
-
-resetScreen :: Object -> Horture l hdl Object
-resetScreen s = do
-  dim <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
-  let s' = s & scale %~ \cs -> lerp 0.1 (scaleForAspectRatio dim) cs
-      s'' = s' & orientation %~ \og -> slerp og (Quaternion 1.0 (V3 0 0 0)) 0.01
-      s''' = s'' & pos %~ \op -> lerp 0.1 (V3 0 0 (-1)) op
-  return s'''
 
 trackScreen :: (HortureLogger (Horture l hdl)) => Float -> Object -> Horture l hdl Object
 trackScreen _ screen = do

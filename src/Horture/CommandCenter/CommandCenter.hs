@@ -273,7 +273,7 @@ deriveBaseEventsCC = deriveBaseEvents <$> gets (^. ccEventBaseCost)
 deriveBaseEvents :: Int -> [(Text, Effect, Int)]
 deriveBaseEvents baseCost = do
   let shaderEffs = map (\v -> AddShaderEffect Forever v []) . enumFrom $ minBound
-      behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ o -> identityDelta)) . enumFrom $ minBound
+      behaviourEffs = map (AddScreenBehaviour Forever . (: []) . flip Behaviour (\_ _ _ -> identityDelta)) . enumFrom $ minBound
       counterEffs = [RemoveScreenBehaviour 0, RemoveShaderEffect 0]
       allEffs =
         behaviourEffs

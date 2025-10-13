@@ -7,15 +7,17 @@ import Control.Lens
 import Control.Monad (void, when)
 import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.Reader
+import Data.Default
 import qualified Data.Map as Map
 import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text)
 import qualified Data.Text as T
-import Foreign (Ptr, allocaBytes)
+import Foreign (Ptr, allocaBytes, nullPtr)
 import Foreign.C (CInt, peekCString)
 import Graphics.Rendering.OpenGL.GL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Horture
+import Horture.Audio
 import Horture.Backend.MacOS.Interface
 import Horture.Error
 import Horture.Event
@@ -99,8 +101,9 @@ initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
             _renderBridgeCtx = rb,
             _capture = Nothing,
             _audioRecording = Nothing,
+            _audioBandState = def,
             _audioStorage = storage,
-            _audioState = AudioPlayerState,
+            _audioState = AudioPlayerState {apHandle = nullPtr, apSounds = Map.empty},
             _frameCounter = frameCounter,
             _mvgAvg = fftBuf,
             _dim = sizeRef,

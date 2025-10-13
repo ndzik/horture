@@ -42,6 +42,7 @@ library horture-lib
                             , Horture.Initializer.Environment
                             , Horture.Path
                             , Horture.Audio
+                            , Horture.Audio.Audio
                             , Horture.Audio.Player
                             , Horture.CommandCenter.CommandCenter
                             , Horture.CommandCenter.GUI
@@ -79,7 +80,9 @@ library horture-lib
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
                             , Horture.Backend.Types
+                            , Horture.Audio.MacOS
                             , Horture.Audio.Recorder
+                            , Horture.Audio.Recorder.Horture
                             , Horture.Audio.Player.Player
                             , Horture.Audio.Player.Error
                             , Horture.Audio.Player.Effects
@@ -185,10 +188,13 @@ library horture-lib
         include-dirs: cbits, cbits/macos
         includes: SCShim.h
                 , render_bridge.h
+                , audio_bridge.h
         install-includes: SCShim.h
                         , render_bridge.h
+                        , audio_bridge.h
         c-sources: cbits/macos/SCShim.m
                  , cbits/macos/render_bridge.m
+                 , cbits/macos/audio_bridge.m
         cc-options: -fobjc-arc
         frameworks: ScreenCaptureKit, CoreMedia, CoreVideo, AVFoundation, AppKit
         build-depends: contiguous ==0.6.5.0

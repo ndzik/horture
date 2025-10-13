@@ -675,34 +675,54 @@ audioShader :: ByteString
 audioShader =
   [r|
 #version 410
-
 in vec2 texCoord;
 uniform sampler2D imgTexture;
-uniform float lifetime = 0;
-uniform float dt = 0;
-uniform float frequencies[3] = float[3](0, 0, 0);
-
+uniform float lifetime = 0.0;
+uniform float dt = 0.0;
+uniform float frequencies[3] = float[3](0.0, 0.0, 0.0); // bass, mid, high in 0..1
 layout(location = 0) out vec4 frag_colour;
 
-vec4 applyVisualization(sampler2D tex, vec2 uv, float lifetime, float dt, float freq[3]) {
-  vec4 rgba = texture(tex, uv);
-  const float maxFreq = 16000;
-  float ceil = 250;
-  float fb = clamp(freq[0]*2-1, 0, ceil)/ceil;
-  float fm = clamp(freq[1]*2-1, 0, ceil)/ceil;
-  float fh = clamp(freq[2]*2-1, 0, ceil)/ceil;
-  float r = 2.4 * fb;
-  float g = 1.6 * fm;
-  float b = 1.8 * fh;
-
-  float dtoc = distance(uv, vec2(0.5, 0.5));
-  vec4 tint = vec4(mix(rgba.x, r, 0.4), mix(rgba.y, g, 0.5), mix(rgba.z, b, 0.6), rgba.w);
-  return mix(tint, rgba, clamp(1 + abs(sin(float(freq[0]/500) * uv.x)*cos(float(freq[1]/200) * uv.y))-abs(dtoc * float(freq[0]/(2*ceil))), 0, 1));
-}
-
 void main() {
-  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
-  frag_colour = applyVisualization(imgTexture, uv, lifetime, dt, frequencies);
+  vec2 uv = vec2(texCoord.x, 1.0 - texCoord.y);
+  vec2 C  = vec2(0.5);
+  vec2 v  = uv - C;
+  float rN = length(v) / 0.70710678;                 // 0..1 radius
+  vec2  dir = (rN > 0.0) ? normalize(v) : vec2(1.0,0.0);
+
+  // bands already normalized 0..1
+  float fb = clamp(frequencies[0], 0.0, 1.0);
+  float fm = clamp(frequencies[1], 0.0, 1.0);
+  float fh = clamp(frequencies[2], 0.0, 1.0);
+
+  // Edge-driven vignette; stronger bass pulls inward
+  float reach    = mix(0.92, 0.55, fb);
+  float vignette = smoothstep(reach, 1.0, rN);
+
+  // Subtle mids distortion near edges
+  float waves   = 28.0;
+  float distAmp = 0.0006; // gentle
+  vec2 uvD = uv + vignette * fm * distAmp *
+             vec2(sin((uv.y + dt * 1.4) * waves),
+                  cos((uv.x + dt * 1.2) * waves));
+
+  vec4 base = texture(imgTexture, uvD);
+
+  // Bass: warm orange overlay from edges inward
+  vec3 orange  = vec3(1.0, 0.58, 0.20);
+  float bassAmt = vignette * fb;
+  vec3 bassMix  = mix(base.rgb, mix(base.rgb, orange, 0.6), bassAmt);
+
+  // Highs: slight CA + lift (edge-weighted)
+  float ca = 0.0015 * vignette * fh;
+  float rS = texture(imgTexture, uvD + dir * ca).r;
+  float gS = texture(imgTexture, uvD).g;
+  float bS = texture(imgTexture, uvD - dir * ca).b;
+  vec3  caRGB = vec3(rS, gS, bS);
+
+  vec3 highsLift = vec3(0.10, 0.09, 0.12) * (vignette * fh);
+  vec3 highsMix  = mix(bassMix, caRGB, 0.25 * vignette * fh) + highsLift;
+
+  frag_colour = vec4(highsMix, 1.0);
 }
   |]
 
@@ -710,31 +730,34 @@ bassRealityWarp :: ByteString
 bassRealityWarp =
   [r|
 #version 410
-
 in vec2 texCoord;
 uniform sampler2D imgTexture;
 uniform float lifetime = 0;
 uniform float dt = 0;
-uniform float frequencies[3] = float[3](0, 0, 0);
+uniform float frequencies[3] = float[3](0, 0, 0); // bass, mid, high in 0..1
 uniform float rng;
-
 layout(location = 0) out vec4 frag_colour;
 
 vec4 applyVisualization(sampler2D tex, vec2 uv, float lifetime, float dt, float freq[3]) {
-  float ceil = 350;
-  float factor = 0.00001;
-  float fr = freq[0]*2;
-  float fb = clamp(fr-1, 0, ceil)/ceil;
-  vec2 tuv = vec2(fr*factor*sin(float(fb*dt*rng)) + uv.x, fr*factor*cos(float(fb*dt*rng)*2) + uv.y);
+  float fb = clamp(freq[0], 0.0, 1.0);     // normalized bass
+
+  float factor = 0.0015 * fb;              // displacement scale
+  float speed  = mix(0.6, 2.2, fb);        // mild speed-up with bass
+
+  vec2 tuv1 = uv + vec2( factor * sin(speed * dt * rng),
+                         factor * cos(speed * dt * rng * 2.0));
+  vec2 tuv2 = uv + vec2( factor * cos(speed * dt * rng),
+                         factor * sin(speed * dt * rng * 2.0));
+
   vec4 orgba = texture(tex, uv);
-  vec4 rgba1 = texture(tex, tuv);
-  tuv = vec2(fr*factor*cos(float(fb*dt*rng)) + uv.x, fr*factor*sin(float(fb*dt*rng)*2) + uv.y);
-  vec4 rgba2 = texture(tex, tuv);
-  return mix(mix(orgba, rgba1, float(fb)*0.9), rgba2, float(fb)*0.3);
+  vec4 rgba1 = texture(tex, tuv1);
+  vec4 rgba2 = texture(tex, tuv2);
+
+  return mix(mix(orgba, rgba1, fb * 0.9), rgba2, fb * 0.3);
 }
 
 void main() {
-  vec2 uv = vec2(texCoord.x, 1-texCoord.y);
+  vec2 uv = vec2(texCoord.x, 1.0 - texCoord.y);
   frag_colour = applyVisualization(imgTexture, uv, lifetime, dt, frequencies);
 }
   |]

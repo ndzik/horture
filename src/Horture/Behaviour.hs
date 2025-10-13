@@ -72,9 +72,12 @@ rotate factor =
 audiophile :: Behaviour
 audiophile =
   Behaviour BehaviourAudiophile $ \(bass, _, _) _ _o ->
-    let a = 0.0001
-        s = 1 - a * realToFrac bass
-     in identityDelta {bdScale = V3 s s s}
+    let fb = clamp (realToFrac bass) 0 1
+        k = 0.15 -- max ~15% shrink
+        s = 1 - k * fb
+     in identityDelta {bdScale = V3 s s 1}
+  where
+    clamp x lo hi = max lo (min hi x)
 
 bob :: Float -> Float -> Behaviour
 bob amp freq = Behaviour BehaviourBob $ \_ t _o ->

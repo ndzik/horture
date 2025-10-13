@@ -25,9 +25,10 @@ import Data.Aeson
 import Data.Default
 import Data.Text (Text)
 import qualified Data.Text as T
+import Horture.Audio.Player.Player (Sound (GeneratedSound), flashbangPeep)
 import qualified Horture.Backend as Backend
 import Horture.Behaviour
-import Horture.Effect (Effect (AddScreenBehaviour, AddShaderEffect))
+import Horture.Effect (Effect (AddScreenBehaviour, AddShaderEffect), ShaderEffect (Flashbang))
 import Horture.Event
 import Horture.EventSource.Local (hortureLocalEventSource)
 import Horture.Horture
@@ -159,7 +160,9 @@ wsApp env pending = do
 
 triggerEffect :: EffectRequest -> Chan Event -> IO ()
 triggerEffect (ERShader eff lt) evChan = do
-  writeChan evChan . EventEffect "CC" $ AddShaderEffect lt eff []
+  case eff of
+    Flashbang -> writeChan evChan . EventEffect "CC" $ AddShaderEffect lt eff [GeneratedSound "flashbangPeep" flashbangPeep]
+    _ -> writeChan evChan . EventEffect "CC" $ AddShaderEffect lt eff []
 triggerEffect (ERBehaviour bt lt) evChan = do
   let behaviourList = case bt of
         BehaviourAudiophile -> [audiophile]
