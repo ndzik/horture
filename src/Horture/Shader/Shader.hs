@@ -547,11 +547,38 @@ uniform float dt = 0;
 uniform vec3 frequencies = vec3(0, 0, 0);
 layout(location = 0) out vec4 frag_colour;
 
+vec3 rgb2yiq(vec3 c){
+  return mat3(0.299,  0.587,  0.114,
+              0.596, -0.274, -0.322,
+              0.211, -0.523,  0.312) * c;
+}
+vec3 yiq2rgb(vec3 y){
+  return mat3(1.0,  0.956,  0.621,
+              1.0, -0.272, -0.647,
+              1.0, -1.106,  1.703) * y;
+}
+
 vec4 cycleColours(sampler2D tex, vec2 uv, float lifetime, float dt) {
   vec4 c = texture(tex, uv);
-  float pp = float(dt);
-  vec4 update = vec4(abs(cos(pp * c.x)), abs(sin(pp*c.y)), abs(sin(pp*c.z)*cos(pp*c.z)), 1);
-  return mix(c, update, clamp(float(dt/(lifetime*0.3)), 0.0, 1.0));
+
+  float ang = 1.2 * sin(dt * 0.6) + 0.6 * sin(dt * 0.13);
+  float ca = cos(ang), sa = sin(ang);
+
+  vec3 yiq = rgb2yiq(c.rgb);
+
+  // boost low-chroma content a bit so effect shows up
+  float chroma = length(yiq.yz);
+  float satBoost = mix(1.0, 1.25, smoothstep(0.02, 0.20, chroma));
+  vec2 iqRot = mat2(ca, -sa, sa, ca) * yiq.yz * satBoost;
+
+  // blend rotated chroma toward original (keeps it gentle)
+  yiq.yz = mix(yiq.yz, iqRot, 0.60);
+
+  vec3 outRGB = clamp(yiq2rgb(yiq), 0.0, 1.0);
+
+  // overall subtlety (raised a bit so it's noticeable)
+  float amt = 0.35;
+  return vec4(mix(c.rgb, outRGB, amt), c.a);
 }
 
 void main() {
@@ -646,25 +673,41 @@ float levels = 8.0 - 1.0;
 float contrast = 1.2;
 float brightness = 1.1;
 
-vec3 hsl2rgb(vec3 hsl) {
-    float t = hsl.y * ((hsl.z < 0.5) ? hsl.z : (1.0 - hsl.z));
-    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-    vec3 p = abs(fract(hsl.xxx + K.xyz) * 6.0 - K.www);
-    return (hsl.z + t) * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), 2.0*t / hsl.z);
-}
+// toonShader (edge-aware, gentle posterize)
+float luma(vec3 c){ return dot(c, vec3(0.299,0.587,0.114)); }
 
 vec4 toonify(sampler2D tex, vec2 uv, float lifetime, float dt) {
-  float colorFactor = 1.0;
-  vec4 color = texture(tex, uv);
-  // BT.709 coefficients related to human perception.
-  float grey = 0.21 * color.r + 0.71 * color.g + 0.07 * color.b;
-  grey = clamp(grey * brightness, 0.0, 1.0);
-  float posterized = round(grey * levels) / levels;
-  float contrasted = clamp(contrast * (posterized - 0.5) + 0.5, 0.0, 1.0);
-  vec3 rgb = hsl2rgb(vec3(0.153, 1.0, contrasted));
-  return vec4(rgb, 1.0);
-}
+  vec2 texel = 1.0 / vec2(textureSize(tex, 0));
+  vec3 C  = texture(tex, uv).rgb;
 
+  // Sobel on luminance (edge mask)
+  float tl=luma(texture(tex, uv+texel*vec2(-1, 1)).rgb);
+  float  t=luma(texture(tex, uv+texel*vec2( 0, 1)).rgb);
+  float tr=luma(texture(tex, uv+texel*vec2( 1, 1)).rgb);
+  float  l=luma(texture(tex, uv+texel*vec2(-1, 0)).rgb);
+  float  r=luma(texture(tex, uv+texel*vec2( 1, 0)).rgb);
+  float bl=luma(texture(tex, uv+texel*vec2(-1,-1)).rgb);
+  float  b=luma(texture(tex, uv+texel*vec2( 0,-1)).rgb);
+  float br=luma(texture(tex, uv+texel*vec2( 1,-1)).rgb);
+
+  float gx = (tr + 2.0*r + br) - (tl + 2.0*l + bl);
+  float gy = (bl + 2.0*b + br) - (tl + 2.0*t + tr);
+  float edge = clamp(length(vec2(gx,gy))*1.5, 0.0, 1.0);
+
+  // gentle posterization
+  float levels = 6.0;                         // fewer bands
+  vec3  Q = floor(C*levels)/levels;
+  vec3  P = mix(C, Q, 0.55);                  // keep some detail
+
+  // slight contrast+brightness lift (soft)
+  P = clamp(P*1.06 + 0.02, 0.0, 1.0);
+
+  // draw outlines by darkening along edges
+  float stroke = smoothstep(0.12, 0.45, edge); // soft thresholds
+  vec3  ink    = mix(P, P*0.55, stroke);       // darken, not pure black
+
+  return vec4(ink, 1.0);
+}
 void main() {
   vec2 uv = vec2(texCoord.x, 1-texCoord.y);
   frag_colour = toonify(imgTexture, uv, lifetime, dt);
