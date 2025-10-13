@@ -316,11 +316,42 @@ newRandomAssetAny' assets = do
 newRandomScreenBehaviours :: (LastMember IO effs) => Int -> Eff effs [Behaviour]
 newRandomScreenBehaviours n = do
   shake' <- newRandomShake
-  moveTo' <- newRandomMoveToScreen
-  pulse' <- newRandomPulseScreen
+  moveTo' <- newRandomMoveTo
+  pulse' <- newRandomPulse
+  circle' <- newRandomCircle
   rotate' <- newRandomRotate
-  circle' <- newRandomCircleScreen
-  take n . cycle <$> liftIO (shuffle [moveTo', shake', pulse', rotate', circle', audiophile])
+  audiophile <- newRandomAudiophile
+  orbit' <- newRandomOrbit
+  spiral' <- newRandomSpiralTo
+  wobble' <- newRandomWobble
+  sway' <- newRandomSway
+  bounce' <- newRandomBounce
+  bob' <- newRandomBob
+  flipX' <- newRandomFlipX
+  easeTo' <- newRandomEaseTo
+  jitter' <- newRandomJitter
+  breathe' <- newRandomBreathe
+  take n . cycle
+    <$> liftIO
+      ( shuffle
+          [ shake',
+            moveTo',
+            pulse',
+            rotate',
+            circle',
+            audiophile,
+            orbit',
+            spiral',
+            wobble',
+            sway',
+            bounce',
+            bob',
+            flipX',
+            easeTo',
+            jitter',
+            breathe'
+          ]
+      )
 
 newRandomMoveToScreen :: (LastMember IO effs) => Eff effs Behaviour
 newRandomMoveToScreen = moveTo . V3 0 0 <$> ((+ (-1)) . (/ 1) . negate <$> randomM')
@@ -332,61 +363,114 @@ newRandomBehaviours n = do
   pulse' <- newRandomPulse
   circle' <- newRandomCircle
   rotate' <- newRandomRotate
-  take n . cycle <$> liftIO (shuffle [shake', moveTo', pulse', rotate', circle', audiophile])
+  audiophile <- newRandomAudiophile
+  orbit' <- newRandomOrbit
+  spiral' <- newRandomSpiralTo
+  wobble' <- newRandomWobble
+  sway' <- newRandomSway
+  bounce' <- newRandomBounce
+  bob' <- newRandomBob
+  flipX' <- newRandomFlipX
+  easeTo' <- newRandomEaseTo
+  jitter' <- newRandomJitter
+  breathe' <- newRandomBreathe
+  take n . cycle
+    <$> liftIO
+      ( shuffle
+          [ shake',
+            moveTo',
+            pulse',
+            rotate',
+            circle',
+            audiophile,
+            orbit',
+            spiral',
+            wobble',
+            sway',
+            bounce',
+            bob',
+            flipX',
+            easeTo',
+            jitter',
+            breathe'
+          ]
+      )
+
+randX, randY, randZ :: (LastMember IO effs) => Eff effs Float
+randX = uniformRM' (-0.25) 0.25
+randY = uniformRM' (-0.15) 0.15
+randZ = pure (-1) -- keep on plane
 
 newRandomShake :: (LastMember IO effs) => Eff effs Behaviour
-newRandomShake = shake <$> randomM' <*> uniformRM' 80 160 <*> randomM'
+newRandomShake = shake <$> uniformRM' 0.01 0.04 <*> uniformRM' 0.8 1.3 <*> uniformRM' 2 6
 
 newRandomRotate :: (LastMember IO effs) => Eff effs Behaviour
-newRandomRotate = rotate <$> randomRM' (-1) 1
+newRandomRotate = rotate <$> uniformRM' 0.05 0.5 -- deg per frame (~3–30°/s @60fps)
 
 newRandomFlipX :: (LastMember IO effs) => Eff effs Behaviour
-newRandomFlipX = flipXPulse <$> randomM'
+newRandomFlipX = flipXPulse <$> uniformRM' 0.2 1.0 -- flips per second
 
 newRandomEaseTo :: (LastMember IO effs) => Eff effs Behaviour
-newRandomEaseTo = easeTo <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM')) <*> (uniformRM' 2 6)
+newRandomEaseTo = easeTo <$> (V3 <$> randX <*> randY <*> randZ) <*> uniformRM' 0.6 2.5
 
 newRandomJitter :: (LastMember IO effs) => Eff effs Behaviour
-newRandomJitter = jitter <$> randomM' <*> uniformRM' 20 80
+newRandomJitter = jitter <$> uniformRM' 0.005 0.02 <*> uniformRM' 6 14
 
 newRandomBreathe :: (LastMember IO effs) => Eff effs Behaviour
-newRandomBreathe = breathe <$> randomM' <*> uniformRM' 1 3
+newRandomBreathe = breathe <$> uniformRM' 0.03 0.10 <*> uniformRM' 0.2 0.6
 
 newRandomOrbit :: (LastMember IO effs) => Eff effs Behaviour
-newRandomOrbit = orbit <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM')) <*> uniformRM' 1 3 <*> uniformRM' 1 3
+newRandomOrbit =
+  orbit
+    <$> (V3 <$> randX <*> randY <*> randZ)
+    <*> uniformRM' 0.05 0.15
+    <*> uniformRM' 0.1 0.4
 
 newRandomSpiralTo :: (LastMember IO effs) => Eff effs Behaviour
-newRandomSpiralTo = spiralTo <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM')) <*> uniformRM' 1 3 <*> uniformRM' 1 3
+newRandomSpiralTo =
+  spiralTo
+    <$> (V3 <$> randX <*> randY <*> randZ)
+    <*> uniformRM' 0.3 1.0
+    <*> uniformRM' 0.1 0.5
 
 newRandomWobble :: (LastMember IO effs) => Eff effs Behaviour
-newRandomWobble = wobble <$> randomM' <*> uniformRM' 20 80 <*> randomM'
+newRandomWobble =
+  wobble
+    <$> uniformRM' 2 8 -- rot deg peak
+    <*> uniformRM' 0.05 0.20 -- scale amp
+    <*> uniformRM' 0.5 2.0 -- Hz-ish
 
 newRandomSway :: (LastMember IO effs) => Eff effs Behaviour
-newRandomSway = sway <$> uniformRM' 1 90 <*> uniformRM' 1 3
+newRandomSway = sway <$> uniformRM' 3 15 <*> uniformRM' 0.25 1.5
 
 newRandomBounce :: (LastMember IO effs) => Eff effs Behaviour
-newRandomBounce = bounce <$> randomM' <*> uniformRM' 1 3
+newRandomBounce = bounce <$> uniformRM' 0.02 0.10 <*> uniformRM' 0.6 1.8
 
 newRandomBob :: (LastMember IO effs) => Eff effs Behaviour
-newRandomBob = bob <$> randomM' <*> uniformRM' 1 3
+newRandomBob = bob <$> uniformRM' 0.02 0.06 <*> uniformRM' 0.3 0.8
 
 newRandomMoveTo :: (LastMember IO effs) => Eff effs Behaviour
-newRandomMoveTo = moveTo <$> (V3 <$> randomM' <*> randomM' <*> (negate <$> randomM'))
+newRandomMoveTo = moveTo <$> (V3 <$> randX <*> randY <*> randZ)
 
+-- Pulses:
 newRandomPulseScreen :: (LastMember IO effs) => Eff effs Behaviour
-newRandomPulseScreen = pulse 1 (1 / 100) <$> uniformRM' 20 200
+newRandomPulseScreen = pulse 1.0 (1 / 60) <$> uniformRM' 0.5 2.0 -- ~1–2% scale swing
 
 newRandomPulse :: (LastMember IO effs) => Eff effs Behaviour
-newRandomPulse = pulse <$> randomM' <*> randomM' <*> ((*) <$> uniformRM' 1 10 <*> randomM')
+newRandomPulse =
+  pulse
+    <$> uniformRM' 0.9 1.1 -- base scale
+    <*> uniformRM' 0.03 0.12 -- amp
+    <*> uniformRM' 0.8 3.0 -- freq
 
 newRandomCircle :: (LastMember IO effs) => Eff effs Behaviour
-newRandomCircle = circle 1 <$> ((*) <$> randomM' <*> randomRM' 1 3)
+newRandomCircle = circle <$> uniformRM' 0.05 0.20 <*> uniformRM' 0.2 0.8
 
 newRandomCircleScreen :: (LastMember IO effs) => Eff effs Behaviour
-newRandomCircleScreen = circle (1 / 10) <$> uniformRM' 20 30
+newRandomCircleScreen = circle <$> uniformRM' 0.01 0.03 <*> uniformRM' 0.3 0.8
 
 newRandomAudiophile :: (LastMember IO effs) => Eff effs Behaviour
-newRandomAudiophile = return audiophile
+newRandomAudiophile = pure audiophile
 
 shuffle :: [a] -> IO [a]
 shuffle xs = do
