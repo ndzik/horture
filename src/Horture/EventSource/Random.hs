@@ -305,13 +305,13 @@ newRandomAssetAny' :: (LastMember IO effs) => [FilePath] -> Eff effs Effect
 newRandomAssetAny' assets = do
   AddAsset
     <$> (uniformRM' 0 (length assets - 1) <&> (assets !!))
-    <*> (Limited <$> uniformRM' 8 18)
+    <*> (Limited <$> uniformRM' 4 18)
     <*> ( V3
             <$> (randomM' <&> (sin . (* 20)))
             <*> (randomM' <&> (cos . (* 33)))
             <*> return 0
         )
-    <*> (uniformRM' 0 3 >>= newRandomBehaviours)
+    <*> (uniformRM' 0 16 >>= newRandomBehaviours)
 
 newRandomScreenBehaviours :: (LastMember IO effs) => Int -> Eff effs [Behaviour]
 newRandomScreenBehaviours n = do
@@ -452,7 +452,6 @@ newRandomBob = bob <$> uniformRM' 0.02 0.06 <*> uniformRM' 0.3 0.8
 newRandomMoveTo :: (LastMember IO effs) => Eff effs Behaviour
 newRandomMoveTo = moveTo <$> (V3 <$> randX <*> randY <*> randZ)
 
--- Pulses:
 newRandomPulseScreen :: (LastMember IO effs) => Eff effs Behaviour
 newRandomPulseScreen = pulse 1.0 (1 / 60) <$> uniformRM' 0.5 2.0 -- ~1–2% scale swing
 
