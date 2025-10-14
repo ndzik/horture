@@ -64,10 +64,19 @@ static int bounds_for_window(uint64_t wid, SCRect* out) {
     if (!CGRectMakeWithDictionaryRepresentation(b, &r)) break;
 
     // r is in global screen space, origin at top-left (y down)
-    out->x = (int)llround(r.origin.x);
-    out->y = (int)llround(r.origin.y);
-    out->w = (int)llround(r.size.width);
-    out->h = (int)llround(r.size.height);
+    // Add a small inset so we don't fully occlude GPU-backed windows
+    const int inset = 1;
+    if (r.size.width > 2*inset && r.size.height > 2*inset) {
+        out->x = (int)llround(r.origin.x) + inset;
+        out->y = (int)llround(r.origin.y) + inset;
+        out->w = (int)llround(r.size.width)  - 2*inset;
+        out->h = (int)llround(r.size.height) - 2*inset;
+    } else {
+        out->x = (int)llround(r.origin.x);
+        out->y = (int)llround(r.origin.y);
+        out->w = (int)llround(r.size.width);
+        out->h = (int)llround(r.size.height);
+    }
     rc = 0;
     break;
   }
