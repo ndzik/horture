@@ -17,7 +17,8 @@ import Horture.Program
 import Horture.RenderBridge
 
 data HortureEnv hdl = HortureEnv
-  { _screenProg :: !HortureScreenProgram,
+  { -- READONLY
+    _screenProg :: !HortureScreenProgram,
     _dynamicImageProg :: !HortureDynamicImageProgram,
     _backgroundProg :: !HortureBackgroundProgram,
     _fontProg :: !HortureFontProgram,
@@ -26,6 +27,7 @@ data HortureEnv hdl = HortureEnv
     _logChan :: !(Maybe (Chan Text)),
     _glWin :: !GLFW.Window,
     _backgroundColor :: !(Color4 Float),
+    -- WRITEABLE
     _envHandle :: !(TVar hdl),
     _renderBridgeCtx :: !(TVar (Ptr RB)),
     _audioRecording :: !(MVar AudioRecorderEnv),

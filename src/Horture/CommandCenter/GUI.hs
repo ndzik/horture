@@ -92,14 +92,15 @@ customTheme = baseTheme customColormap
   where
     customColormap =
       darkThemeColors
-        { inputText = black,
-          labelText = black,
-          btnBgBasic = mustardLight,
-          btnBgHover = mustardBase,
-          btnBgFocus = mustardDark,
-          btnBgActive = mustardLight,
+        { inputText = textSecondary,
+          labelText = textbaseColor,
+          btnText = textbaseColor,
+          btnBgBasic = lightColor,
+          btnBgHover = baseColor,
+          btnBgFocus = darkColor,
+          btnBgActive = lightColor,
           btnBgDisabled = gray,
-          btnFocusBorder = mustardHighlight
+          btnFocusBorder = highlightColor
         }
 
 titleSize :: Double
@@ -133,14 +134,14 @@ buildUI _ m =
                       (label (showt (m ^. mFPS))) `styleBasic` [textCenter]
                     ]
                 )
-                  `styleBasic` [bgColor mustardLight, radius 6, padding 4, width 128]
+                  `styleBasic` [bgColor lightColor, radius 6, padding 4, width 128]
             ]
             `styleBasic` [padding 8],
           hstack
             [ filler,
               boxShadow $
                 (capturedWinW m)
-                  `styleBasic` [bgColor mustardLight, radius 6, padding 4],
+                  `styleBasic` [bgColor lightColor, radius 6, padding 4],
               filler
             ]
         ],
@@ -156,7 +157,7 @@ buildUI _ m =
                       `styleBasic` [padding 8, radius 6]
                   ]
               )
-              `styleBasic` [bgColor mustardLight, radius 6, padding 4],
+              `styleBasic` [bgColor lightColor, radius 6, padding 4],
           spacer,
           boxShadow $
             box
@@ -168,7 +169,7 @@ buildUI _ m =
                       `styleBasic` [padding 8, radius 6, height 300]
                   ]
               )
-              `styleBasic` [bgColor mustardLight, radius 6, padding 4]
+              `styleBasic` [bgColor lightColor, radius 6, padding 4]
         ]
         `styleBasic` [paddingT 4],
       spacer,
@@ -181,7 +182,7 @@ buildUI _ m =
             ]
             `styleBasic` []
         )
-          `styleBasic` [bgColor mustardLight, padding 8, radius 6],
+          `styleBasic` [bgColor lightColor, padding 8, radius 6],
       spacer,
       scroll_ [wheelRate 40] $
         vstack
@@ -199,7 +200,7 @@ buildUI _ m =
                         ]
                     )
                 ]
-                `styleBasic` [bgColor mustardLight, padding 4, radius 6],
+                `styleBasic` [bgColor lightColor, padding 4, radius 6],
             spacer,
             boxShadow . box_ [expandContent] $
               vstack
@@ -215,10 +216,10 @@ buildUI _ m =
                         ]
                     )
                 ]
-                `styleBasic` [bgColor mustardLight, padding 4, radius 6]
+                `styleBasic` [bgColor lightColor, padding 4, radius 6]
           ]
     ]
-    `styleBasic` [bgColor mustardBase]
+    `styleBasic` [bgColor baseColor]
   where
     assetList =
       if null (m ^. mAssets)
@@ -260,10 +261,14 @@ defaultLifetime = Limited 10
 behaviourButton :: BehaviourType -> WidgetNode CCModel CCEvent
 behaviourButton bt =
   button (T.pack $ show bt) (EvSendEffect (ERBehaviour bt defaultLifetime))
+    `styleBasic` [width 240, bgColor baseColor, paddingT 4]
+    `styleHover` [bgColor darkColor]
 
 shaderButton :: ShaderEffect -> WidgetNode CCModel CCEvent
 shaderButton se =
   button (T.pack $ show se) (EvSendEffect (ERShader se defaultLifetime))
+    `styleBasic` [width 240, bgColor baseColor, paddingT 4]
+    `styleHover` [bgColor darkColor]
 
 buttonGrid :: Int -> [WidgetNode CCModel CCEvent] -> WidgetNode CCModel CCEvent
 buttonGrid cols btns =
@@ -274,12 +279,36 @@ buttonGrid cols btns =
       let (ys, zs) = splitAt n xs
        in ys : chunk n zs
 
-mustardBase, mustardLight, mustardDark, mustardHighlight, softRed :: Color
-mustardDark = rgbHex "#f2d279"
-mustardBase = rgbHex "#f4d88b"
-mustardLight = rgbHex "#f8e7b9"
-mustardHighlight = rgbHex "#d19f15"
-softRed = rgbHex "#f5655b"
+-- baseColor, lightColor, darkColor, highlightColor, softRed :: Color
+-- darkColor = rgbHex "#f2d279"
+-- baseColor = rgbHex "#f4d88b"
+-- lightColor = rgbHex "#f8e7b9"
+-- highlightColor = rgbHex "#d19f15"
+-- softRed = rgbHex "#f5655b"
+
+baseColor :: Color
+baseColor = rgbHex "#1E1E1E" -- deep neutral base, not pure black
+
+darkColor :: Color
+darkColor = rgbHex "#121212" -- almost black; background panels
+
+lightColor :: Color
+lightColor = rgbHex "#2A2A2A" -- subtle separation layers / cards
+
+highlightColor :: Color
+highlightColor = rgbHex "#3A6EA5" -- cold steel-blue accent for focus/hover
+
+softRed :: Color
+softRed = rgbHex "#D35F5F" -- muted alert tone that fits the palette
+
+textSecondary :: Color
+textSecondary = rgbHex "#A0A0A0"
+
+textbaseColor :: Color
+textbaseColor = rgbHex "#DADADA"
+
+_textDisabled :: Color
+_textDisabled = rgbHex "#666666"
 
 handleEvent ::
   WidgetEnv CCModel CCEvent ->
