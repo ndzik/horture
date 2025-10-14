@@ -23,7 +23,6 @@ import Control.Lens
 import Control.Monad (unless, void, when)
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.State
 import Data.Bifunctor
 import Data.Default
 import qualified Data.Map.Strict as Map
@@ -109,12 +108,12 @@ playScene s = do
 calcCurrentFFTPeak :: (HortureLogger (Horture l hdl), AudioRecorder (Horture l hdl)) => Horture l hdl (Float, Float, Float)
 calcCurrentFFTPeak = do
   (b, m, h) <- currentFFTPeak
-  (bNorm, bst') <- stepBand (realToFrac b) <$> gets (^. audioBandState . abBass)
-  (mNorm, mst') <- stepBand (realToFrac m) <$> gets (^. audioBandState . abMid)
-  (hNorm, hst') <- stepBand (realToFrac h) <$> gets (^. audioBandState . abHigh)
-  audioBandState . abBass .= bst'
-  audioBandState . abMid .= mst'
-  audioBandState . abHigh .= hst'
+  absTvar <- asks (^. audioBandState)
+  abs <- liftIO . readTVarIO $ absTvar
+  let (bNorm, bst') = stepBand (realToFrac b) $ abs ^. abBass
+  let (mNorm, mst') = stepBand (realToFrac m) $ abs ^. abMid
+  let (hNorm, hst') = stepBand (realToFrac h) $ abs ^. abHigh
+  liftIO . atomically . writeTVar absTvar $ (AllBands {_abMid = mst', _abHigh = hst', _abBass = bst'})
   return (bNorm, mNorm, hNorm)
 
 -- stepBand: input in dBFS, output normalized 0..1 (bigger = louder vs baseline)
@@ -154,7 +153,9 @@ processAudio (Just s) = do
   return $ Just s
 
 countFrame :: Horture l hdl ()
-countFrame = gets (^. frameCounter) >>= liftIO . atomically . flip modifyTVar' (+ 1)
+countFrame = do
+  fc <- asks (^. frameCounter)
+  liftIO . atomically . modifyTVar' fc $ (+ 1)
 
 clearView :: Horture l hdl ()
 clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]

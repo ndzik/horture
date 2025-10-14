@@ -5,31 +5,23 @@
 module Horture.Horture
   ( Horture (..),
     runHorture,
-    evalHorture,
     LoggingTarget (..),
   )
 where
 
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.State
 import Horture.Error
 import Horture.State
 
 data LoggingTarget = Channel | NoLog deriving (Show)
 
 newtype Horture (l :: LoggingTarget) hdl a = Horture
-  { unHorture :: ExceptT HortureError (StateT (HortureState hdl) (ReaderT HortureStatic IO)) a
+  { unHorture :: ExceptT HortureError ((ReaderT (HortureEnv hdl) IO)) a
   }
   deriving (Functor, Applicative, Monad, MonadIO)
 
-instance MonadState (HortureState hdl) (Horture l hdl) where
-  get = Horture get
-  {-# INLINEABLE get #-}
-  put s = Horture $ put s
-  {-# INLINEABLE put #-}
-
-instance MonadReader HortureStatic (Horture l hdl) where
+instance MonadReader (HortureEnv hdl) (Horture l hdl) where
   ask = Horture ask
   {-# INLINEABLE ask #-}
   local mod (Horture h) = Horture $ local mod h
@@ -41,8 +33,5 @@ instance MonadError HortureError (Horture l hdl) where
   catchError (Horture act) h = Horture $ catchError act (unHorture . h)
   {-# INLINEABLE catchError #-}
 
-runHorture :: HortureState hdl -> HortureStatic -> Horture l hdl a -> IO (Either HortureError a)
-runHorture ss rs = flip runReaderT rs . flip evalStateT ss . runExceptT . unHorture
-
-evalHorture :: HortureState hdl -> HortureStatic -> Horture l hdl a -> IO (Either HortureError a, HortureState hdl)
-evalHorture ss rs = flip runReaderT rs . flip runStateT ss . runExceptT . unHorture
+runHorture :: HortureEnv hdl -> Horture l hdl a -> IO (Either HortureError a)
+runHorture rs = flip runReaderT rs . runExceptT . unHorture

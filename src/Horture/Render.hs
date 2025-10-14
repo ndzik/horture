@@ -10,14 +10,11 @@ module Horture.Render
 where
 
 import Codec.Picture.Gif
--- import Horture.Audio.PipeWire ()
-
 import Control.Concurrent.STM (readTVarIO)
 import Control.Lens
 import Control.Monad (foldM_)
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.State
 import Data.Bits hiding (rotate)
 import Data.Default
 import Data.Foldable (foldrM)
@@ -200,7 +197,7 @@ applyShaderEffect ::
   (TextureObject, TextureObject) ->
   Horture l hdl (TextureObject, TextureObject)
 applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
-  (tw, th) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
+  (tw, th) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
   shaderProgs <-
     asks (Map.lookup eff . (^. screenProg . shaderEffects)) >>= \case
       Nothing -> throwError $ HE "unhandled shadereffect encountered"
@@ -232,9 +229,9 @@ newRandomNumber = liftIO $ randomM globalStdGen
 
 renderEventList :: (HortureLogger (Horture l hdl)) => Float -> Horture l hdl ()
 renderEventList timeNow = do
-  gets (^. eventList) >>= liftIO . RingBuffer.toList >>= \evs -> do
-    let numOfLines = length evs - 1
-    go numOfLines 0 $ map (\pe@(PastEvent bt _ _) -> (bt, show pe)) evs
+  evs <- asks (^. eventList) >>= liftIO . readTVarIO >>= liftIO . RingBuffer.toList
+  let numOfLines = length evs - 1
+  go numOfLines 0 $ map (\pe@(PastEvent bt _ _) -> (bt, show pe)) evs
   where
     height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
     showTime = 16
@@ -262,7 +259,7 @@ renderActiveEffectText s = do
 
 renderEffectList :: (HortureLogger (Horture l hdl)) => [(Text, Int)] -> Horture l hdl ()
 renderEffectList effs = do
-  (_, top) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
+  (_, top) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
   let height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
   go top height effs 0
   where
@@ -287,7 +284,7 @@ renderText txt posi opacity = do
   blend $= Enabled
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
   uniform ou $= opacity
-  (screenW, screenH) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
+  (screenW, screenH) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
   renderWord (screenW, screenH) mu posi word
   blend $= Disabled
   where
@@ -332,7 +329,7 @@ applyScreenBehaviours ::
   (HortureLogger (Horture l hdl)) =>
   FFTSnapshot -> Float -> Object -> Horture l hdl Object
 applyScreenBehaviours fft t screen = do
-  dim <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
+  dim <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
 
   -- accumulate deltas
   let foldOne (Behaviour _ f, bt, lt) acc =
@@ -378,7 +375,7 @@ projectScreen :: (HortureLogger (Horture l hdl)) => Object -> Horture l hdl Obje
 projectScreen s = do
   modelUniform <- asks (^. screenProg . modelUniform)
   projectionUniform <- asks (^. screenProg . projectionUniform)
-  (w, h) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
+  (w, h) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
   let proj = projectionForAspectRatio (w, h)
   liftIO $ m44ToGLmatrix proj >>= (uniform projectionUniform $=)
   liftIO $ m44ToGLmatrix (model s) >>= (uniform modelUniform $=)

@@ -4,11 +4,11 @@
 
 module Horture.Audio.Player.Horture where
 
+import Control.Concurrent.STM (atomically, readTVarIO, writeTVar)
 import Control.Lens
 import Control.Monad (void, when)
 import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.Reader
-import Control.Monad.State
 import Foreign (nullPtr)
 import Horture.Audio.MacOS
 import Horture.Audio.Player.Effects
@@ -28,32 +28,30 @@ instance (HortureLogger (Horture l hdl)) => AudioPlayer (Horture l hdl) where
 
 withHortureAudio :: Horture l hdl a -> Horture l hdl ()
 withHortureAudio action = do
-  s0 <- get
   env <- ask
-  let acquire = evalHorture s0 env initHortureAudio
-      runA (_, s1) = runHorture s1 env action
-      release (_, s1) = runHorture s1 env clearHortureAudio
-  void $ liftIO $ bracket acquire release runA
+  let acquire = runHorture env initHortureAudio
+      runA _ = runHorture env action
+      release _ = runHorture env clearHortureAudio
+  void . liftIO $ bracket acquire release runA
 
 initHortureAudio :: Horture l hdl ()
 initHortureAudio = do
   ctx <- liftIO nativeInitPlayer
   when (apHandle ctx == nullPtr) $
     throwError AudioSinkInitializationErr
-  modify $ \st -> st & audioState .~ ctx
+  asks (^. audioState) >>= liftIO . atomically . flip writeTVar ctx
 
 deinitHortureAudio :: Horture l hdl ()
 deinitHortureAudio = do
-  m <- gets _audioState
+  m <- asks _audioState >>= liftIO . readTVarIO
   liftIO $ nativeDeinitPlayer m
 
 clearHortureAudio :: Horture l hdl ()
 clearHortureAudio = do
-  m <- gets _audioState
+  m <- asks _audioState >>= liftIO . readTVarIO
   liftIO $ nativeClearAudio m
 
 playHortureAudio :: Sound StaticSoundEffect -> Horture l hdl ()
 playHortureAudio sound = do
-  m <- gets _audioState
-  liftIO $ print $ "Playing sound: " ++ show sound
+  m <- asks _audioState >>= liftIO . readTVarIO
   liftIO $ nativePlayAudio m sound

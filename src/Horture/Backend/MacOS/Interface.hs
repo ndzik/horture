@@ -15,7 +15,6 @@ import Control.Concurrent.STM (atomically, readTVarIO, writeTVar)
 import Control.Lens
 import Control.Monad (forM_, when)
 import Control.Monad.Reader
-import Control.Monad.State
 import Data.IORef
 import qualified Data.Text as T
 import qualified Data.Text.Foreign as TF
@@ -28,7 +27,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import Horture.Asset (HasTextureObject (textureObject))
 import Horture.Horture
 import Horture.Logging
-import Horture.Program (HasBackTextureObject (backTextureObject), HasShader (shader), HasTextureUnit (textureUnit), HasUVInsetUniform (uVInsetUniform))
+import Horture.Program (HasBackTextureObject (backTextureObject), HasTextureUnit (textureUnit))
 import Horture.RenderBridge
 import Horture.State
 import Horture.WindowGrabber
@@ -103,7 +102,7 @@ instance
   WindowPoller hdl (Horture l hdl)
   where
   pollWindowEnvironment = do
-    h <- gets (^. envHandle)
+    h <- asks (^. envHandle) >>= liftIO . readTVarIO
     win <- asks (^. glWin)
     let wid = chWinId h
     rc <- liftIO $ alloca $ \p -> do
@@ -116,11 +115,11 @@ instance
           GLFW.setWindowPos win (fromIntegral x) (fromIntegral y)
           GLFW.setWindowSize win (fromIntegral w) (fromIntegral h)
   nextFrame = do
-    rb <- gets (^. renderBridgeCtx)
+    rb <- asks (^. renderBridgeCtx) >>= liftIO . readTVarIO
     texUnit <- asks (^. screenProg . textureUnit)
     texObj <- asks (^. screenProg . textureObject)
     backTexObj <- asks (^. screenProg . backTextureObject)
-    sizeRef <- gets (^. dim)
+    sizeRef <- asks (^. dim)
     -- Ensure the target texture is bound!
     liftIO $ do
       alloca $ \pf -> do

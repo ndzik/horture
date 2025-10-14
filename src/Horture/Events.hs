@@ -1,10 +1,10 @@
 module Horture.Events (pollHortureEvents) where
 
 import Control.Concurrent.Chan.Synchronous
+import Control.Concurrent.STM (readTVarIO)
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.State
 import qualified Data.RingBuffer as Ringbuffer
 import Horture.Command
 import Horture.Effect
@@ -28,7 +28,8 @@ pollHortureEvents timeNow dt s = do
 
 handleHortureEvent :: Float -> Float -> Event -> Scene -> Horture l hdl (Maybe Scene)
 handleHortureEvent timeNow dt (EventEffect n eff) s = do
-  gets (^. eventList) >>= liftIO . Ringbuffer.append (PastEvent timeNow n eff)
+  rb <- asks (^. eventList) >>= liftIO . readTVarIO
+  liftIO $ Ringbuffer.append (PastEvent timeNow n eff) rb
   Just <$> applyEffect timeNow dt s eff
 handleHortureEvent _ _ (EventCommand Exit) _ = return Nothing
 handleHortureEvent _ _ (EventCommand _cmd) _ = throwError $ HE "unimplemented"

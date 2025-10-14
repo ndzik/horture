@@ -1,6 +1,6 @@
 module Horture.Backend.MacOS.Initializer (initialize) where
 
-import Control.Concurrent (putMVar)
+import Control.Concurrent (newEmptyMVar, putMVar)
 import Control.Concurrent.Chan.Synchronous
 import Control.Concurrent.STM (TVar, newTVarIO)
 import Control.Lens
@@ -65,7 +65,7 @@ initialize ::
   Maybe (Chan Text) ->
   Chan Event ->
   HortureInitializer l hdl ()
-initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
+initialize startScene loadedImages _loadedSounds frameCounter logChan evChan = do
   glW <- liftIO initGLFW
   capHandle <- grabAnyWindow
 
@@ -89,30 +89,35 @@ initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
   liftIO $ GL.viewport $= (Position 0 0, Size (fromIntegral wa_width) (fromIntegral wa_height))
 
   sizeRef <- liftIO $ newTVarIO (wa_width, wa_height)
+  tvarEnvHandle <-
+    liftIO . newTVarIO $
+      CaptureHandle
+        { chWinId = chWinId capHandle,
+          chTitle = chTitle capHandle,
+          chStop = c_rb_stop rb >> c_rb_destroy rb
+        }
+  tvarRenderBridge <- liftIO $ newTVarIO rb
+  mvarAudioRecording <- liftIO newEmptyMVar
+  tvarAllBands <- liftIO $ newTVarIO def
+  tvarAudioState <- liftIO $ newTVarIO AudioPlayerState {apHandle = nullPtr, apSounds = Map.empty}
+  tvarMvAvg <- liftIO $ newTVarIO fftBuf
+  tvarEventBuf <- liftIO $ newTVarIO evBuf
 
   let scene = startScene {_assetCache = dip ^. assets}
-      hs =
-        HortureState
-          { _envHandle =
-              CaptureHandle
-                { chWinId = chWinId capHandle,
-                  chTitle = chTitle capHandle,
-                  chStop = c_rb_stop rb >> c_rb_destroy rb
-                },
-            _renderBridgeCtx = rb,
-            _capture = Nothing,
-            _audioRecording = Nothing,
-            _audioBandState = def,
-            _audioStorage = storage,
-            _audioState = AudioPlayerState {apHandle = nullPtr, apSounds = Map.empty},
-            _frameCounter = frameCounter,
-            _mvgAvg = fftBuf,
-            _dim = sizeRef,
-            _eventList = evBuf
-          }
   let hc =
-        HortureStatic
-          { _screenProg = hsp,
+        HortureEnv
+          { _envHandle = tvarEnvHandle,
+            _renderBridgeCtx = tvarRenderBridge,
+            _audioRecording = mvarAudioRecording,
+            _audioBandState = tvarAllBands,
+            _audioStorage = storage,
+            _audioState = tvarAudioState,
+            _frameCounter = frameCounter,
+            _mvgAvg = tvarMvAvg,
+            _dim = sizeRef,
+            _eventList = tvarEventBuf,
+            -- READONLY
+            _screenProg = hsp,
             _dynamicImageProg = dip,
             _backgroundProg = hbp,
             _fontProg = ftp,
@@ -126,11 +131,11 @@ initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
     Just chan -> do
       liftIO . print @Text $ "Starting with logging to channel"
       liftIO $
-        runHorture hs hc (playScene @'Channel scene) >>= \case
+        runHorture hc (playScene @'Channel scene) >>= \case
           Left err -> writeChan chan . T.pack . show $ err
           _otherwise -> return ()
     Nothing -> do
       liftIO . print @Text $ "Starting without logging"
-      void . liftIO $ runHorture hs hc (playScene @'NoLog scene)
+      void . liftIO $ runHorture hc (playScene @'NoLog scene)
   liftIO $ GLFW.destroyWindow glW
   liftIO GLFW.terminate
