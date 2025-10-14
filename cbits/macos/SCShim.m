@@ -42,54 +42,41 @@ void sc_list_windows(WindowCB cb, void* user) {
   }
 }
 
-int sc_get_window_rect(uint64_t wid, SCRect* out) {
+static int bounds_for_window(uint64_t wid, SCRect* out) {
   if (!out) return -1;
 
-  NSError *err = nil;
-  SCShareableContent *content = fetchContent(&err);
-  if (!content) return -2;
+  CFArrayRef arr = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
+  if (!arr) return -2;
 
-  SCWindow *target = nil;
-  for (SCWindow* w in content.windows)
-    if ((uint64_t)w.windowID == wid) { target = w; break; }
-  if (!target) return -3;
+  int rc = -3;
+  CFIndex n = CFArrayGetCount(arr);
+  for (CFIndex i = 0; i < n; i++) {
+    CFDictionaryRef d = (CFDictionaryRef)CFArrayGetValueAtIndex(arr, i);
+    CFNumberRef num = (CFNumberRef)CFDictionaryGetValue(d, kCGWindowNumber);
+    int64_t id64 = 0;
+    if (num) CFNumberGetValue(num, kCFNumberSInt64Type, &id64);
+    if ((uint64_t)id64 != wid) continue;
 
-  // Pick hosting screen by window center
-  NSPoint center = NSMakePoint(NSMidX(target.frame), NSMidY(target.frame));
-  NSScreen *host = nil;
-  for (NSScreen *s in [NSScreen screens]) {
-    if (NSPointInRect(center, s.frame)) { host = s; break; }
+    CFDictionaryRef b = (CFDictionaryRef)CFDictionaryGetValue(d, kCGWindowBounds);
+    if (!b) break;
+
+    CGRect r;
+    if (!CGRectMakeWithDictionaryRepresentation(b, &r)) break;
+
+    // r is in global screen space, origin at top-left (y down)
+    out->x = (int)llround(r.origin.x);
+    out->y = (int)llround(r.origin.y);
+    out->w = (int)llround(r.size.width);
+    out->h = (int)llround(r.size.height);
+    rc = 0;
+    break;
   }
-  if (!host) host = [NSScreen mainScreen];
+  CFRelease(arr);
+  return rc;
+}
 
-  NSScreen *primary = [NSScreen mainScreen];
-
-  // Frames in global points; Y up.
-  NSRect f = target.frame;
-  // TODO: Really required?
-  CGFloat scaleHost = host.backingScaleFactor ?: 1.0;
-
-  int xpx = (int)llround(f.origin.x);
-  int wpx = (int)llround(f.size.width);
-  int hpx = (int)llround(f.size.height);
-  int ypx = (int)llround(f.origin.y);
-
-  // 1 pixel in pixel space
-  // Need a visible border inset to avoid completely occluding the target window.
-  const int inset = 1;
-  if (wpx > 2*inset && hpx > 2*inset) {
-    out->x = xpx + inset;
-    out->y = ypx + inset;
-    out->w = wpx - 2*inset;
-    out->h = hpx - 2*inset;
-  } else {
-    // fallback
-    out->x = xpx;
-    out->y = ypx;
-    out->w = wpx;
-    out->h = hpx;
-  }
-  return 0;
+int sc_get_window_rect(uint64_t wid, SCRect* out) {
+  return bounds_for_window(wid, out);
 }
 
 @interface _SCOut : NSObject <SCStreamOutput>
