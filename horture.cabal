@@ -157,6 +157,7 @@ library horture-lib
                             , GLUtil
                             , monomer
                             , network
+                            , clock
 
     ghc-options:            -Wall
                             -fno-warn-name-shadowing

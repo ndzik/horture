@@ -76,26 +76,27 @@ playScene s = do
             (_, timeSince) <- deltaTime 0
             clearView
             fft <- calcCurrentFFTPeak
-            renderBackground lt
-            s <- renderScene timeSince fft s
-            renderAssets timeSince . _assets $ s
-            renderActiveEffectText s
-            renderEventList timeSince
-            updateView
-            countFrame
-            timeNow <- getTime
-            pollEvents s timeNow timeSince >>= processAudio <&> (purge timeNow <$>)
+            _ <- timeCPU "Render background" $ renderBackground lt
+            s <- timeCPU "Render whole scene" $ renderScene timeSince fft s
+            _ <- timeCPU "Render assets" $ renderAssets timeSince . _assets $ s
+            _ <- timeCPU "Render active text" $ renderActiveEffectText s
+            _ <- timeCPU "Render event list" $ renderEventList timeSince
+            _ <- timeCPU "Update view" $ updateView
+            _ <- timeCPU "Counting frame" $ countFrame
+            timeNow <- timeCPU "Getting time" $ getTime
+            (timeCPU "Polling events" $ pollEvents s timeNow timeSince) >>= processAudio <&> (purge timeNow <$>)
       s <-
-        action
-          `catchError` ( \err -> do
-                           handleHortureError err
-                           logWarn "resetting scene & continuing..."
-                           return $ Just s
-                       )
-      deltaTime lt >>= \(timeSinceFrame, _) ->
-        when (timeSinceFrame < frameTime) $
-          liftIO . threadDelay . round $
-            (frameTime - timeSinceFrame) * 1000 * 1000
+        timeCPU "Horture action" $
+          action
+            `catchError` ( \err -> do
+                             handleHortureError err
+                             logWarn "resetting scene & continuing..."
+                             return $ Just s
+                         )
+      -- deltaTime lt >>= \(timeSinceFrame, _) ->
+      --   when (timeSinceFrame < frameTime) $
+      --     liftIO . threadDelay . round $
+      --       (frameTime - timeSinceFrame) * 1000 * 1000
       newTime <- getTime
       go newTime s
     handleHortureError (HE err) = logError . pack $ err

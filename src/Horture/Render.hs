@@ -6,6 +6,7 @@ module Horture.Render
     renderEventList,
     renderScene,
     indexForGif,
+    timeCPU,
   )
 where
 
@@ -22,6 +23,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text, unpack)
+import qualified Data.Text as T
 import Foreign hiding (rotate, void)
 import Graphics.GLUtil.Camera3D as Util hiding (orientation)
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, rotate, scale)
@@ -45,6 +47,7 @@ import Linear.Quaternion
 import Linear.V3
 import Linear.V4
 import Linear.Vector
+import qualified System.Clock as Clock
 import System.Random.Stateful (globalStdGen, randomM)
 
 renderAssets :: forall l hdl. (HortureLogger (Horture l hdl)) => Float -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
@@ -161,15 +164,24 @@ renderScene t fft scene = do
   activeTexture $= screenTexUnit
   textureBinding Texture2D $= Just sourceTexObject
   -- Fetch the next frame.
-  nextFrame
+  _ <- timeCPU "Frame fetch" nextFrame
   -- Apply shaders to captured texture.
-  applySceneShaders fft t scene
+  _ <- timeCPU "Apply scene shaders" $ applySceneShaders fft t scene
   -- Final renderpass rendering scene.
   currentProgram $= Just screenP
   -- Apply behavioural effects to the scene itself.
-  s <- applyScreenBehaviours fft t s >>= trackScreen t >>= projectScreen
+  s <- (timeCPU "Apply screen behaviours" $ applyScreenBehaviours fft t s) >>= (timeCPU "tracking screen" . trackScreen t) >>= (timeCPU "projecting screen" . projectScreen)
   drawBaseQuad
   return $ scene {_screen = s}
+
+timeCPU :: Text -> Horture l hdl a -> Horture l hdl a
+timeCPU label action = do
+  start <- liftIO $ Clock.getTime Clock.Monotonic
+  result <- action
+  end <- liftIO $ Clock.getTime Clock.Monotonic
+  let ms :: Double = fromIntegral (Clock.toNanoSecs (end - start)) / 1e6
+  liftIO . print $ label <> " (ms): " <> (T.pack $ show ms)
+  return result
 
 -- | Applies all shader effects in the current scene to the captured window.
 applySceneShaders :: (HortureLogger (Horture l hdl)) => FFTSnapshot -> Float -> Scene -> Horture l hdl ()

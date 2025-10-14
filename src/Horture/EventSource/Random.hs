@@ -47,8 +47,8 @@ runStaticEffectRandomizer ::
   Eff (RandomizeEffect : effs) x ->
   Eff effs x
 runStaticEffectRandomizer = interpret $ \case
-  RandomizeEffect (AddAsset "" _ _ _) -> newRandomAssetAny
-  RandomizeEffect (AddAsset fp _ _ _) -> newRandomAssetWith fp
+  RandomizeEffect (AddAsset "" _ _ _) -> return Noop -- newRandomAssetAny
+  RandomizeEffect (AddAsset fp _ _ _) -> return Noop -- newRandomAssetWith fp
   RandomizeEffect (AddScreenBehaviour _ [Behaviour bht _]) -> case bht of
     BehaviourPulse -> mkRandomScreenEffect <*> ((: []) <$> newRandomPulseScreen)
     BehaviourShake -> mkRandomScreenEffect <*> ((: []) <$> newRandomShake)
@@ -68,7 +68,7 @@ runStaticEffectRandomizer = interpret $ \case
     BehaviourBob -> mkRandomScreenEffect <*> ((: []) <$> newRandomBob)
   RandomizeEffect AddScreenBehaviour {} -> newRandomScreenEffect
   RandomizeEffect (AddShaderEffect _ se _) -> randomizeShaderEffect se
-  RandomizeEffect AddRapidFire {} -> newRapidFireEffect
+  RandomizeEffect AddRapidFire {} -> return Noop -- newRapidFireEffect
   RandomizeEffect (RemoveShaderEffect _) -> RemoveShaderEffect <$> randomM'
   RandomizeEffect (RemoveScreenBehaviour _) -> RemoveScreenBehaviour <$> randomM'
   RandomizeEffect Noop -> return Noop
@@ -257,7 +257,8 @@ newRandomEffect ::
   Eff effs Effect
 newRandomEffect =
   randomM' @_ @Float >>= \r ->
-    let effects = [newRandomAsset, newRandomScreenEffect, newRandomShaderEffect, newRandomPurgeEffect, newRandomRapidFireEffect]
+    let -- effects = [newRandomAsset, newRandomScreenEffect, newRandomShaderEffect, newRandomPurgeEffect, newRandomRapidFireEffect]
+        effects = [newRandomAsset, newRandomScreenEffect, newRandomShaderEffect, newRandomPurgeEffect]
         n = length effects
         idx = floor (r * fromIntegral n) `mod` n
      in effects !! idx
