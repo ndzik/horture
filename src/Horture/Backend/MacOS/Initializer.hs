@@ -79,9 +79,10 @@ initialize startScene loadedImages loadedSounds frameCounter logChan evChan = do
   storage <- liftIO $ newTVarIO Nothing
   evBuf <- liftIO $ RingBuffer.new 4
   fftBuf <- liftIO $ RingBuffer.new 8
+  mFont <- asks (^. defaultFont)
   let wa_width = 1028
       wa_height = 720
-  (hsp, dip, hbp, ftp) <- liftIO $ initResources (wa_width, wa_height) loadedImages Nothing
+  (hsp, dip, hbp, ftp) <- liftIO $ initResources (wa_width, wa_height) loadedImages mFont
 
   liftIO $ GLFW.setFramebufferSizeCallback glW (Just resizeWindow')
   liftIO $ GLFW.setWindowSize glW (fromIntegral wa_width) (fromIntegral wa_height)

@@ -1,12 +1,20 @@
-module Horture.Loader.FontLoader where
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE RecordWildCards #-}
 
-import Control.Lens
+module Horture.Loader.FontLoader
+  ( FontLoader,
+    FontLoaderEnv (..),
+    runFontLoader,
+    loadFont,
+  )
+where
+
 import Control.Loop
 import Control.Monad.Reader
 import qualified Data.Map.Strict as Map
 import Data.Word
 import Foreign hiding (void)
--- import FreeType
+import Foreign.C
 import Graphics.GL.Functions (glPixelStorei)
 import Graphics.GL.Tokens
 import Graphics.Rendering.OpenGL
@@ -18,65 +26,135 @@ data FontLoaderEnv = FontLoaderEnv
     _fontLoaderEnvTexUni :: !UniformLocation
   }
 
-makeLenses ''FontLoaderEnv
-
 type FontLoader a = ReaderT FontLoaderEnv IO a
 
 runFontLoader :: TextureUnit -> UniformLocation -> FontLoader a -> IO a
 runFontLoader tu tuni act = runReaderT act (FontLoaderEnv tu tuni)
 
 loadFont :: FilePath -> FontLoader (Map.Map Char Character)
-loadFont fp = do
-  undefined
+loadFont fp = loadFontInternal fp characterHeight
 
---   tu <- asks _fontLoaderEnvTextureUnit
---   fontTexUni <- asks _fontLoaderEnvTexUni
---   activeTexture $= tu
---   liftIO $
---     ft_With_FreeType $ \lib ->
---       ft_With_Face lib fp 0 $ \face -> do
---         -- Set the pixel font size we'd like to extract. 0 width let's the
---         -- width automatically be calculated based on the given height.
---         ft_Set_Pixel_Sizes face 0 (fromIntegral characterHeight)
---         -- Disable OpenGL alignment requirement.
---         glPixelStorei GL_UNPACK_ALIGNMENT 2
---         -- Load the first 128 ASCII characters into textures.
---         let loadCharacter char = do
---               ft_Load_Char face char FT_LOAD_RENDER
---               to <- genObjectName @TextureObject
---               textureBinding Texture2D $= Just to
---               glyphSlot <- peek . frGlyph =<< peek face
---               let glyphBitmap = gsrBitmap glyphSlot
---                   chWidth = bWidth glyphBitmap
---                   chHeight = bRows glyphBitmap
---                   chLeft = gsrBitmap_left glyphSlot
---                   chTop = gsrBitmap_top glyphSlot
---                   chAdvance = vX . gsrAdvance $ glyphSlot
---               withOutlineTexture (chWidth, chHeight) (bBuffer glyphBitmap) $ \buf -> do
---                 let pixelData = PixelData RG UnsignedByte buf
---                 texImage2D
---                   Texture2D
---                   NoProxy
---                   0
---                   RG8
---                   (TextureSize2D (fromIntegral chWidth) (fromIntegral chHeight))
---                   0
---                   pixelData
---                 textureWrapMode Texture2D S $= (Repeated, ClampToBorder)
---                 textureWrapMode Texture2D T $= (Repeated, ClampToBorder)
---                 textureFilter Texture2D $= ((Linear', Nothing), Linear')
---                 uniform fontTexUni $= tu
---                 return
---                   ( toEnum . fromIntegral $ char,
---                     Character
---                       { _characterTextureID = to,
---                         _characterSize = fromIntegral <$> V2 chWidth chHeight,
---                         _characterBearing = fromIntegral <$> V2 chLeft chTop,
---                         _characterAdvance = fromIntegral chAdvance,
---                         _characterLetter = toEnum . fromIntegral $ char
---                       }
---                   )
---         Map.fromList <$> mapM loadCharacter [32 .. 127]
+data CFTLContext
+
+data CFTLFace
+
+data CGlyph = CGlyph
+  { gPixels :: Ptr Word8,
+    gWidth :: CInt,
+    gHeight :: CInt,
+    gBearingX :: CInt,
+    gBearingY :: CInt,
+    gAdvance :: CInt,
+    gCode :: Word32
+  }
+
+instance Storable CGlyph where
+  sizeOf _ = (8) + 6 * 4 + 4 -- pointer + 6 ints + u32 (platforms differ; safer to 'peek' field-by-field)
+  alignment _ = alignment (nullPtr :: Ptr ())
+  peek p = do
+    pix <- peekByteOff p 0
+    w <- peekByteOff p (ptrSize)
+    h <- peekByteOff p (ptrSize + 4)
+    bx <- peekByteOff p (ptrSize + 8)
+    by <- peekByteOff p (ptrSize + 12)
+    adv <- peekByteOff p (ptrSize + 16)
+    cp <- peekByteOff p (ptrSize + 20)
+    pure $ CGlyph pix w h bx by adv cp
+    where
+      ptrSize = sizeOf (nullPtr :: Ptr ())
+  poke _ _ = error "not needed"
+
+foreign import ccall unsafe "ftl_create" c_ftl_create :: IO (Ptr CFTLContext)
+
+foreign import ccall unsafe "ftl_destroy" c_ftl_destroy :: Ptr CFTLContext -> IO ()
+
+foreign import ccall unsafe "ftl_face_open" c_ftl_face_open :: Ptr CFTLContext -> CString -> CUInt -> IO (Ptr CFTLFace)
+
+foreign import ccall unsafe "ftl_face_close" c_ftl_face_close :: Ptr CFTLFace -> IO ()
+
+foreign import ccall unsafe "ftl_render_glyph" c_ftl_render_glyph :: Ptr CFTLFace -> Word32 -> Ptr CGlyph -> IO CInt
+
+foreign import ccall unsafe "ftl_free_glyph" c_ftl_free_glyph :: Ptr CGlyph -> IO ()
+
+loadFontInternal :: FilePath -> Int -> FontLoader (Map.Map Char Character)
+loadFontInternal path pixelHeight = do
+  tu <- asks _fontLoaderEnvTextureUnit
+  fontTexUni <- asks _fontLoaderEnvTexUni
+  activeTexture $= tu
+  ctx <- liftIO c_ftl_create
+
+  let uploadGlyphRG8WithOutline :: CGlyph -> IO TextureObject
+      uploadGlyphRG8WithOutline CGlyph {..} = do
+        to <- genObjectName
+        textureBinding Texture2D $= Just to
+        glPixelStorei GL_UNPACK_ALIGNMENT 2
+
+        let w = fromIntegral gWidth
+            h = fromIntegral gHeight
+
+        if w > 0 && h > 0
+          then withOutlineTexture (fromIntegral w, fromIntegral h) gPixels $ \buf ->
+            texImage2D
+              Texture2D
+              NoProxy
+              0
+              RG8
+              (TextureSize2D w h)
+              0
+              (PixelData RG UnsignedByte buf)
+          else
+            texImage2D
+              Texture2D
+              NoProxy
+              0
+              RG8
+              (TextureSize2D 1 1)
+              0
+              (PixelData RG UnsignedByte nullPtr)
+
+        textureWrapMode Texture2D S $= (Repeated, ClampToBorder)
+        textureWrapMode Texture2D T $= (Repeated, ClampToBorder)
+        textureFilter Texture2D $= ((Linear', Nothing), Linear')
+        uniform fontTexUni $= tu
+
+        pure to
+
+  liftIO $ withCString path $ \cpath -> do
+    face <- c_ftl_face_open ctx cpath (fromIntegral pixelHeight)
+    m <- go uploadGlyphRG8WithOutline face 32 127 Map.empty
+    c_ftl_face_close face
+    c_ftl_destroy ctx
+    pure m
+  where
+    go _upload _face i maxI acc | i > maxI = pure acc
+    go upload face i maxI acc =
+      allocaBytes glyphSize $ \pg -> do
+        rc <- c_ftl_render_glyph face (fromIntegral (fromEnum (toEnum i :: Char))) pg
+        if rc == 0
+          then go upload face (i + 1) maxI acc
+          else do
+            g <- peekGlyph pg
+            tex <- upload g
+            let ch = toEnum i
+                w = fromIntegral (gWidth g)
+                h = fromIntegral (gHeight g)
+                bx = fromIntegral (gBearingX g)
+                by = fromIntegral (gBearingY g)
+                adv = fromIntegral (gAdvance g)
+                charRec =
+                  Character
+                    { _characterTextureID = tex,
+                      _characterSize = V2 w h,
+                      _characterBearing = V2 bx by,
+                      _characterAdvance = adv,
+                      _characterLetter = ch
+                    }
+            c_ftl_free_glyph pg
+            go upload face (i + 1) maxI (Map.insert ch charRec acc)
+
+    glyphSize = 8 + 6 * 4 + 4
+    peekGlyph :: Ptr CGlyph -> IO CGlyph
+    peekGlyph = peek
 
 withOutlineTexture :: (Word32, Word32) -> Ptr Word8 -> (Ptr Word8 -> IO b) -> IO b
 withOutlineTexture dim src action = do

@@ -77,7 +77,6 @@ playScene s = do
             (_, timeSince) <- deltaTime 0
             clearView
             fft <- calcCurrentFFTPeak
-            liftIO $ print $ "FFT: " ++ show fft
             renderBackground lt
             s <- renderScene timeSince fft s
             renderAssets timeSince . _assets $ s

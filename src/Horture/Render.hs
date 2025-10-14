@@ -284,15 +284,18 @@ renderText txt posi opacity = do
   let word = WordObject def $ mapMaybe (`Map.lookup` chs) txt
   activeTexture $= tu
   currentProgram $= Just (fp ^. shader)
+  blend $= Enabled
+  blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
   uniform ou $= opacity
-  renderWord mu posi word
+  (screenW, screenH) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
+  renderWord (screenW, screenH) mu posi word
+  blend $= Disabled
   where
-    renderWord :: (HortureLogger (Horture l hdl)) => UniformLocation -> (Int, Int) -> WordObject -> Horture l hdl ()
-    renderWord mu (x, y) word = do
+    renderWord :: (HortureLogger (Horture l hdl)) => (Int, Int) -> UniformLocation -> (Int, Int) -> WordObject -> Horture l hdl ()
+    renderWord (screenW, screenH) mu (x, y) word = do
       let renderCharacter :: (HortureLogger (Horture l hdl)) => Int -> Character -> Horture l hdl Int
           renderCharacter adv ch = do
             textureBinding Texture2D $= Just (ch ^. textureID)
-            (screenW, screenH) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< gets (^. dim)
             let bearingX = fromIntegral (ch ^. bearing . _x) * baseScale
                 bearingY = round $ fromIntegral (ch ^. bearing . _y) * baseScale
                 w = round $ fromIntegral (ch ^. size . _x) * baseScale

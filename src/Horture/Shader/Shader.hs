@@ -182,18 +182,24 @@ fontFragmentShader :: ByteString
 fontFragmentShader =
   [r|
 #version 410
-
 in vec2 texCoord;
-
 uniform sampler2D fontTexture;
 uniform float opacity = 1.0;
-
+uniform vec3  textColor  = vec3(1.0);
+uniform vec3  outlineCol = vec3(0.0);
 out vec4 frag_colour;
 
 void main() {
-  float color = texture(fontTexture, texCoord).r;
-  float alpha = texture(fontTexture, texCoord).g;
-  frag_colour = vec4(color, color, color, alpha*opacity);
+  vec2 uv = vec2(texCoord.x, texCoord.y);
+  vec2 rg = texture(fontTexture, uv).rg;
+  float fill    = rg.r;
+  float outline = rg.g;
+
+  float a   = max(fill, outline) * opacity;
+  if (a < 0.005) discard;
+
+  vec3 col = mix(outlineCol, textColor, fill);
+  frag_colour = vec4(col, a);
 }
   |]
 

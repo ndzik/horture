@@ -185,16 +185,25 @@ library horture-lib
                      , Horture.Backend.MacOS.Initializer
                      , Horture.Backend.MacOS.Interface
         cpp-options: -DHORTURE_DARWIN
+        extra-include-dirs:
+            /opt/homebrew/opt/freetype/include/freetype2
+        extra-lib-dirs:
+            /opt/homebrew/opt/freetype/lib
+        extra-libraries:
+            freetype
         include-dirs: cbits, cbits/macos
         includes: SCShim.h
                 , render_bridge.h
                 , audio_bridge.h
+                , freetype_shim.h
         install-includes: SCShim.h
                         , render_bridge.h
                         , audio_bridge.h
+                        , freetype_shim.h
         c-sources: cbits/macos/SCShim.m
                  , cbits/macos/render_bridge.m
                  , cbits/macos/audio_bridge.m
+                 , cbits/freetype_shim.c
         cc-options: -fobjc-arc
         frameworks: ScreenCaptureKit, CoreMedia, CoreVideo, AVFoundation, AppKit
         build-depends: contiguous ==0.6.5.0

@@ -198,11 +198,12 @@ _run fpsTvar evChan logChan mv enabledTVar preloadedImages = do
   let timeout = round $ (1.0 * 1000.0 * 1000.0 :: Double)
       images = map fst preloadedImages
   esTID <- forkIO $ hortureLocalEventSource timeout evChan images enabledTVar
+  let defaultFont = Just "./assets/fonts/CaskaydiaMonoNerdFontMono-Regular.ttf"
   let env =
         HortureInitializerEnvironment
           { _hortureInitializerEnvironmentLogChan = logChan,
             _hortureInitializerEnvironmentGrabbedWin = mv,
-            _hortureInitializerEnvironmentDefaultFont = Nothing
+            _hortureInitializerEnvironmentDefaultFont = defaultFont
           }
       startScene =
         def
