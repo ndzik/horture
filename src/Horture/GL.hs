@@ -9,13 +9,13 @@ module Horture.GL
 where
 
 import Control.Monad.IO.Class
+import Foreign.Ptr
+import Foreign.Storable
 import Graphics.GLUtil.Camera3D as Util
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, scale)
 import Horture.Horture
 import Linear.Matrix
 import Linear.V4
-import Foreign.Storable
-import Foreign.Ptr
 
 -- | m44ToGLmatrix converts the row based representation of M44 to a GLmatrix
 -- representation which is column based.
@@ -43,10 +43,10 @@ scaleForAspectRatio (ww, wh) = scaling
         (V4 0 0 1 0)
         (V4 0 0 0 1)
 
-drawBaseQuad :: Horture l hdl ()
+drawBaseQuad :: Horture m l hdl ()
 drawBaseQuad = liftIO $ drawElements Triangles 6 UnsignedInt nullPtr
 
-genMipMap :: Horture l hdl ()
+genMipMap :: Horture m l hdl ()
 genMipMap = liftIO $ generateMipmap' Texture2D
 
 projectionForAspectRatio :: (Float, Float) -> M44 Float

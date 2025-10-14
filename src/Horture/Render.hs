@@ -6,7 +6,6 @@ module Horture.Render
     renderEventList,
     renderScene,
     indexForGif,
-    timeCPU,
   )
 where
 
@@ -23,13 +22,13 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text, unpack)
-import qualified Data.Text as T
 import Foreign hiding (rotate, void)
 import Graphics.GLUtil.Camera3D as Util hiding (orientation)
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, rotate, scale)
 import Horture.Asset
 import Horture.Audio
 import Horture.Character
+import Horture.Debug
 import Horture.Effect
 import Horture.Error (HortureError (HE))
 import Horture.Event
@@ -47,17 +46,16 @@ import Linear.Quaternion
 import Linear.V3
 import Linear.V4
 import Linear.Vector
-import qualified System.Clock as Clock
 import System.Random.Stateful (globalStdGen, randomM)
 
-renderAssets :: forall l hdl. (HortureLogger (Horture l hdl)) => Float -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
+renderAssets :: forall m l hdl. (HortureLogger (Horture m l hdl)) => Float -> Map.Map AssetIndex [ActiveAsset] -> Horture m l hdl ()
 renderAssets _ m | Map.null m = return ()
 renderAssets dt m = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject
   -- General preconditions are set. Render all Assets.
   mapM_ renderAssetType . Map.toList $ m
   where
-    renderAssetType :: (HortureLogger (Horture l hdl)) => (AssetIndex, [ActiveAsset]) -> Horture l hdl ()
+    renderAssetType :: (HortureLogger (Horture m l hdl)) => (AssetIndex, [ActiveAsset]) -> Horture m l hdl ()
     renderAssetType (_, []) = return ()
     renderAssetType (_, assetsOfSameType@(g : _)) = do
       case _afAsset g of
@@ -84,7 +82,7 @@ renderAssets dt m = do
           textureBinding Texture2D $= Just imageTextureObject
           mapM_ (drawAsset modelUniform noop) assetsOfSameType
 
-    drawAsset :: UniformLocation -> (Float -> Horture l hdl ()) -> ActiveAsset -> Horture l hdl ()
+    drawAsset :: UniformLocation -> (Float -> Horture m l hdl ()) -> ActiveAsset -> Horture m l hdl ()
     drawAsset mu act a = do
       let o = _afObject a
           tB = dt - _birth o
@@ -136,7 +134,7 @@ indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxInd
       | (accumulatedTime + fromIntegral d) < timeSinceBirth = go gifDelays (accumulatedTime + fromIntegral d) (i + 1)
       | otherwise = i
 
-renderBackground :: (HortureLogger (Horture l hdl)) => Float -> Horture l hdl ()
+renderBackground :: (HortureLogger (Horture m l hdl)) => Float -> Horture m l hdl ()
 renderBackground dt = do
   backgroundP <- asks (^. backgroundProg . shader)
   backgroundTexUnit <- asks (^. backgroundProg . textureUnit)
@@ -150,11 +148,12 @@ renderBackground dt = do
 -- | renderScene renders the captured application window. It is assumed that
 -- the horture texture was already initialized at this point.
 renderScene ::
-  ( HortureLogger (Horture l hdl),
-    WindowPoller hdl (Horture l hdl),
-    AudioRecorder (Horture l hdl)
+  ( HortureLogger (Horture m l hdl),
+    WindowPoller hdl (Horture m l hdl),
+    Debuggable (Horture m l hdl),
+    AudioRecorder (Horture m l hdl)
   ) =>
-  Float -> FFTSnapshot -> Scene -> Horture l hdl Scene
+  Float -> FFTSnapshot -> Scene -> Horture m l hdl Scene
 renderScene t fft scene = do
   let s = scene ^. screen
   screenP <- asks (^. screenProg . shader)
@@ -174,17 +173,8 @@ renderScene t fft scene = do
   drawBaseQuad
   return $ scene {_screen = s}
 
-timeCPU :: Text -> Horture l hdl a -> Horture l hdl a
-timeCPU label action = do
-  start <- liftIO $ Clock.getTime Clock.Monotonic
-  result <- action
-  end <- liftIO $ Clock.getTime Clock.Monotonic
-  let ms :: Double = fromIntegral (Clock.toNanoSecs (end - start)) / 1e6
-  liftIO . print $ label <> " (ms): " <> (T.pack $ show ms)
-  return result
-
 -- | Applies all shader effects in the current scene to the captured window.
-applySceneShaders :: (HortureLogger (Horture l hdl)) => FFTSnapshot -> Float -> Scene -> Horture l hdl ()
+applySceneShaders :: (HortureLogger (Horture m l hdl)) => FFTSnapshot -> Float -> Scene -> Horture m l hdl ()
 applySceneShaders fft t scene = do
   fb <- asks (^. screenProg . framebuffer)
   -- Set custom framebuffer as target for read&writes.
@@ -202,12 +192,12 @@ applySceneShaders fft t scene = do
   textureBinding Texture2D $= Just finishedTex
 
 applyShaderEffect ::
-  (HortureLogger (Horture l hdl)) =>
+  (HortureLogger (Horture m l hdl)) =>
   FFTSnapshot ->
   Float ->
   (ShaderEffect, Float, Lifetime) ->
   (TextureObject, TextureObject) ->
-  Horture l hdl (TextureObject, TextureObject)
+  Horture m l hdl (TextureObject, TextureObject)
 applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
   (tw, th) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
   shaderProgs <-
@@ -236,10 +226,10 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
     setLifetimeUniform (Limited s) uni = uniform uni $= s
     setLifetimeUniform Forever uni = uniform uni $= (0 :: Float)
 
-newRandomNumber :: Horture l hdl Float
+newRandomNumber :: Horture m l hdl Float
 newRandomNumber = liftIO $ randomM globalStdGen
 
-renderEventList :: (HortureLogger (Horture l hdl)) => Float -> Horture l hdl ()
+renderEventList :: (HortureLogger (Horture m l hdl)) => Float -> Horture m l hdl ()
 renderEventList timeNow = do
   evs <- asks (^. eventList) >>= liftIO . readTVarIO >>= liftIO . RingBuffer.toList
   let numOfLines = length evs - 1
@@ -248,13 +238,13 @@ renderEventList timeNow = do
     height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
     showTime = 16
     lineSpacing = round $ 10 * baseScale
-    go :: (HortureLogger (Horture l hdl)) => Int -> Int -> [(Float, String)] -> Horture l hdl ()
+    go :: (HortureLogger (Horture m l hdl)) => Int -> Int -> [(Float, String)] -> Horture m l hdl ()
     go _ _ [] = return ()
     go numOfLines i ((bt, l) : ls) = do
       renderText l (lineSpacing, lineSpacing + numOfLines * height - height * i) . realToFrac $ 1 - ((timeNow - bt) / showTime)
       go numOfLines (i + 1) ls
 
-renderActiveEffectText :: (HortureLogger (Horture l hdl)) => Scene -> Horture l hdl ()
+renderActiveEffectText :: (HortureLogger (Horture m l hdl)) => Scene -> Horture m l hdl ()
 renderActiveEffectText s = do
   let bs = foldr (\(bh, _, _) -> incrementOrInsert (toTitle bh) []) [] $ s ^. screen . behaviours
       ss = foldr (\(sh, _, _) -> incrementOrInsert (toTitle sh) []) [] $ s ^. shaders
@@ -269,7 +259,7 @@ renderActiveEffectText s = do
       | sh == fs = reverse r ++ (sh, c + 1) : ds
       | otherwise = incrementOrInsert sh ((fs, c) : ds) r
 
-renderEffectList :: (HortureLogger (Horture l hdl)) => [(Text, Int)] -> Horture l hdl ()
+renderEffectList :: (HortureLogger (Horture m l hdl)) => [(Text, Int)] -> Horture m l hdl ()
 renderEffectList effs = do
   (_, top) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
   let height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
@@ -282,7 +272,7 @@ renderEffectList effs = do
     x = 10
     lineSpacing = round $ 10 * baseScale
 
-renderText :: (HortureLogger (Horture l hdl)) => String -> (Int, Int) -> Float -> Horture l hdl ()
+renderText :: (HortureLogger (Horture m l hdl)) => String -> (Int, Int) -> Float -> Horture m l hdl ()
 renderText txt posi opacity = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject
   fp <- asks (^. fontProg)
@@ -300,9 +290,9 @@ renderText txt posi opacity = do
   renderWord (screenW, screenH) mu posi word
   blend $= Disabled
   where
-    renderWord :: (HortureLogger (Horture l hdl)) => (Int, Int) -> UniformLocation -> (Int, Int) -> WordObject -> Horture l hdl ()
+    renderWord :: (HortureLogger (Horture m l hdl)) => (Int, Int) -> UniformLocation -> (Int, Int) -> WordObject -> Horture m l hdl ()
     renderWord (screenW, screenH) mu (x, y) word = do
-      let renderCharacter :: (HortureLogger (Horture l hdl)) => Int -> Character -> Horture l hdl Int
+      let renderCharacter :: (HortureLogger (Horture m l hdl)) => Int -> Character -> Horture m l hdl Int
           renderCharacter adv ch = do
             textureBinding Texture2D $= Just (ch ^. textureID)
             let bearingX = fromIntegral (ch ^. bearing . _x) * baseScale
@@ -338,8 +328,8 @@ renderText txt posi opacity = do
        in ((pixelX - halfW) * wPerPixel, (pixelY - halfH) * hPerPixel)
 
 applyScreenBehaviours ::
-  (HortureLogger (Horture l hdl)) =>
-  FFTSnapshot -> Float -> Object -> Horture l hdl Object
+  (HortureLogger (Horture m l hdl)) =>
+  FFTSnapshot -> Float -> Object -> Horture m l hdl Object
 applyScreenBehaviours fft t screen = do
   dim <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
 
@@ -372,7 +362,7 @@ applyScreenBehaviours fft t screen = do
         (V4 0 0 sz 0)
         (V4 0 0 0 1)
 
-trackScreen :: (HortureLogger (Horture l hdl)) => Float -> Object -> Horture l hdl Object
+trackScreen :: (HortureLogger (Horture m l hdl)) => Float -> Object -> Horture m l hdl Object
 trackScreen _ screen = do
   viewUniform <- asks (^. screenProg . viewUniform)
   let s = screen
@@ -383,7 +373,7 @@ trackScreen _ screen = do
   liftIO $ m44ToGLmatrix lookAtM >>= (uniform viewUniform $=)
   return s
 
-projectScreen :: (HortureLogger (Horture l hdl)) => Object -> Horture l hdl Object
+projectScreen :: (HortureLogger (Horture m l hdl)) => Object -> Horture m l hdl Object
 projectScreen s = do
   modelUniform <- asks (^. screenProg . modelUniform)
   projectionUniform <- asks (^. screenProg . projectionUniform)

@@ -15,7 +15,7 @@ import Horture.Logging
 import Horture.Scene
 import Horture.State
 
-pollHortureEvents :: (HortureLogger (Horture l hdl)) => Float -> Float -> Scene -> Horture l hdl (Maybe Scene)
+pollHortureEvents :: (HortureLogger (Horture m l hdl)) => Float -> Float -> Scene -> Horture m l hdl (Maybe Scene)
 pollHortureEvents timeNow dt s = do
   asks _eventChan
     >>= liftIO . tryReadChan
@@ -26,7 +26,7 @@ pollHortureEvents timeNow dt s = do
       _otherwise -> do
         return (Just s)
 
-handleHortureEvent :: Float -> Float -> Event -> Scene -> Horture l hdl (Maybe Scene)
+handleHortureEvent :: Float -> Float -> Event -> Scene -> Horture m l hdl (Maybe Scene)
 handleHortureEvent timeNow dt (EventEffect n eff) s = do
   rb <- asks (^. eventList) >>= liftIO . readTVarIO
   liftIO $ Ringbuffer.append (PastEvent timeNow n eff) rb
@@ -34,5 +34,5 @@ handleHortureEvent timeNow dt (EventEffect n eff) s = do
 handleHortureEvent _ _ (EventCommand Exit) _ = return Nothing
 handleHortureEvent _ _ (EventCommand _cmd) _ = throwError $ HE "unimplemented"
 
-applyEffect :: Float -> Float -> Scene -> Effect -> Horture l hdl Scene
+applyEffect :: Float -> Float -> Scene -> Effect -> Horture m l hdl Scene
 applyEffect timeNow dt s eff = return $ apply timeNow dt eff s

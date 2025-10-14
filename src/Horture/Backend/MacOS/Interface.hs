@@ -98,8 +98,8 @@ instance Show CaptureHandle where
   show h = "CaptureHandle {chWinId = " ++ show (chWinId h) ++ ", chTitle = " ++ T.unpack (chTitle h) ++ "}"
 
 instance
-  (CaptureHandle ~ hdl, HortureLogger (Horture l hdl)) =>
-  WindowPoller hdl (Horture l hdl)
+  (CaptureHandle ~ hdl, HortureLogger (Horture m l hdl)) =>
+  WindowPoller hdl (Horture m l hdl)
   where
   pollWindowEnvironment = do
     h <- asks (^. envHandle) >>= liftIO . readTVarIO

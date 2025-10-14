@@ -24,13 +24,13 @@ class (Monad m) => HortureLogger m where
 
 -- TODO: Maybe add WriterT to Horture monad and use `tell` to embed the
 -- Channel.
-instance HortureLogger (Horture 'Channel hdl) where
+instance HortureLogger (Horture m 'Channel hdl) where
   logEvent ev = asks _logChan >>= (\la -> withColog Info la (logEvent' ev)) . logChannel
   logInfo msg = asks _logChan >>= (\la -> withColog Info la msg) . logChannel
   logError msg = asks _logChan >>= (\la -> withColog Error la msg) . logChannel
   logWarn msg = asks _logChan >>= (\la -> withColog Warning la msg) . logChannel
 
-instance HortureLogger (Horture 'NoLog hdl) where
+instance HortureLogger (Horture m 'NoLog hdl) where
   logEvent _ = return ()
   logInfo _ = return ()
   logError _ = return ()

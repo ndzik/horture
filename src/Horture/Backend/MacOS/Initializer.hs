@@ -131,11 +131,11 @@ initialize startScene loadedImages _loadedSounds frameCounter logChan evChan = d
     Just chan -> do
       liftIO . print @Text $ "Starting with logging to channel"
       liftIO $
-        runHorture hc (playScene @'Channel scene) >>= \case
+        runHorture hc (playScene @'Prod @'Channel scene) >>= \case
           Left err -> writeChan chan . T.pack . show $ err
           _otherwise -> return ()
     Nothing -> do
       liftIO . print @Text $ "Starting without logging"
-      void . liftIO $ runHorture hc (playScene @'NoLog scene)
+      void . liftIO $ runHorture hc (playScene @'Prod @'NoLog scene)
   liftIO $ GLFW.destroyWindow glW
   liftIO GLFW.terminate

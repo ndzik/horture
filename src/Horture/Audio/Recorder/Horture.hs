@@ -23,7 +23,7 @@ import Control.Monad.Reader
 import Horture.State
 import UnliftIO (bracket, putMVar, tryReadMVar, tryTakeMVar)
 
-instance (HortureLogger (Horture l hdl)) => AudioRecorder (Horture l hdl) where
+instance (HortureLogger (Horture m l hdl)) => AudioRecorder (Horture m l hdl) where
   startRecording = do
     ctx <- liftIO $ nativeInitRecorder 0 -- 0 For systemwide audio
     asks (^. audioRecording) >>= liftIO . flip putMVar ctx
@@ -45,11 +45,11 @@ instance (HortureLogger (Horture l hdl)) => AudioRecorder (Horture l hdl) where
 
   withRecording = withHortureRecording
 
-withHortureRecording :: forall hdl l a. (HortureLogger (Horture l hdl)) => Horture l hdl a -> Horture l hdl ()
+withHortureRecording :: forall hdl l m a. (HortureLogger (Horture m l hdl)) => Horture m l hdl a -> Horture m l hdl ()
 withHortureRecording action = do
   env <- ask
   logInfo "Setting up audio recording context"
-  let acquire = runHorture env (startRecording @(Horture l hdl))
+  let acquire = runHorture env (startRecording @(Horture m l hdl))
       runA _ = runHorture env action
-      release _ = runHorture env (stopRecording @(Horture l hdl))
+      release _ = runHorture env (stopRecording @(Horture m l hdl))
   void . liftIO $ bracket acquire release runA

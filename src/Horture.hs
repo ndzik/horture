@@ -17,10 +17,9 @@ module Horture
   )
 where
 
-import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
 import Control.Lens
-import Control.Monad (unless, void, when)
+import Control.Monad (unless, void)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Bifunctor
@@ -39,6 +38,7 @@ import Horture.Audio
 import Horture.Audio.Player.Horture ()
 import Horture.Audio.Recorder.Horture ()
 import Horture.Constraints
+import Horture.Debug
 import Horture.Effect
 import Horture.Error
 import Horture.Events
@@ -58,11 +58,8 @@ import System.Exit
 hortureName :: String
 hortureName = "horture"
 
-frameTime :: Float
-frameTime = 1 / 60
-
 -- | playScene plays the given scene in a Horture context.
-playScene :: forall l hdl. (HortureEffects hdl l) => Scene -> Horture l hdl ()
+playScene :: forall m l hdl. (HortureEffects m hdl l) => Scene -> Horture m l hdl ()
 playScene s = do
   setTime 0
   -- void . go 0 . Just $ s
@@ -106,7 +103,7 @@ playScene s = do
     handleHortureError asi@AudioSinkInitializationErr = logError . pack . show $ asi
     handleHortureError asp@(AudioSinkPlayErr _) = logError . pack . show $ asp
 
-calcCurrentFFTPeak :: (HortureLogger (Horture l hdl), AudioRecorder (Horture l hdl)) => Horture l hdl (Float, Float, Float)
+calcCurrentFFTPeak :: (HortureLogger (Horture m l hdl), AudioRecorder (Horture m l hdl)) => Horture m l hdl (Float, Float, Float)
 calcCurrentFFTPeak = do
   (b, m, h) <- currentFFTPeak
   absTvar <- asks (^. audioBandState)
@@ -147,40 +144,40 @@ stepBand x (BandState s l p) =
 clamp01 :: Float -> Float
 clamp01 = max 0 . min 1
 
-processAudio :: (HortureEffects hdl l) => Maybe Scene -> Horture l hdl (Maybe Scene)
+processAudio :: (HortureEffects m hdl l) => Maybe Scene -> Horture m l hdl (Maybe Scene)
 processAudio Nothing = return Nothing
 processAudio (Just s) = do
   mapM_ playAudio $ s ^. audio
   return $ Just s
 
-countFrame :: Horture l hdl ()
+countFrame :: Horture m l hdl ()
 countFrame = do
   fc <- asks (^. frameCounter)
   liftIO . atomically . modifyTVar' fc $ (+ 1)
 
-clearView :: Horture l hdl ()
+clearView :: Horture m l hdl ()
 clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
 
-updateView :: Horture l hdl ()
+updateView :: Horture m l hdl ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
 
-pollEvents :: (HortureEffects hdl l) => Scene -> Float -> Float -> Horture l hdl (Maybe Scene)
+pollEvents :: (HortureEffects m hdl l) => Scene -> Float -> Float -> Horture m l hdl (Maybe Scene)
 pollEvents s timeNow dt = do
   pollGLFWEvents
   pollWindowEnvironment
   pollHortureEvents timeNow dt s
 
-pollGLFWEvents :: Horture l hdl ()
+pollGLFWEvents :: Horture m l hdl ()
 pollGLFWEvents = liftIO GLFW.pollEvents
 
-deltaTime :: Float -> Horture l hdl (Float, Float)
+deltaTime :: Float -> Horture m l hdl (Float, Float)
 deltaTime startTime =
   getTime >>= \currentTime -> return $ (currentTime - startTime, currentTime)
 
-setTime :: Float -> Horture l hdl ()
+setTime :: Float -> Horture m l hdl ()
 setTime = liftIO . GLFW.setTime . realToFrac
 
-getTime :: Horture l hdl Float
+getTime :: Horture m l hdl Float
 getTime =
   liftIO GLFW.getTime >>= \case
     Nothing -> throwError . HE $ "GLFW not running or initialized"
