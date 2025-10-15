@@ -13,7 +13,7 @@ import Data.Text
 
 data HortureInitializerEnvironment = HortureInitializerEnvironment
   { _hortureInitializerEnvironmentLogChan :: !(Chan Text),
-    _hortureInitializerEnvironmentGrabbedWin :: !(MVar (Maybe String)),
+    _hortureInitializerEnvironmentGrabbedWin :: !(MVar Text),
     _hortureInitializerEnvironmentDefaultFont :: !(Maybe FilePath)
   }
 

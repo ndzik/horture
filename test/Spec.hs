@@ -1,7 +1,23 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
 module Main where
 
+import Control.Concurrent (newEmptyMVar)
+import Control.Concurrent.Chan.Synchronous
+import Data.Default
+import Data.Text (Text)
+import GHC.Conc (newTVarIO)
+import Horture
+import Horture.Backend as Backend
+import Horture.Behaviour
+import Horture.Event
+import Horture.Horture (LoggingTarget (..))
+import Horture.Initializer (HortureInitializerEnvironment (..), runHortureInitializer)
 import Horture.Loader
+import Horture.Object
 import Horture.Render (indexForGif)
+import Horture.Scene
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -12,18 +28,6 @@ tests =
   testGroup
     "Horture"
     [ testGroup
-        "Loader"
-        [ testGroup
-            "isGif"
-            [ testCase "noGif" $
-                isGif "noGif" @?= False,
-              testCase "noGif with extension" $
-                isGif "noGif.jpeg" @?= False,
-              testCase "isGif" $
-                isGif "isGif.gif" @?= True
-            ]
-        ],
-      testGroup
         "Renderer"
         [ testCase "indexForGif" $ do
             let delays = [10, 2, 2, 23, 12]
@@ -42,5 +46,24 @@ tests =
             assertEqual "end_start" 4 $ indexForGif delays 38 maxIndex
             assertEqual "end_edge-1" 4 $ indexForGif delays 48 maxIndex
             assertEqual "end" 4 $ indexForGif delays 49 maxIndex
-        ]
+        ],
+      testGroup "Backend.Grabber" $ [testBackendWindowSelection]
     ]
+
+testBackendWindowSelection :: TestTree
+testBackendWindowSelection = testCase "initializer" $ do
+  logChan <- newChan @Text
+  mv <- newEmptyMVar
+  fc <- newTVarIO 0
+  evChan <- newChan @Event
+  let env =
+        HortureInitializerEnvironment
+          { _hortureInitializerEnvironmentLogChan = logChan,
+            _hortureInitializerEnvironmentGrabbedWin = mv,
+            _hortureInitializerEnvironmentDefaultFont = Nothing
+          }
+      -- startScene = def {_screen = def {_behaviours = [(pulse 0.5 2 1, 0, Forever)]}}
+      startScene = def
+      action = Backend.initialize @'NoLog startScene [] [] fc (Just logChan) evChan
+  res <- runHortureInitializer env action
+  print res

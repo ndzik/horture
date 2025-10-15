@@ -1,21 +1,24 @@
 module Horture.State where
 
-import Control.Concurrent (MVar)
 import Control.Concurrent.Chan.Synchronous
+import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Lens.TH
+import Data.RingBuffer
 import Data.Text (Text)
+import qualified Data.Vector as V
+import Foreign (Ptr)
 import Graphics.Rendering.OpenGL hiding (get)
 import qualified Graphics.UI.GLFW as GLFW
-import Graphics.X11
+import Horture.Audio.Audio
 import Horture.Audio.Recorder
 import Horture.Event
-import Horture.Audio.Player.Protea
 import Horture.Program
-import RingBuffers.Lifted
+import Horture.RenderBridge
 
-data HortureStatic = HortureStatic
-  { _screenProg :: !HortureScreenProgram,
+data HortureEnv hdl = HortureEnv
+  { -- READONLY
+    _screenProg :: !HortureScreenProgram,
     _dynamicImageProg :: !HortureDynamicImageProgram,
     _backgroundProg :: !HortureBackgroundProgram,
     _fontProg :: !HortureFontProgram,
@@ -23,20 +26,18 @@ data HortureStatic = HortureStatic
     _eventChan :: !(Chan Event),
     _logChan :: !(Maybe (Chan Text)),
     _glWin :: !GLFW.Window,
-    _backgroundColor :: !(Color4 Float)
-  }
-
-data HortureState hdl = HortureState
-  { _envHandle :: !hdl,
-    _audioRecording :: !(Maybe (MVar ())),
+    _backgroundColor :: !(Color4 Float),
+    -- WRITEABLE
+    _envHandle :: !(TVar hdl),
+    _renderBridgeCtx :: !(TVar (Ptr RB)),
+    _audioRecording :: !(MVar AudioRecorderEnv),
+    _audioBandState :: !(TVar AllBands),
     _audioStorage :: !(TVar (Maybe FFTSnapshot)),
-    _audioState :: !AudioPlayerState,
+    _audioState :: !(TVar AudioPlayerState),
     _frameCounter :: !(TVar Int),
-    _mvgAvg :: !(RingBuffer FFTSnapshot),
-    _capture :: !(Maybe Drawable),
-    _dim :: !(Int, Int),
-    _eventList :: !(RingBuffer PastEvent)
+    _mvgAvg :: !(TVar (RingBuffer V.Vector FFTSnapshot)),
+    _dim :: !(TVar (GLsizei, GLsizei)),
+    _eventList :: !(TVar (RingBuffer V.Vector PastEvent))
   }
 
-makeLenses ''HortureStatic
-makeLenses ''HortureState
+makeLenses ''HortureEnv

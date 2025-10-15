@@ -5,7 +5,7 @@ import Horture.Audio.Player.Effects
 
 -- | The AudioPlayer describes the capability to output sound to the
 -- environment.
-class Monad m => AudioPlayer m where
+class (Monad m) => AudioPlayer m where
   -- | init initializes the audioplayer sink.
   initAudio :: m ()
 
@@ -28,6 +28,7 @@ data Sound k
   = StaticSound !Float !k
   | DynamicSound !FilePath
   | GeneratedSound !String !PCM
+  deriving (Eq)
 
 instance (Show k) => Show (Sound k) where
   show (StaticSound _ k) = show k
@@ -36,6 +37,7 @@ instance (Show k) => Show (Sound k) where
 
 -- | PCM describes a PCM stream which can be used to play a sound.
 data PCM = PCM !ByteString !Int !Int !Int !Float
+  deriving (Eq, Show)
 
 flashbangPeep :: PCM
 flashbangPeep =

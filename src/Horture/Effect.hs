@@ -1,3 +1,6 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+
 module Horture.Effect
   ( Effect (..),
     ShaderEffect (..),
@@ -11,8 +14,11 @@ module Horture.Effect
   )
 where
 
-import Data.Text (Text, pack)
+import Data.Aeson (FromJSON, ToJSON)
+import Data.Text (Text)
+import GHC.Generics (Generic)
 import Horture.Audio.Player
+import Horture.Behaviour (identityDelta)
 import Horture.Object
 import Linear.V3
 import System.FilePath.Posix
@@ -51,6 +57,8 @@ effectToCost (AddShaderEffect _ Invert _) = 3
 effectToCost (AddShaderEffect _ Toonify _) = 3
 effectToCost (AddShaderEffect _ Audiophile _) = 4
 effectToCost (AddShaderEffect _ BassRealityWarp _) = 3
+effectToCost (AddShaderEffect _ Glitch _) = 3
+effectToCost (AddShaderEffect _ Kaleidoscope _) = 3
 effectToCost (RemoveScreenBehaviour _) = 3
 effectToCost (RemoveShaderEffect _) = 2
 effectToCost AddRapidFire {} = 6
@@ -76,6 +84,8 @@ effectToColor (AddShaderEffect _ Invert _) = "#66ffff"
 effectToColor (AddShaderEffect _ Toonify _) = "#99cc00"
 effectToColor (AddShaderEffect _ Audiophile _) = "#cc0000"
 effectToColor (AddShaderEffect _ BassRealityWarp _) = "#7a7a52"
+effectToColor (AddShaderEffect _ Glitch _) = "#0a7a02"
+effectToColor (AddShaderEffect _ Kaleidoscope _) = "#0a7a02"
 effectToColor (RemoveScreenBehaviour _) = "#ff0000"
 effectToColor (RemoveShaderEffect _) = "#ff0000"
 effectToColor AddRapidFire {} = "#006600"
@@ -101,6 +111,8 @@ effectToImage (AddShaderEffect _ Invert _) = Nothing
 effectToImage (AddShaderEffect _ Toonify _) = Nothing
 effectToImage (AddShaderEffect _ Audiophile _) = Nothing
 effectToImage (AddShaderEffect _ BassRealityWarp _) = Nothing
+effectToImage (AddShaderEffect _ Glitch _) = Nothing
+effectToImage (AddShaderEffect _ Kaleidoscope _) = Nothing
 effectToImage (RemoveScreenBehaviour _) = Nothing
 effectToImage (RemoveShaderEffect _) = Nothing
 effectToImage AddRapidFire {} = Nothing
@@ -110,6 +122,7 @@ data ShaderEffect
   = Barrel
   | Blur
   | Stitch
+  | Glitch
   | Flashbang
   | Cycle
   | Blink
@@ -118,7 +131,17 @@ data ShaderEffect
   | Toonify
   | Audiophile
   | BassRealityWarp
-  deriving (Eq, Ord, Show, Enum, Bounded)
+  | Kaleidoscope
+  deriving
+    ( Eq,
+      Ord,
+      Show,
+      Enum,
+      Bounded,
+      Generic,
+      FromJSON,
+      ToJSON
+    )
 
 instance Show Effect where
   show (AddAsset fp lt pos _) = unwords ["AddImage", takeFileName fp, show lt, show pos]
@@ -152,6 +175,16 @@ instance Entitled BehaviourType where
   toTitle BehaviourMoveTo = "moveIt"
   toTitle BehaviourCircle = "circleIt"
   toTitle BehaviourPulse = "pulseIt"
+  toTitle BehaviourBob = "bobIt"
+  toTitle BehaviourBounce = "bounceIt"
+  toTitle BehaviourSway = "swayIt"
+  toTitle BehaviourWobble = "wobbleIt"
+  toTitle BehaviourSpiralTo = "spiralIt"
+  toTitle BehaviourOrbit = "orbitIt"
+  toTitle BehaviourBreathe = "breatheIt"
+  toTitle BehaviourJitter = "jitterIt"
+  toTitle BehaviourEaseTo = "easeIt"
+  toTitle BehaviourFlipX = "flipIt"
 
 instance Entitled ShaderEffect where
   toTitle Barrel = "ThiccIt"
@@ -160,11 +193,13 @@ instance Entitled ShaderEffect where
   toTitle Flashbang = "FLASHBANG"
   toTitle Cycle = "TakeTheWhitePill"
   toTitle Blink = "EyesClosed"
+  toTitle Glitch = "Glitch"
   toTitle Mirror = "Discombobulated"
   toTitle Invert = "InvertColors"
   toTitle Toonify = "Toonify"
   toTitle Audiophile = "Audiophile"
   toTitle BassRealityWarp = "BassRealityWarp"
+  toTitle Kaleidoscope = "Kaleidoscope"
 
 class FromText d where
   fromText :: Text -> d
@@ -187,12 +222,12 @@ instance FromText Effect where
   fromText "Toonify" = AddShaderEffect Forever Toonify []
   fromText "Audiophile" = AddShaderEffect Forever Audiophile []
   fromText "BassRealityWarp" = AddShaderEffect Forever BassRealityWarp []
-  fromText "hearAndFeelIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourAudiophile (\_ _ o -> o)]
-  fromText "shakeIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourShake (\_ _ o -> o)]
-  fromText "rotateIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourRotate (\_ _ o -> o)]
-  fromText "moveIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourMoveTo (\_ _ o -> o)]
-  fromText "circleIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourCircle (\_ _ o -> o)]
-  fromText "pulseIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourPulse (\_ _ o -> o)]
+  fromText "hearAndFeelIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourAudiophile (\_ _ _ -> identityDelta)]
+  fromText "shakeIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourShake (\_ _ _ -> identityDelta)]
+  fromText "rotateIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourRotate (\_ _ _ -> identityDelta)]
+  fromText "moveIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourMoveTo (\_ _ _ -> identityDelta)]
+  fromText "circleIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourCircle (\_ _ _ -> identityDelta)]
+  fromText "pulseIt" = AddScreenBehaviour (Limited 8) [Behaviour BehaviourPulse (\_ _ _ -> identityDelta)]
   fromText "RandomGifOrImage" = AddAsset "" Forever (V3 0 0 0) []
   fromText "RandomScreenEffect" = AddScreenBehaviour Forever []
   fromText "RATATATATA" = AddRapidFire []

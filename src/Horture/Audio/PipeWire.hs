@@ -21,6 +21,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Array.CArray.Base
 import Data.Maybe
+import qualified Data.RingBuffer as Ringbuffer
 import Foreign.C.Types
 import Foreign.ForeignPtr
 import Foreign.Ptr
@@ -31,7 +32,6 @@ import Horture.Logging
 import Horture.State
 import Math.FFT
 import Math.FFT.Base
-import qualified RingBuffers.Lifted as Ringbuffer
 import UnliftIO.Exception
 
 deriving instance FFTWReal CFloat
@@ -109,7 +109,8 @@ onProcessAudio shouldStop stm sampleRate _nChannels nSamples samples = do
       highIndex = round $ 16000 * n -- 9000 - 16000 Hz
   withCArray fftRes $ \ptr -> do
     res <-
-      (,,) <$> numLoopState 0 bassIndex 0 (\acc i -> (acc +) . abs . realToFrac <$> peekElemOff ptr i)
+      (,,)
+        <$> numLoopState 0 bassIndex 0 (\acc i -> (acc +) . abs . realToFrac <$> peekElemOff ptr i)
         <*> numLoopState bassIndex midIndex 0 (\acc i -> (acc +) . abs . realToFrac <$> peekElemOff ptr i)
         <*> numLoopState midIndex highIndex 0 (\acc i -> (acc +) . abs . realToFrac <$> peekElemOff ptr i)
     atomically $ writeTVar stm (Just res)

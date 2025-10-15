@@ -1,0 +1,5 @@
+{
+  "twitchClientId": "invalid-client-id",
+  "twitchClientSecret": "something",
+  "assetDirectory": "./assets"
+}

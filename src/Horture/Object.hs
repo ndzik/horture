@@ -1,7 +1,12 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+
 module Horture.Object where
 
 import Control.Lens.TH
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Default
+import GHC.Generics (Generic)
 import Horture.Audio
 import Linear.Matrix
 import Linear.Quaternion
@@ -10,7 +15,14 @@ import Linear.V4
 
 -- | Lifetime describes for how long an object can live. Either forever or for
 -- a limited time. Limited defines the lifetime in seconds.
-data Lifetime = Forever | Limited !Double deriving (Show, Eq)
+data Lifetime = Forever | Limited !Float
+  deriving
+    ( Show,
+      Eq,
+      Generic,
+      FromJSON,
+      ToJSON
+    )
 
 -- | Object is a horture object which forms the basis for all objects in a
 -- horture scene, which can have effects applied to them and rendered.
@@ -24,11 +36,11 @@ data Object = Object
     -- | How long this object is supposed to live.
     _lifetime :: !Lifetime,
     -- | When was this object created.
-    _birth :: !Double,
+    _birth :: !Float,
     -- | How will this object behave during its lifetime. An empty list means a
     -- static object. Each behaviour has an associated lifetime and time of
     -- birth.
-    _behaviours :: ![(Behaviour, Double, Lifetime)]
+    _behaviours :: ![(Behaviour, Float, Lifetime)]
   }
   deriving (Show)
 
@@ -59,7 +71,7 @@ instance Renderable Object where
       trans = mkTransformation @Float (_orientation o) (_pos o)
       m = trans !*! _scale o
 
-isStillAlive :: Double -> Lifetime -> Double -> Bool
+isStillAlive :: Float -> Lifetime -> Float -> Bool
 isStillAlive _ Forever _ = True
 isStillAlive timeNow (Limited s) tob = (timeNow - tob) <= s
 
@@ -70,12 +82,38 @@ data BehaviourType
   | BehaviourMoveTo
   | BehaviourCircle
   | BehaviourPulse
-  deriving (Show, Enum, Bounded)
+  | BehaviourBob
+  | BehaviourBounce
+  | BehaviourSway
+  | BehaviourWobble
+  | BehaviourSpiralTo
+  | BehaviourOrbit
+  | BehaviourBreathe
+  | BehaviourJitter
+  | BehaviourEaseTo
+  | BehaviourFlipX
+  deriving (Show, Eq, Enum, Bounded, Generic, FromJSON, ToJSON)
 
 -- | Each object can have multiple behaviours attached to it. The behaviour
 -- decides how this object will be displayed during its lifetime depending on
 -- how long it already exists.
-data Behaviour = Behaviour !BehaviourType !(FFTSnapshot -> Double -> Object -> Object)
+data Behaviour = Behaviour !BehaviourType !BehaviourApply
+
+type BehaviourApply = FFTSnapshot -> Float -> Object -> BehaviourDelta
+
+data BehaviourDelta = BehaviourDelta
+  { bdPos :: V3 Float,
+    bdScale :: V3 Float,
+    bdRot :: Quaternion Float
+  }
+
+instance Semigroup BehaviourDelta where
+  BehaviourDelta p1 s1 r1 <> BehaviourDelta p2 s2 r2 = BehaviourDelta (p1 + p2) (s1 * s2) (r2 * r1)
+
+instance Monoid BehaviourDelta where mempty = BehaviourDelta 0 (V3 1 1 1) (axisAngle (V3 0 0 1) 0)
+
+instance Eq Behaviour where
+  (Behaviour bt1 _) == (Behaviour bt2 _) = bt1 == bt2
 
 instance Show Behaviour where
   show (Behaviour bt _) = show bt

@@ -10,23 +10,25 @@ module Horture.Render
 where
 
 import Codec.Picture.Gif
+import Control.Concurrent.STM (readTVarIO)
 import Control.Lens
+import Control.Monad (foldM_, when)
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.State
 import Data.Bits hiding (rotate)
 import Data.Default
 import Data.Foldable (foldrM)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
+import qualified Data.RingBuffer as RingBuffer
 import Data.Text (Text, unpack)
 import Foreign hiding (rotate, void)
 import Graphics.GLUtil.Camera3D as Util hiding (orientation)
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, rotate, scale)
 import Horture.Asset
 import Horture.Audio
-import Horture.Audio.PipeWire ()
 import Horture.Character
+import Horture.Debug
 import Horture.Effect
 import Horture.Error (HortureError (HE))
 import Horture.Event
@@ -44,17 +46,16 @@ import Linear.Quaternion
 import Linear.V3
 import Linear.V4
 import Linear.Vector
-import qualified RingBuffers.Lifted as RingBuffer
 import System.Random.Stateful (globalStdGen, randomM)
 
-renderAssets :: forall l hdl. (HortureLogger (Horture l hdl)) => Double -> Map.Map AssetIndex [ActiveAsset] -> Horture l hdl ()
+renderAssets :: forall m l hdl. (HortureLogger (Horture m l hdl)) => Float -> Map.Map AssetIndex [ActiveAsset] -> Horture m l hdl ()
 renderAssets _ m | Map.null m = return ()
 renderAssets dt m = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject
   -- General preconditions are set. Render all Assets.
   mapM_ renderAssetType . Map.toList $ m
   where
-    renderAssetType :: (HortureLogger (Horture l hdl)) => (AssetIndex, [ActiveAsset]) -> Horture l hdl ()
+    renderAssetType :: (HortureLogger (Horture m l hdl)) => (AssetIndex, [ActiveAsset]) -> Horture m l hdl ()
     renderAssetType (_, []) = return ()
     renderAssetType (_, assetsOfSameType@(g : _)) = do
       case _afAsset g of
@@ -81,43 +82,79 @@ renderAssets dt m = do
           textureBinding Texture2D $= Just imageTextureObject
           mapM_ (drawAsset modelUniform noop) assetsOfSameType
 
+    drawAsset :: UniformLocation -> (Float -> Horture m l hdl ()) -> ActiveAsset -> Horture m l hdl ()
     drawAsset mu act a = do
       let o = _afObject a
-          bs = o ^. behaviours
-          timeSinceBirth = dt - _birth o
-          o' = foldr (\(Behaviour _ f, _, _) o -> f (0, 0, 0) timeSinceBirth o) o bs
+          tB = dt - _birth o
+
+          -- fold behaviours into a single delta
+          foldOne (Behaviour _ f, bt, lt) acc =
+            let τ = case lt of
+                  Limited d | d > 0 -> clamp01 ((tB - bt) / d)
+                  _ -> tB
+             in acc <> f (0, 0, 0) τ o
+          delta = foldr foldOne mempty (o ^. behaviours)
+
+          -- apply delta to base object
+          o' = applyDelta delta o
+
       liftIO $ m44ToGLmatrix (model o' !*! _scale o') >>= (uniform mu $=)
-      act timeSinceBirth
+      act tB
       drawBaseQuad
+
+    clamp01 :: Float -> Float
+    clamp01 x = max 0 (min 1 x)
+
+    applyDelta :: BehaviourDelta -> Object -> Object
+    applyDelta (BehaviourDelta dp ds dq) obj =
+      obj
+        & scale %~ (!*! matScale ds)
+        & orientation %~ (dq *)
+        & pos %~ (^+^ dp)
+
+    matScale :: V3 Float -> M44 Float
+    matScale (V3 sx sy sz) =
+      V4
+        (V4 sx 0 0 0)
+        (V4 0 sy 0 0)
+        (V4 0 0 sz 0)
+        (V4 0 0 0 1)
 
     noop _ = return ()
 
 -- | indexForGif returns the index of the image for the associated GIF to be
 -- viewed at the time given since birth in 100th of a second. The index is
 -- clamped from [0,maxIndex].
-indexForGif :: [GifDelay] -> Double -> Int -> Int
+indexForGif :: [GifDelay] -> Float -> Int -> Int
 indexForGif delays timeSinceBirth maxIndex = go (cycle delays) 0 0 `mod` (maxIndex + 1)
   where
-    go :: [GifDelay] -> Double -> Int -> Int
+    go :: [GifDelay] -> Float -> Int -> Int
     go [] _ i = i
     go (d : gifDelays) accumulatedTime i
       | (accumulatedTime + fromIntegral d) < timeSinceBirth = go gifDelays (accumulatedTime + fromIntegral d) (i + 1)
       | otherwise = i
 
-renderBackground :: (HortureLogger (Horture l hdl)) => Double -> Horture l hdl ()
+renderBackground :: (HortureLogger (Horture m l hdl)) => Float -> Horture m l hdl ()
 renderBackground dt = do
   backgroundP <- asks (^. backgroundProg . shader)
   backgroundTexUnit <- asks (^. backgroundProg . textureUnit)
   timeUni <- asks (^. backgroundProg . timeUniform)
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
   activeTexture $= backgroundTexUnit
-  uniform timeUni $= dt
   currentProgram $= Just backgroundP
+  uniform @GLfloat timeUni $= (realToFrac dt)
   drawBaseQuad
 
 -- | renderScene renders the captured application window. It is assumed that
 -- the horture texture was already initialized at this point.
-renderScene :: (HortureLogger (Horture l hdl), WindowPoller hdl (Horture l hdl)) => Double -> Scene -> Horture l hdl Scene
-renderScene t scene = do
+renderScene ::
+  ( HortureLogger (Horture m l hdl),
+    WindowPoller hdl (Horture m l hdl),
+    Debuggable (Horture m l hdl),
+    AudioRecorder (Horture m l hdl)
+  ) =>
+  Float -> FFTSnapshot -> Scene -> Horture m l hdl Scene
+renderScene t fft scene = do
   let s = scene ^. screen
   screenP <- asks (^. screenProg . shader)
   screenTexUnit <- asks (^. screenProg . textureUnit)
@@ -126,89 +163,105 @@ renderScene t scene = do
   activeTexture $= screenTexUnit
   textureBinding Texture2D $= Just sourceTexObject
   -- Fetch the next frame.
-  nextFrame
+  _ <- timeCPU "Frame fetch" nextFrame
   -- Apply shaders to captured texture.
-  fft <- currentFFTPeak
-  applySceneShaders fft t scene
+  _ <- timeCPU "Apply scene shaders" $ applySceneShaders fft t scene
   -- Final renderpass rendering scene.
   currentProgram $= Just screenP
   -- Apply behavioural effects to the scene itself.
-  s <- applyScreenBehaviours fft t s >>= trackScreen t >>= projectScreen
+  s <- (timeCPU "Apply screen behaviours" $ applyScreenBehaviours fft t s) >>= (timeCPU "tracking screen" . trackScreen t) >>= (timeCPU "projecting screen" . projectScreen)
   drawBaseQuad
   return $ scene {_screen = s}
 
 -- | Applies all shader effects in the current scene to the captured window.
-applySceneShaders :: (HortureLogger (Horture l hdl)) => FFTSnapshot -> Double -> Scene -> Horture l hdl ()
+applySceneShaders :: (HortureLogger (Horture m l hdl)) => FFTSnapshot -> Float -> Scene -> Horture m l hdl ()
 applySceneShaders fft t scene = do
   fb <- asks (^. screenProg . framebuffer)
   -- Set custom framebuffer as target for read&writes.
   bindFramebuffer Framebuffer $= fb
-  frontTexture <- asks (^. screenProg . textureObject)
-  backTexture <- asks (^. screenProg . backTextureObject)
-  -- Use tmp texture with correct dimensions to enable ping-ponging.
-  textureBinding Texture2D $= Just backTexture
+
+  -- Fronttexture here already has the captured window texture.
+  identityP <- asks (^. screenProg . identityProgram)
+  readTexture <- asks (^. screenProg . textureObject)
+  pingTexture <- asks (^. screenProg . pingTextureObject)
+  pongTexture <- asks (^. screenProg . pongTextureObject)
+
+  liftIO $ framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D pingTexture 0
+  activeTexture $= TextureUnit 0
+  textureBinding Texture2D $= Just readTexture
+  currentProgram $= Just identityP
+  drawBaseQuad
+  currentProgram $= Nothing
+
   let effs = scene ^. shaders
-  (finishedTex, _) <- foldrM (applyShaderEffect fft t) (frontTexture, backTexture) effs
+  (finishedTex, _) <- foldrM (applyShaderEffect fft t) (pingTexture, pongTexture) effs
+  -- (r, w) -> (w, r) -> (r, w)
   -- Unbind post-processing framebuffer and bind default framebuffer for
   -- on-screen rendering.
   bindFramebuffer Framebuffer $= defaultFramebufferObject
   -- Bind final texture for final rendering.
   textureBinding Texture2D $= Just finishedTex
-  liftIO $ generateMipmap' Texture2D
 
 applyShaderEffect ::
-  (HortureLogger (Horture l hdl)) =>
+  (HortureLogger (Horture m l hdl)) =>
   FFTSnapshot ->
-  Double ->
-  (ShaderEffect, Double, Lifetime) ->
+  Float ->
+  (ShaderEffect, Float, Lifetime) ->
   (TextureObject, TextureObject) ->
-  Horture l hdl (TextureObject, TextureObject)
+  Horture m l hdl (TextureObject, TextureObject)
 applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
+  (tw, th) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
   shaderProgs <-
     asks (Map.lookup eff . (^. screenProg . shaderEffects)) >>= \case
       Nothing -> throwError $ HE "unhandled shadereffect encountered"
       Just sp -> return sp
-  foldrM go buffers shaderProgs
+  result <- foldrM (go (tw, th)) buffers shaderProgs
+  pure result
   where
-    go prog (r, w) = do
-      -- Read from texture r.
-      textureBinding Texture2D $= Just r
-      genMipMap -- Mipmap generation has to happen for everyframe.
-      -- Write to texture w.
-      liftIO $ framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D w 0
+    go (w, h) prog (readTexture, writeTexture) = do
+      when (readTexture == writeTexture) $
+        throwError $
+          HE "read and write textures are the same!"
+
+      liftIO $ do
+        framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D writeTexture 0
+        GL.viewport $= (Position 0 0, Size w h)
+
+      activeTexture $= TextureUnit 0
+      textureBinding Texture2D $= Just readTexture
+
       currentProgram $= Just (prog ^. shader)
       setLifetimeUniform lt (prog ^. lifetimeUniform)
       liftIO . withArray [bass, mids, highs] $ uniformv (prog ^. frequenciesUniform) 3
-      uniform (prog ^. dtUniform) $= t - birth
+      uniform @Float (prog ^. dtUniform) $= (realToFrac $ t - birth)
       newRandomNumber >>= (uniform (prog ^. randomUniform) $=)
       drawBaseQuad
-      genMipMap
       currentProgram $= Nothing
       -- Flip textures for next effect. Read from written texture `w` and write to
       -- read from texture `r`.
-      return (w, r)
+      return (writeTexture, readTexture)
     setLifetimeUniform (Limited s) uni = uniform uni $= s
-    setLifetimeUniform Forever uni = uniform uni $= (0 :: Double)
+    setLifetimeUniform Forever uni = uniform uni $= (0 :: Float)
 
-newRandomNumber :: Horture l hdl Double
+newRandomNumber :: Horture m l hdl Float
 newRandomNumber = liftIO $ randomM globalStdGen
 
-renderEventList :: (HortureLogger (Horture l hdl)) => Double -> Horture l hdl ()
+renderEventList :: (HortureLogger (Horture m l hdl)) => Float -> Horture m l hdl ()
 renderEventList timeNow = do
-  gets (^. eventList) >>= liftIO . RingBuffer.toList >>= \evs -> do
-    let numOfLines = length evs - 1
-    go numOfLines 0 $ map (\pe@(PastEvent bt _ _) -> (bt, show pe)) evs
+  evs <- asks (^. eventList) >>= liftIO . readTVarIO >>= liftIO . RingBuffer.toList
+  let numOfLines = length evs - 1
+  go numOfLines 0 $ map (\pe@(PastEvent bt _ _) -> (bt, show pe)) evs
   where
     height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
     showTime = 16
     lineSpacing = round $ 10 * baseScale
-    go :: (HortureLogger (Horture l hdl)) => Int -> Int -> [(Double, String)] -> Horture l hdl ()
+    go :: (HortureLogger (Horture m l hdl)) => Int -> Int -> [(Float, String)] -> Horture m l hdl ()
     go _ _ [] = return ()
     go numOfLines i ((bt, l) : ls) = do
       renderText l (lineSpacing, lineSpacing + numOfLines * height - height * i) . realToFrac $ 1 - ((timeNow - bt) / showTime)
       go numOfLines (i + 1) ls
 
-renderActiveEffectText :: (HortureLogger (Horture l hdl)) => Scene -> Horture l hdl ()
+renderActiveEffectText :: (HortureLogger (Horture m l hdl)) => Scene -> Horture m l hdl ()
 renderActiveEffectText s = do
   let bs = foldr (\(bh, _, _) -> incrementOrInsert (toTitle bh) []) [] $ s ^. screen . behaviours
       ss = foldr (\(sh, _, _) -> incrementOrInsert (toTitle sh) []) [] $ s ^. shaders
@@ -223,9 +276,9 @@ renderActiveEffectText s = do
       | sh == fs = reverse r ++ (sh, c + 1) : ds
       | otherwise = incrementOrInsert sh ((fs, c) : ds) r
 
-renderEffectList :: (HortureLogger (Horture l hdl)) => [(Text, Int)] -> Horture l hdl ()
+renderEffectList :: (HortureLogger (Horture m l hdl)) => [(Text, Int)] -> Horture m l hdl ()
 renderEffectList effs = do
-  (_, top) <- gets (^. dim)
+  (_, top) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
   let height = round $ fromIntegral (characterHeight + lineSpacing) * baseScale
   go top height effs 0
   where
@@ -236,7 +289,7 @@ renderEffectList effs = do
     x = 10
     lineSpacing = round $ 10 * baseScale
 
-renderText :: (HortureLogger (Horture l hdl)) => String -> (Int, Int) -> Float -> Horture l hdl ()
+renderText :: (HortureLogger (Horture m l hdl)) => String -> (Int, Int) -> Float -> Horture m l hdl ()
 renderText txt posi opacity = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject
   fp <- asks (^. fontProg)
@@ -247,15 +300,18 @@ renderText txt posi opacity = do
   let word = WordObject def $ mapMaybe (`Map.lookup` chs) txt
   activeTexture $= tu
   currentProgram $= Just (fp ^. shader)
+  blend $= Enabled
+  blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
   uniform ou $= opacity
-  renderWord mu posi word
+  (screenW, screenH) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
+  renderWord (screenW, screenH) mu posi word
+  blend $= Disabled
   where
-    renderWord :: (HortureLogger (Horture l hdl)) => UniformLocation -> (Int, Int) -> WordObject -> Horture l hdl ()
-    renderWord mu (x, y) word = do
-      let renderCharacter :: (HortureLogger (Horture l hdl)) => Int -> Character -> Horture l hdl Int
+    renderWord :: (HortureLogger (Horture m l hdl)) => (Int, Int) -> UniformLocation -> (Int, Int) -> WordObject -> Horture m l hdl ()
+    renderWord (screenW, screenH) mu (x, y) word = do
+      let renderCharacter :: (HortureLogger (Horture m l hdl)) => Int -> Character -> Horture m l hdl Int
           renderCharacter adv ch = do
             textureBinding Texture2D $= Just (ch ^. textureID)
-            (screenW, screenH) <- gets (^. dim)
             let bearingX = fromIntegral (ch ^. bearing . _x) * baseScale
                 bearingY = round $ fromIntegral (ch ^. bearing . _y) * baseScale
                 w = round $ fromIntegral (ch ^. size . _x) * baseScale
@@ -288,28 +344,42 @@ renderText txt posi opacity = do
           pixelY = fromIntegral y
        in ((pixelX - halfW) * wPerPixel, (pixelY - halfH) * hPerPixel)
 
-applyScreenBehaviours :: (HortureLogger (Horture l hdl)) => FFTSnapshot -> Double -> Object -> Horture l hdl Object
+applyScreenBehaviours ::
+  (HortureLogger (Horture m l hdl)) =>
+  FFTSnapshot -> Float -> Object -> Horture m l hdl Object
 applyScreenBehaviours fft t screen = do
-  let bs = screen ^. behaviours
-      s =
-        foldr
-          ( \(Behaviour _ f, bt, lt) o -> case lt of
-              Limited lt -> f fft ((t - bt) / lt) o
-              Forever -> f fft t o
-          )
-          screen
-          bs
-  resetScreen s
+  dim <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
 
-resetScreen :: Object -> Horture l hdl Object
-resetScreen s = do
-  dim <- gets (^. dim)
-  let s' = s & scale %~ \cs -> lerp 0.1 (scaleForAspectRatio dim) cs
-      s'' = s' & orientation %~ \og -> slerp og (Quaternion 1.0 (V3 0 0 0)) 0.01
-      s''' = s'' & pos %~ \op -> lerp 0.1 (V3 0 0 (-1)) op
-  return s'''
+  -- accumulate deltas
+  let foldOne (Behaviour _ f, bt, lt) acc =
+        let τ = case lt of Limited d | d > 0 -> clamp01 ((t - bt) / d); _ -> t
+         in acc <> f fft τ screen -- f returns a delta; object arg unused
+      BehaviourDelta dp ds dq = foldr foldOne mempty (screen ^. behaviours)
 
-trackScreen :: (HortureLogger (Horture l hdl)) => Double -> Object -> Horture l hdl Object
+      baseScale = scaleForAspectRatio dim
+      targetScale :: M44 Float = baseScale !*! matScale ds
+      targetPos = V3 0 0 (-1) ^+^ dp
+      targetOri = dq * Quaternion 1 (V3 0 0 0)
+
+      α :: Float = 0.82 -- relax factor; smaller = more inertia
+      s' =
+        screen
+          & scale %~ (\cur -> lerp (v4FromA α) targetScale cur)
+          & pos %~ (\cur -> lerp α targetPos cur)
+          & orientation %~ (\cur -> slerp cur targetOri α)
+
+  pure s'
+  where
+    clamp01 = max 0 . min 1
+    v4FromA a = V4 a a a a
+    matScale (V3 sx sy sz) =
+      V4
+        (V4 sx 0 0 0)
+        (V4 0 sy 0 0)
+        (V4 0 0 sz 0)
+        (V4 0 0 0 1)
+
+trackScreen :: (HortureLogger (Horture m l hdl)) => Float -> Object -> Horture m l hdl Object
 trackScreen _ screen = do
   viewUniform <- asks (^. screenProg . viewUniform)
   let s = screen
@@ -320,12 +390,15 @@ trackScreen _ screen = do
   liftIO $ m44ToGLmatrix lookAtM >>= (uniform viewUniform $=)
   return s
 
-projectScreen :: (HortureLogger (Horture l hdl)) => Object -> Horture l hdl Object
+projectScreen :: (HortureLogger (Horture m l hdl)) => Object -> Horture m l hdl Object
 projectScreen s = do
   modelUniform <- asks (^. screenProg . modelUniform)
   projectionUniform <- asks (^. screenProg . projectionUniform)
-  (w, h) <- gets (^. dim)
-  let proj = projectionForAspectRatio (fromIntegral w, fromIntegral h)
+  (w, h) <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
+  let proj = projectionForAspectRatio (w, h)
   liftIO $ m44ToGLmatrix proj >>= (uniform projectionUniform $=)
   liftIO $ m44ToGLmatrix (model s) >>= (uniform modelUniform $=)
   return s
+
+forBoth :: (a -> b) -> (a, a) -> (b, b)
+forBoth f (x, y) = (f x, f y)

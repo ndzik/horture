@@ -37,17 +37,24 @@ library horture-lib
                             , NumericUnderscores
     exposed-modules:        Horture
                             , Horture.Authorize
+                            , Horture.Backend
+                            , Horture.Initializer.Initializer
+                            , Horture.Initializer.Environment
                             , Horture.Path
                             , Horture.Audio
+                            , Horture.Audio.Audio
                             , Horture.Audio.Player
-                            , Horture.Audio.PipeWire
                             , Horture.CommandCenter.CommandCenter
+                            , Horture.CommandCenter.GUI
+                            , Horture.CommandCenter.InsetBoxShadow
                             , Horture.CommandCenter.Event
                             , Horture.CommandCenter.State
+                            , Horture.Server
+                            , Horture.Server.Protocol
+                            , Horture.Server.Env
                             , Horture.Scene
                             , Horture.Horture
                             , Horture.Logging
-                            , Horture.Backend.X11
                             , Horture.Shader.Shader
                             , Horture.Error
                             , Horture.Command
@@ -59,6 +66,7 @@ library horture-lib
                             , Horture.State
                             , Horture.Behaviour
                             , Horture.Render
+                            , Horture.RenderBridge
                             , Horture.Config
                             , Horture.Object
                             , Horture.Program
@@ -68,19 +76,17 @@ library horture-lib
                             , Horture.Constraints
                             , Horture.Character
 
+
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
+                            , Horture.Backend.Types
+                            , Horture.Audio.MacOS
                             , Horture.Audio.Recorder
+                            , Horture.Audio.Recorder.Horture
                             , Horture.Audio.Player.Player
                             , Horture.Audio.Player.Error
-                            , Horture.Audio.Player.Protea
                             , Horture.Audio.Player.Effects
                             , Horture.Audio.Player.Horture
-                            , Horture.Backend.X11.LinuxX11
-                            , Horture.Backend.X11.X11
-                            , Horture.Backend.X11.Initializer
-                            , Horture.Initializer.Initializer
-                            , Horture.Initializer.Environment
                             , Horture.EventSource.Random
                             , Horture.EventSource.Logger
                             , Horture.EventSource.Local
@@ -98,12 +104,12 @@ library horture-lib
                             , Horture.Loader.FilePreloader
                             , Horture.Debug
 
+
     -- LANGUAGE extensions used by modules in this package.
-    build-depends:          base ^>=4.14.3.0
+    build-depends:          base
                             , haskell-twitch-api
                             , horture-server-lib
-                            , X11
-                            , text
+                            , text >= 2.1.3
                             , word-wrap
                             , raw-strings-qq
                             , servant-client
@@ -118,15 +124,12 @@ library horture-lib
                             , http-client
                             , http-client-tls
                             , random
-                            , ring-buffers
-                            -- Enforce correct version for `ring-buffers` to work.
-                            , contiguous ==0.5.2
-                            , proteaaudio-sdl
+                            , ring-buffer
                             , warp
                             , wai
                             , http-types
                             , async
-                            , freer-simple
+                            , freer-simple >= 1.2.1.2
                             , vector
                             , synchronous-channels
                             , OpenGL
@@ -141,37 +144,84 @@ library horture-lib
                             , containers
                             , linear
                             , vty
+                            , vty-unix
                             , brick
                             , array
                             , carray
-                            , fft
+                            , fft >= 0.1.8.7
                             , stm
                             , loop
                             , websockets
                             , wuss
                             , GLFW-b
                             , GLUtil
-                            , freetype2
-    c-sources:
-                            cbits/record.c
-    pkgconfig-depends:
-                            libpipewire-0.3
-    ghc-options:
-                            -Wall
+                            , monomer
+                            , network
+                            , clock
+
+    ghc-options:            -Wall
                             -fno-warn-name-shadowing
                             -fno-warn-unticked-promoted-constructors
                             -fno-warn-orphans
     hs-source-dirs:         src
     default-language:       Haskell2010
 
+    if os(linux)
+        exposed-modules: Horture.Audio.PipeWire
+                         , Horture.Backend.X11
+
+        other-modules: Horture.Backend.X11.LinuxX11
+                       , Horture.Backend.X11.X11
+                       , Horture.Backend.X11.Initializer
+                       , Horture.Audio.Player.Protea
+        build-depends: X11
+                       , proteaaudio-sdl
+                       -- Enforce correct version for `ring-buffers` to work.
+                       , contiguous ==0.5.2
+        cpp-options: -DPROTEA_ENABLED -DHORTURE_LINUX
+        pkgconfig-depends: libpipewire-0.3
+        c-sources: cbits/linux/record.c
+    if os(osx)
+        other-modules: Horture.Backend.MacOS
+                     , Horture.Backend.MacOS.Initializer
+                     , Horture.Backend.MacOS.Interface
+        cpp-options: -DHORTURE_DARWIN
+        extra-include-dirs:
+            /opt/homebrew/opt/freetype/include/freetype2
+        extra-lib-dirs:
+            /opt/homebrew/opt/freetype/lib
+        extra-libraries:
+            freetype
+        include-dirs: cbits, cbits/macos
+        includes: SCShim.h
+                , render_bridge.h
+                , audio_bridge.h
+                , freetype_shim.h
+        install-includes: SCShim.h
+                        , render_bridge.h
+                        , audio_bridge.h
+                        , freetype_shim.h
+        c-sources: cbits/macos/SCShim.m
+                 , cbits/macos/render_bridge.m
+                 , cbits/macos/audio_bridge.m
+                 , cbits/freetype_shim.c
+        cc-options: -fobjc-arc
+        frameworks: ScreenCaptureKit, CoreMedia, CoreVideo, AVFoundation, AppKit
+        build-depends: contiguous ==0.6.5.0
+                     , primitive-unlifted >=2.2.0.0
+
+
 test-suite horture-test
   type:                     exitcode-stdio-1.0
   hs-source-dirs:           test
   main-is:                  Spec.hs
-  build-depends:            base ^>=4.14.3.0
+  build-depends:            base
                             , horture-lib
                             , tasty
                             , tasty-hunit
+                            , synchronous-channels
+                            , text
+                            , data-default
   default-language:         Haskell2010
 
 executable horture-client
@@ -183,7 +233,8 @@ executable horture-client
                           -fno-warn-name-shadowing
                           -threaded
                           -O2
-  build-depends:          base ^>=4.14.3.0
+  build-depends:          base
                           , horture-lib
                           , optparse-applicative
+                          , data-default
   default-language:       Haskell2010

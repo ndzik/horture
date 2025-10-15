@@ -1,10 +1,11 @@
 module Horture.Events (pollHortureEvents) where
 
 import Control.Concurrent.Chan.Synchronous
+import Control.Concurrent.STM (readTVarIO)
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.State
+import qualified Data.RingBuffer as Ringbuffer
 import Horture.Command
 import Horture.Effect
 import Horture.Error
@@ -13,11 +14,11 @@ import Horture.Horture
 import Horture.Logging
 import Horture.Scene
 import Horture.State
-import qualified RingBuffers.Lifted as Ringbuffer
 
-pollHortureEvents :: (HortureLogger (Horture l hdl)) => Double -> Double -> Scene -> Horture l hdl (Maybe Scene)
+pollHortureEvents :: (HortureLogger (Horture m l hdl)) => Float -> Float -> Scene -> Horture m l hdl (Maybe Scene)
 pollHortureEvents timeNow dt s = do
-  asks _eventChan >>= liftIO . tryReadChan
+  asks _eventChan
+    >>= liftIO . tryReadChan
     >>= \case
       Success ev -> do
         logEvent ev
@@ -25,12 +26,13 @@ pollHortureEvents timeNow dt s = do
       _otherwise -> do
         return (Just s)
 
-handleHortureEvent :: Double -> Double -> Event -> Scene -> Horture l hdl (Maybe Scene)
+handleHortureEvent :: Float -> Float -> Event -> Scene -> Horture m l hdl (Maybe Scene)
 handleHortureEvent timeNow dt (EventEffect n eff) s = do
-  gets (^. eventList) >>= liftIO . Ringbuffer.append (PastEvent timeNow n eff)
+  rb <- asks (^. eventList) >>= liftIO . readTVarIO
+  liftIO $ Ringbuffer.append (PastEvent timeNow n eff) rb
   Just <$> applyEffect timeNow dt s eff
 handleHortureEvent _ _ (EventCommand Exit) _ = return Nothing
 handleHortureEvent _ _ (EventCommand _cmd) _ = throwError $ HE "unimplemented"
 
-applyEffect :: Double -> Double -> Scene -> Effect -> Horture l hdl Scene
+applyEffect :: Float -> Float -> Scene -> Effect -> Horture m l hdl Scene
 applyEffect timeNow dt s eff = return $ apply timeNow dt eff s

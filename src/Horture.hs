@@ -20,9 +20,9 @@ where
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
 import Control.Lens
+import Control.Monad (unless, void, when)
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.State
 import Data.Bifunctor
 import Data.Default
 import qualified Data.Map.Strict as Map
@@ -36,9 +36,10 @@ import Graphics.GLUtil.Camera3D as Cam3D
 import Graphics.Rendering.OpenGL as GL hiding (Color, Invert, flush)
 import qualified Graphics.UI.GLFW as GLFW
 import Horture.Audio
-import Horture.Audio.PipeWire ()
 import Horture.Audio.Player.Horture ()
+import Horture.Audio.Recorder.Horture ()
 import Horture.Constraints
+import Horture.Debug
 import Horture.Effect
 import Horture.Error
 import Horture.Events
@@ -58,40 +59,43 @@ import System.Exit
 hortureName :: String
 hortureName = "horture"
 
-frameTime :: Double
-frameTime = 1 / 60
+frameTime :: Float
+frameTime = 1 / 144 -- target 144 FPS upper limit
 
 -- | playScene plays the given scene in a Horture context.
-playScene :: forall l hdl. HortureEffects hdl l => Scene -> Horture l hdl ()
+playScene :: forall m l hdl. (HortureEffects m hdl l) => Scene -> Horture m l hdl ()
 playScene s = do
   setTime 0
-  void . withRecording . withAudio . go 0 . Just $ s
+  void . withAudio . withRecording . go 0 . Just $ s
   where
     go _ Nothing = do
       logInfo "horture stopped"
     go lt (Just s) = do
       let action = do
-            dt <- deltaTime 0
+            (_, timeSince) <- deltaTime 0
             clearView
-            renderBackground dt
-            s <- renderScene dt s
-            renderAssets dt . _assets $ s
-            renderActiveEffectText s
-            renderEventList dt
-            updateView
-            countFrame
-            timeNow <- getTime
-            pollEvents s timeNow dt >>= processAudio <&> (purge timeNow <$>)
+            fft <- calcCurrentFFTPeak
+            _ <- timeCPU "Render background" $ renderBackground lt
+            s <- timeCPU "Render whole scene" $ renderScene timeSince fft s
+            _ <- timeCPU "Render assets" $ renderAssets timeSince . _assets $ s
+            _ <- timeCPU "Render active text" $ renderActiveEffectText s
+            _ <- timeCPU "Render event list" $ renderEventList timeSince
+            _ <- timeCPU "Update view" $ updateView
+            _ <- timeCPU "Counting frame" $ countFrame
+            timeNow <- timeCPU "Getting time" $ getTime
+            (timeCPU "Polling events" $ pollEvents s timeNow timeSince) >>= processAudio <&> (purge timeNow <$>)
       s <-
-        action
-          `catchError` ( \err -> do
-                           handleHortureError err
-                           logWarn "resetting scene & continuing..."
-                           return $ Just s
-                       )
-      deltaTime lt >>= \timeSinceFrame ->
+        timeCPU "Horture action" $
+          action
+            `catchError` ( \err -> do
+                             handleHortureError err
+                             logWarn "resetting scene & continuing..."
+                             return $ Just s
+                         )
+      deltaTime lt >>= \(timeSinceFrame, _) ->
         when (timeSinceFrame < frameTime) $
-          liftIO . threadDelay . round $ (frameTime - timeSinceFrame) * 1000 * 1000
+          liftIO . threadDelay . round $
+            (frameTime - timeSinceFrame) * 1000 * 1000
       newTime <- getTime
       go newTime s
     handleHortureError (HE err) = logError . pack $ err
@@ -101,42 +105,87 @@ playScene s = do
     handleHortureError asi@AudioSinkInitializationErr = logError . pack . show $ asi
     handleHortureError asp@(AudioSinkPlayErr _) = logError . pack . show $ asp
 
-processAudio :: HortureEffects hdl l => Maybe Scene -> Horture l hdl (Maybe Scene)
+calcCurrentFFTPeak :: (HortureLogger (Horture m l hdl), AudioRecorder (Horture m l hdl)) => Horture m l hdl (Float, Float, Float)
+calcCurrentFFTPeak = do
+  (b, m, h) <- currentFFTPeak
+  absTvar <- asks (^. audioBandState)
+  abs <- liftIO . readTVarIO $ absTvar
+  let (bNorm, bst') = stepBand (realToFrac b) $ abs ^. abBass
+  let (mNorm, mst') = stepBand (realToFrac m) $ abs ^. abMid
+  let (hNorm, hst') = stepBand (realToFrac h) $ abs ^. abHigh
+  liftIO . atomically . writeTVar absTvar $ (AllBands {_abMid = mst', _abHigh = hst', _abBass = bst'})
+  return (bNorm, mNorm, hNorm)
+
+-- stepBand: input in dBFS, output normalized 0..1 (bigger = louder vs baseline)
+stepBand :: Float -> BandState -> (Float, BandState)
+stepBand x (BandState s l p) =
+  let -- EMA params
+      αs = 0.25 -- short EMA (fast)
+      αL_up = 0.01 -- long EMA rises *slowly*
+      αL_down = 0.08 -- long EMA falls faster (prevents “fade-out”)
+      peakHold = 0.985 -- decay per step
+
+      -- update short EMA
+      s' = s + αs * (x - s)
+
+      -- asymmetric long EMA
+      αL = if x > l then αL_up else αL_down
+      l' = l + αL * (x - l)
+
+      -- optional peak-hold (unused in norm below, but handy for UI)
+      p' = max x (p * peakHold)
+
+      -- normalize:
+      -- use dB *difference* with small dead-zone, then scale to 0..1
+      dead = 1.5 -- dB that we ignore
+      delta = max 0 (s' - l' - dead) -- dB above baseline
+      scale = 8.0 -- ~how many dB map to full scale
+      norm = clamp01 (delta / scale)
+   in (norm, BandState s' l' p')
+
+clamp01 :: Float -> Float
+clamp01 = max 0 . min 1
+
+processAudio :: (HortureEffects m hdl l) => Maybe Scene -> Horture m l hdl (Maybe Scene)
 processAudio Nothing = return Nothing
 processAudio (Just s) = do
   mapM_ playAudio $ s ^. audio
   return $ Just s
 
-countFrame :: Horture l hdl ()
-countFrame = gets (^. frameCounter) >>= liftIO . atomically . flip modifyTVar' (+ 1)
+countFrame :: Horture m l hdl ()
+countFrame = do
+  fc <- asks (^. frameCounter)
+  liftIO . atomically . modifyTVar' fc $ (+ 1)
 
-clearView :: Horture l hdl ()
-clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
+clearView :: Horture m l hdl ()
+clearView = do
+  liftIO $ GL.clearColor $= Color4 0.1 0.1 0.1 1
+  liftIO $ GL.clear [ColorBuffer, DepthBuffer]
 
-updateView :: Horture l hdl ()
+updateView :: Horture m l hdl ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
 
-pollEvents :: HortureEffects hdl l => Scene -> Double -> Double -> Horture l hdl (Maybe Scene)
+pollEvents :: (HortureEffects m hdl l) => Scene -> Float -> Float -> Horture m l hdl (Maybe Scene)
 pollEvents s timeNow dt = do
   pollGLFWEvents
   pollWindowEnvironment
   pollHortureEvents timeNow dt s
 
-pollGLFWEvents :: Horture l hdl ()
+pollGLFWEvents :: Horture m l hdl ()
 pollGLFWEvents = liftIO GLFW.pollEvents
 
-deltaTime :: Double -> Horture l hdl Double
+deltaTime :: Float -> Horture m l hdl (Float, Float)
 deltaTime startTime =
-  getTime >>= \currentTime -> return $ currentTime - startTime
+  getTime >>= \currentTime -> return $ (currentTime - startTime, currentTime)
 
-setTime :: Double -> Horture l hdl ()
-setTime = liftIO . GLFW.setTime
+setTime :: Float -> Horture m l hdl ()
+setTime = liftIO . GLFW.setTime . realToFrac
 
-getTime :: Horture l hdl Double
+getTime :: Horture m l hdl Float
 getTime =
   liftIO GLFW.getTime >>= \case
     Nothing -> throwError . HE $ "GLFW not running or initialized"
-    Just t -> return t
+    Just t -> return $ realToFrac t
 
 verts :: [Float]
 verts = [-1, -1, 0, 0, 1, -1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, -1, 0, 1, 1]
@@ -167,6 +216,12 @@ initGLFW = do
   GLFW.windowHint $ GLFW.WindowHint'Focused False
   GLFW.windowHint $ GLFW.WindowHint'Decorated False
   GLFW.windowHint $ GLFW.WindowHint'MousePassthrough True
+
+  GLFW.windowHint (GLFW.WindowHint'ContextVersionMajor 4)
+  GLFW.windowHint (GLFW.WindowHint'ContextVersionMinor 1)
+  GLFW.windowHint (GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core)
+  GLFW.windowHint (GLFW.WindowHint'OpenGLForwardCompat True)
+
   win <-
     GLFW.createWindow 1024 1024 hortureName Nothing Nothing >>= \case
       Nothing -> throwError . userError $ "Failed to create GLFW window"
@@ -218,8 +273,10 @@ initShaderEffects = do
       let shaderProgs =
             [ (Barrel, [barrelShader]),
               (Stitch, [stitchShader]),
+              (Glitch, [aiIsWonderful]),
               (Blur, [blurVShader, blurHShader]),
               (Flashbang, [flashbangShader]),
+              (Kaleidoscope, [kaleidoscopeShader]),
               (Cycle, [cycleColoursShader]),
               (Blink, [blinkShader]),
               (Mirror, [mirrorShader]),
@@ -232,15 +289,22 @@ initShaderEffects = do
             hsp <- loadShaderBS "shadereffect.shader" FragmentShader p >>= linkShaderProgram . (: [vsp])
             lifetimeUniform <- uniformLocation hsp "lifetime"
             dtUniform <- uniformLocation hsp "dt"
+            timeSinceUniform <- uniformLocation hsp "timeSinceStart"
             dominatingFreqUniform <- uniformLocation hsp "frequencies"
+            imgSamplerUniform <- uniformLocation hsp "imgTexture"
             randomUniform <- uniformLocation hsp "rng"
+            currentProgram $= Just hsp
+            uniform imgSamplerUniform $= (0 :: GLint)
+            currentProgram $= Nothing
             return
               HortureShaderProgram
                 { _hortureShaderProgramShader = hsp,
                   _hortureShaderProgramLifetimeUniform = lifetimeUniform,
+                  _hortureShaderProgramTimeSinceUniform = timeSinceUniform,
                   _hortureShaderProgramDtUniform = dtUniform,
                   _hortureShaderProgramFrequenciesUniform = dominatingFreqUniform,
-                  _hortureShaderProgramRandomUniform = randomUniform
+                  _hortureShaderProgramRandomUniform = randomUniform,
+                  _hortureShaderProgramTextureUniform = imgSamplerUniform
                 }
       Map.fromList <$> mapM (sequenceRight . second (sequence . (buildLinkAndUniform <$>))) shaderProgs
     sequenceRight :: (ShaderEffect, IO [HortureShaderProgram]) -> IO (ShaderEffect, [HortureShaderProgram])
@@ -248,15 +312,27 @@ initShaderEffects = do
 
 initHortureScreenProgram :: (GLsizei, GLsizei) -> Map.Map ShaderEffect [HortureShaderProgram] -> IO HortureScreenProgram
 initHortureScreenProgram (w, h) effs = do
+  -- Identity program.
+  vsp <- loadShaderBS "passthrough.shader" VertexShader passthroughVertexShader
+  fsp <- loadShaderBS "identity.shader" FragmentShader identityShader
+  identityProgram <- linkShaderProgram [vsp, fsp]
+  currentProgram $= Just identityProgram
+  identityTexUniform <- uniformLocation identityProgram "imgTexture"
+  uniform identityTexUniform $= Index1 (0 :: GLint)
+
   -- Shader program.
   vsp <- loadShaderBS "mvp.shader" VertexShader mvpVertexShader
   fsp <- loadShaderBS "display.shader" FragmentShader displayShader
   prog <- linkShaderProgram [vsp, fsp]
   currentProgram $= Just prog
+
+  screenTexUniform <- uniformLocation prog "imgTexture"
+  uniform screenTexUniform $= Index1 (0 :: GLint)
+
   -- Initialize source texture holding captured window image.
-  backTexture <- genObjectName
+  pingTexture <- genObjectName
   let !anyPixelData = PixelData BGRA UnsignedByte nullPtr
-  textureBinding Texture2D $= Just backTexture
+  textureBinding Texture2D $= Just pingTexture
   texImage2D
     Texture2D
     NoProxy
@@ -265,6 +341,9 @@ initHortureScreenProgram (w, h) effs = do
     (TextureSize2D w h)
     0
     anyPixelData
+  textureFilter Texture2D $= ((Linear', Nothing), Linear')
+  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
 
   renderedTexture <- genObjectName
   textureBinding Texture2D $= Just renderedTexture
@@ -276,6 +355,23 @@ initHortureScreenProgram (w, h) effs = do
     (TextureSize2D w h)
     0
     anyPixelData
+  textureFilter Texture2D $= ((Linear', Nothing), Linear')
+  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
+
+  pongTexture <- genObjectName
+  textureBinding Texture2D $= Just pongTexture
+  texImage2D
+    Texture2D
+    NoProxy
+    0
+    RGBA'
+    (TextureSize2D w h)
+    0
+    anyPixelData
+  textureFilter Texture2D $= ((Linear', Nothing), Linear')
+  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
 
   -- FRAMEBUFFER SETUP BEGIN
   -- fb is the framebuffer, grouping our textures.
@@ -304,18 +400,27 @@ initHortureScreenProgram (w, h) effs = do
   timeUniform <- uniformLocation prog "dt"
   uniform timeUniform $= (0 :: Float)
 
+  uvInsetUniform <- uniformLocation prog "uvInset"
+  uniform uvInsetUniform $= (Vertex2 1 1 :: Vertex2 GLfloat)
+
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
+
   return $
     HortureScreenProgram
       { _hortureScreenProgramShader = prog,
         _hortureScreenProgramShaderEffects = effs,
         _hortureScreenProgramModelUniform = modelUniform,
         _hortureScreenProgramProjectionUniform = projectionUniform,
+        _hortureScreenProgramTextureUniform = screenTexUniform,
+        _hortureScreenProgramUVInsetUniform = uvInsetUniform,
         _hortureScreenProgramViewUniform = viewUniform,
         _hortureScreenProgramTimeUniform = timeUniform,
         _hortureScreenProgramFramebuffer = fb,
         _hortureScreenProgramTextureObject = renderedTexture,
-        _hortureScreenProgramBackTextureObject = backTexture,
-        _hortureScreenProgramTextureUnit = screenTextureUnit
+        _hortureScreenProgramPingTextureObject = pingTexture,
+        _hortureScreenProgramPongTextureObject = pongTexture,
+        _hortureScreenProgramTextureUnit = screenTextureUnit,
+        _hortureScreenProgramIdentityProgram = identityProgram
       }
   where
     screenTextureUnit = TextureUnit 0
