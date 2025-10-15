@@ -330,9 +330,9 @@ initHortureScreenProgram (w, h) effs = do
   uniform screenTexUniform $= Index1 (0 :: GLint)
 
   -- Initialize source texture holding captured window image.
-  backTexture <- genObjectName
+  pingTexture <- genObjectName
   let !anyPixelData = PixelData BGRA UnsignedByte nullPtr
-  textureBinding Texture2D $= Just backTexture
+  textureBinding Texture2D $= Just pingTexture
   texImage2D
     Texture2D
     NoProxy
@@ -417,7 +417,7 @@ initHortureScreenProgram (w, h) effs = do
         _hortureScreenProgramTimeUniform = timeUniform,
         _hortureScreenProgramFramebuffer = fb,
         _hortureScreenProgramTextureObject = renderedTexture,
-        _hortureScreenProgramBackTextureObject = backTexture,
+        _hortureScreenProgramPingTextureObject = pingTexture,
         _hortureScreenProgramPongTextureObject = pongTexture,
         _hortureScreenProgramTextureUnit = screenTextureUnit,
         _hortureScreenProgramIdentityProgram = identityProgram

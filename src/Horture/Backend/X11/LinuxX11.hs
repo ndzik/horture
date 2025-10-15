@@ -81,7 +81,7 @@ pollXEvents = do
   glWin <- asks _glWin
   modelUniform <- asks (^. screenProg . modelUniform)
   projectionUniform <- asks (^. screenProg . projectionUniform)
-  backTexObj <- asks (^. screenProg . backTextureObject)
+  pingTexObj <- asks (^. screenProg . pingTextureObject)
   screenTexObj <- asks (^. screenProg . textureObject)
   screenTexUnit <- asks (^. screenProg . textureUnit)
   (dp, xWin, isMapped) <- gets (^. envHandle)
@@ -101,7 +101,7 @@ pollXEvents = do
                 pm
                 screenTexUnit
                 screenTexObj
-                backTexObj
+                pingTexObj
                 (projectionUniform, modelUniform)
                 (ev_width, ev_height)
                 (ev_x, ev_y)
@@ -116,7 +116,7 @@ pollXEvents = do
                 pm
                 screenTexUnit
                 screenTexObj
-                backTexObj
+                pingTexObj
                 (projectionUniform, modelUniform)
                 dim
                 pos
@@ -156,7 +156,7 @@ handleConfigureEvent
   pm
   screenTexUnit
   screenTexObj
-  backTexObj
+  pingTexObj
   (projectionUniform, modelUniform)
   (ev_width, ev_height)
   (ev_x, ev_y) =
@@ -185,7 +185,7 @@ handleConfigureEvent
         0
         anyPixelData
       generateMipmap' Texture2D
-      textureBinding Texture2D $= Just backTexObj
+      textureBinding Texture2D $= Just pingTexObj
       texImage2D
         Texture2D
         NoProxy

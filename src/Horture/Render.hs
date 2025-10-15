@@ -178,16 +178,12 @@ applySceneShaders :: (HortureLogger (Horture m l hdl)) => FFTSnapshot -> Float -
 applySceneShaders fft t scene = do
   fb <- asks (^. screenProg . framebuffer)
   -- Set custom framebuffer as target for read&writes.
-  blend $= Disabled
-  depthFunc $= Nothing
-  cullFace $= Nothing
-  colorMask $= (Color4 Enabled Enabled Enabled Enabled)
   bindFramebuffer Framebuffer $= fb
 
   -- Fronttexture here already has the captured window texture.
   identityP <- asks (^. screenProg . identityProgram)
   readTexture <- asks (^. screenProg . textureObject)
-  pingTexture <- asks (^. screenProg . backTextureObject)
+  pingTexture <- asks (^. screenProg . pingTextureObject)
   pongTexture <- asks (^. screenProg . pongTextureObject)
 
   liftIO $ framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D pingTexture 0

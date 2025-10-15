@@ -117,7 +117,7 @@ instance
     rb <- asks (^. renderBridgeCtx) >>= liftIO . readTVarIO
     texUnit <- asks (^. screenProg . textureUnit)
     texObj <- asks (^. screenProg . textureObject)
-    backTexObj <- asks (^. screenProg . backTextureObject)
+    pingTexObj <- asks (^. screenProg . pingTextureObject)
     pongTexObj <- asks (^. screenProg . pongTextureObject)
     sizeRef <- asks (^. dim)
     -- Ensure the target texture is bound!
@@ -131,7 +131,7 @@ instance
           when (w /= aw || h /= ah) $ do
             -- allocate storage once or on resize
             activeTexture $= texUnit
-            forM_ [texObj, backTexObj, pongTexObj] $ \to -> do
+            forM_ [texObj, pingTexObj, pongTexObj] $ \to -> do
               textureBinding Texture2D $= Just to
               glPixelStorei GL_UNPACK_ALIGNMENT 1
               texImage2D
