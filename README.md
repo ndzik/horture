@@ -13,6 +13,10 @@ support. E.g. using alerts which are shown in their streamoverlay to notify
 about followings/subscriptions and more. This is a suitable way for handling
 such events, but what if you want to go a step further?
 
+## Video with a debug build
+
+https://github.com/user-attachments/assets/d85e1490-f7be-4ef7-87d8-3c375a46356a
+
 ## Horture's goal
 
 The simplest usecase for horture is to allow the integration of displaying
