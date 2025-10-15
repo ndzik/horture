@@ -26,11 +26,24 @@ module Horture.Shader.Shader
     audioShader,
     bassRealityWarp,
     kaleidoscopeShader,
+    identityShader,
   )
 where
 
 import Data.ByteString.Char8 (ByteString)
 import Text.RawString.QQ
+
+identityShader :: ByteString
+identityShader =
+  [r|
+#version 410
+in vec2 texCoord;
+uniform sampler2D imgTexture;
+layout(location=0) out vec4 frag_colour;
+void main(){
+  frag_colour = texture(imgTexture, vec2(texCoord.x, 1.0 - texCoord.y));
+}
+  |]
 
 backgroundShader :: ByteString
 backgroundShader =
@@ -38,7 +51,7 @@ backgroundShader =
 #version 410 core
 
 in vec2 texCoord;
-uniform float time;                 // set from CPU each frame (seconds)
+uniform float time;
 
 layout(location = 0) out vec4 frag_colour;
 
@@ -134,12 +147,8 @@ out vec4 frag_colour;
 // input alpha values and replacing them with 1.0. Keeps compatibility high
 // between multiple display applications.
 void main() {
-  vec4 col = texture(imgTexture, texCoord);
+  vec4 col = texture(imgTexture, vec2(texCoord.x, texCoord.y));
   frag_colour = vec4(col.x, col.y, col.z, 1.0);
-  // vec2 lo = uvInset;
-  // vec2 hi = vec2(1.0) - uvInset;
-  // vec2 uv = lo + texCoord * (hi - lo);
-  // frag_colour = texture(imgTexture, uv);
 }
   |]
 

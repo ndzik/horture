@@ -27,7 +27,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import Horture.Asset (HasTextureObject (textureObject))
 import Horture.Horture
 import Horture.Logging
-import Horture.Program (HasBackTextureObject (backTextureObject), HasTextureUnit (textureUnit))
+import Horture.Program
 import Horture.RenderBridge
 import Horture.State
 import Horture.WindowGrabber
@@ -118,6 +118,7 @@ instance
     texUnit <- asks (^. screenProg . textureUnit)
     texObj <- asks (^. screenProg . textureObject)
     backTexObj <- asks (^. screenProg . backTextureObject)
+    pongTexObj <- asks (^. screenProg . pongTextureObject)
     sizeRef <- asks (^. dim)
     -- Ensure the target texture is bound!
     liftIO $ do
@@ -130,7 +131,7 @@ instance
           when (w /= aw || h /= ah) $ do
             -- allocate storage once or on resize
             activeTexture $= texUnit
-            forM_ [texObj, backTexObj] $ \to -> do
+            forM_ [texObj, backTexObj, pongTexObj] $ \to -> do
               textureBinding Texture2D $= Just to
               glPixelStorei GL_UNPACK_ALIGNMENT 1
               texImage2D

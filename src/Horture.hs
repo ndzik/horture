@@ -158,7 +158,9 @@ countFrame = do
   liftIO . atomically . modifyTVar' fc $ (+ 1)
 
 clearView :: Horture m l hdl ()
-clearView = liftIO $ GL.clear [ColorBuffer, DepthBuffer]
+clearView = do
+  liftIO $ GL.clearColor $= Color4 0.1 0.1 0.1 1
+  liftIO $ GL.clear [ColorBuffer, DepthBuffer]
 
 updateView :: Horture m l hdl ()
 updateView = asks _glWin >>= liftIO . GLFW.swapBuffers
@@ -289,7 +291,11 @@ initShaderEffects = do
             dtUniform <- uniformLocation hsp "dt"
             timeSinceUniform <- uniformLocation hsp "timeSinceStart"
             dominatingFreqUniform <- uniformLocation hsp "frequencies"
+            imgSamplerUniform <- uniformLocation hsp "imgTexture"
             randomUniform <- uniformLocation hsp "rng"
+            currentProgram $= Just hsp
+            uniform imgSamplerUniform $= (0 :: GLint)
+            currentProgram $= Nothing
             return
               HortureShaderProgram
                 { _hortureShaderProgramShader = hsp,
@@ -297,7 +303,8 @@ initShaderEffects = do
                   _hortureShaderProgramTimeSinceUniform = timeSinceUniform,
                   _hortureShaderProgramDtUniform = dtUniform,
                   _hortureShaderProgramFrequenciesUniform = dominatingFreqUniform,
-                  _hortureShaderProgramRandomUniform = randomUniform
+                  _hortureShaderProgramRandomUniform = randomUniform,
+                  _hortureShaderProgramTextureUniform = imgSamplerUniform
                 }
       Map.fromList <$> mapM (sequenceRight . second (sequence . (buildLinkAndUniform <$>))) shaderProgs
     sequenceRight :: (ShaderEffect, IO [HortureShaderProgram]) -> IO (ShaderEffect, [HortureShaderProgram])
@@ -305,6 +312,14 @@ initShaderEffects = do
 
 initHortureScreenProgram :: (GLsizei, GLsizei) -> Map.Map ShaderEffect [HortureShaderProgram] -> IO HortureScreenProgram
 initHortureScreenProgram (w, h) effs = do
+  -- Identity program.
+  vsp <- loadShaderBS "passthrough.shader" VertexShader passthroughVertexShader
+  fsp <- loadShaderBS "identity.shader" FragmentShader identityShader
+  identityProgram <- linkShaderProgram [vsp, fsp]
+  currentProgram $= Just identityProgram
+  identityTexUniform <- uniformLocation identityProgram "imgTexture"
+  uniform identityTexUniform $= Index1 (0 :: GLint)
+
   -- Shader program.
   vsp <- loadShaderBS "mvp.shader" VertexShader mvpVertexShader
   fsp <- loadShaderBS "display.shader" FragmentShader displayShader
@@ -332,6 +347,20 @@ initHortureScreenProgram (w, h) effs = do
 
   renderedTexture <- genObjectName
   textureBinding Texture2D $= Just renderedTexture
+  texImage2D
+    Texture2D
+    NoProxy
+    0
+    RGBA'
+    (TextureSize2D w h)
+    0
+    anyPixelData
+  textureFilter Texture2D $= ((Linear', Nothing), Linear')
+  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
+
+  pongTexture <- genObjectName
+  textureBinding Texture2D $= Just pongTexture
   texImage2D
     Texture2D
     NoProxy
@@ -389,7 +418,9 @@ initHortureScreenProgram (w, h) effs = do
         _hortureScreenProgramFramebuffer = fb,
         _hortureScreenProgramTextureObject = renderedTexture,
         _hortureScreenProgramBackTextureObject = backTexture,
-        _hortureScreenProgramTextureUnit = screenTextureUnit
+        _hortureScreenProgramPongTextureObject = pongTexture,
+        _hortureScreenProgramTextureUnit = screenTextureUnit,
+        _hortureScreenProgramIdentityProgram = identityProgram
       }
   where
     screenTextureUnit = TextureUnit 0

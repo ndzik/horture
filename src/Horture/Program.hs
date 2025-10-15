@@ -30,8 +30,10 @@ data HortureScreenProgram = HortureScreenProgram
     _hortureScreenProgramTimeUniform :: !UniformLocation,
     _hortureScreenProgramTextureObject :: !TextureObject,
     _hortureScreenProgramBackTextureObject :: !TextureObject,
+    _hortureScreenProgramPongTextureObject :: !TextureObject,
     _hortureScreenProgramFramebuffer :: !FramebufferObject,
-    _hortureScreenProgramTextureUnit :: !TextureUnit
+    _hortureScreenProgramTextureUnit :: !TextureUnit,
+    _hortureScreenProgramIdentityProgram :: !Program
   }
   deriving (Show)
 
@@ -81,7 +83,8 @@ data HortureShaderProgram = HortureShaderProgram
     _hortureShaderProgramTimeSinceUniform :: !UniformLocation,
     _hortureShaderProgramDtUniform :: !UniformLocation,
     _hortureShaderProgramFrequenciesUniform :: !UniformLocation,
-    _hortureShaderProgramRandomUniform :: !UniformLocation
+    _hortureShaderProgramRandomUniform :: !UniformLocation,
+    _hortureShaderProgramTextureUniform :: !UniformLocation
   }
   deriving (Show)
 

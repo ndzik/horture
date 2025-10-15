@@ -12,7 +12,7 @@ where
 import Codec.Picture.Gif
 import Control.Concurrent.STM (readTVarIO)
 import Control.Lens
-import Control.Monad (foldM_)
+import Control.Monad (foldM_, when)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Bits hiding (rotate)
@@ -178,12 +178,27 @@ applySceneShaders :: (HortureLogger (Horture m l hdl)) => FFTSnapshot -> Float -
 applySceneShaders fft t scene = do
   fb <- asks (^. screenProg . framebuffer)
   -- Set custom framebuffer as target for read&writes.
+  blend $= Disabled
+  depthFunc $= Nothing
+  cullFace $= Nothing
+  colorMask $= (Color4 Enabled Enabled Enabled Enabled)
   bindFramebuffer Framebuffer $= fb
+
   -- Fronttexture here already has the captured window texture.
+  identityP <- asks (^. screenProg . identityProgram)
   readTexture <- asks (^. screenProg . textureObject)
-  writeTexture <- asks (^. screenProg . backTextureObject)
+  pingTexture <- asks (^. screenProg . backTextureObject)
+  pongTexture <- asks (^. screenProg . pongTextureObject)
+
+  liftIO $ framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D pingTexture 0
+  activeTexture $= TextureUnit 0
+  textureBinding Texture2D $= Just readTexture
+  currentProgram $= Just identityP
+  drawBaseQuad
+  currentProgram $= Nothing
+
   let effs = scene ^. shaders
-  (finishedTex, _) <- foldrM (applyShaderEffect fft t) (readTexture, writeTexture) effs
+  (finishedTex, _) <- foldrM (applyShaderEffect fft t) (pingTexture, pongTexture) effs
   -- (r, w) -> (w, r) -> (r, w)
   -- Unbind post-processing framebuffer and bind default framebuffer for
   -- on-screen rendering.
@@ -204,15 +219,21 @@ applyShaderEffect (bass, mids, highs) t (eff, birth, lt) buffers = do
     asks (Map.lookup eff . (^. screenProg . shaderEffects)) >>= \case
       Nothing -> throwError $ HE "unhandled shadereffect encountered"
       Just sp -> return sp
-  foldrM (go (tw, th)) buffers shaderProgs
+  result <- foldrM (go (tw, th)) buffers shaderProgs
+  pure result
   where
     go (w, h) prog (readTexture, writeTexture) = do
-      -- Read from texture r.
-      textureBinding Texture2D $= Just readTexture
-      -- Write to texture w.
+      when (readTexture == writeTexture) $
+        throwError $
+          HE "read and write textures are the same!"
+
       liftIO $ do
         framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D writeTexture 0
         GL.viewport $= (Position 0 0, Size w h)
+
+      activeTexture $= TextureUnit 0
+      textureBinding Texture2D $= Just readTexture
+
       currentProgram $= Just (prog ^. shader)
       setLifetimeUniform lt (prog ^. lifetimeUniform)
       liftIO . withArray [bass, mids, highs] $ uniformv (prog ^. frequenciesUniform) 3
