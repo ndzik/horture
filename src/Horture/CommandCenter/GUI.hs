@@ -20,6 +20,9 @@ import Horture.Server.Protocol
 import Monomer
 import Monomer.Core.Themes.BaseTheme (BaseThemeColors (..), baseTheme)
 
+data UIPane = UIPaneMain | UIPaneConfiguration
+  deriving (Eq, Show)
+
 data CCModel = CCModel
   { _mCapturedWin :: Maybe Text,
     _mFPS :: Double,
@@ -27,7 +30,8 @@ data CCModel = CCModel
     _mAssets :: [FilePath],
     _mSelAsset :: Int,
     _mLogLines :: [Text],
-    _mMeta :: Text
+    _mMeta :: Text,
+    _mMenu :: UIPane
   }
 
 data Pane = PaneAssets | PaneLog
@@ -44,6 +48,7 @@ instance Eq CCModel where
       && (a ^. mLogLines) == (b ^. mLogLines)
       && (isJust (a ^. mConn) == isJust (b ^. mConn))
       && (a ^. mMeta) == (b ^. mMeta)
+      && (a ^. mMenu) == (b ^. mMenu)
 
 instance Default CCModel where
   def =
@@ -54,7 +59,8 @@ instance Default CCModel where
         _mAssets = [],
         _mSelAsset = 0,
         _mLogLines = [],
-        _mMeta = "No metainformation available"
+        _mMeta = "No metainformation available",
+        _mMenu = UIPaneMain
       }
 
 data CCEvent
@@ -68,6 +74,7 @@ data CCEvent
   | EvSendEffect EffectRequest
   | EvStopCapture
   | EvToggleES
+  | EvSetUI UIPane
   | EvRefreshES
   | EvDisableAll
   | EvEnableAll
@@ -112,18 +119,28 @@ headerSize = 20
 buildUI :: WidgetEnv CCModel CCEvent -> CCModel -> WidgetNode CCModel CCEvent
 buildUI _ m =
   vstack
-    [ vstack
+    [ hstack
+        [ vstack
+            [ label "Horture" `styleBasic` [textSize titleSize, textCenter],
+              separatorLine `styleBasic` [paddingH 4]
+            ],
+          spacer_ [width 128],
+          menuButtons
+        ]
+        `styleBasic` [padding 8],
+      spacer,
+      box_ [expandContent] $ menu (m ^. mMenu) `styleBasic` [radius 6],
+      filler
+    ]
+    `styleBasic` [bgColor baseColor, padding 8]
+  where
+    menu UIPaneMain =
+      vstack
         [ hstack
-            [ vstack
-                [ label "CommandCenter" `styleBasic` [textSize titleSize, textCenter],
-                  separatorLine `styleBasic` [paddingH 4]
-                ],
-              spacer_ [width 128],
+            [ spacer,
               box captureButton,
               spacer,
               box toggleEventSourceButton,
-              spacer,
-              box toggleActiveCaptureButton,
               filler,
               spacer_ [width 32],
               boxShadow . box $
@@ -134,93 +151,92 @@ buildUI _ m =
                       (label (showt (m ^. mFPS))) `styleBasic` [textCenter]
                     ]
                 )
-                  `styleBasic` [bgColor lightColor, radius 6, padding 4, width 128]
+                  `styleBasic` [bgColor baseColor, radius 6, padding 4, width 128]
             ]
-            `styleBasic` [padding 8],
+            `styleBasic` [bgColor lightColor, padding 8],
           hstack
             [ filler,
-              boxShadow $
-                (capturedWinW m)
-                  `styleBasic` [bgColor lightColor, radius 6, padding 4],
+              boxShadow $ capturedWinW m,
               filler
-            ]
-        ],
-      hstack
-        [ boxShadow $
-            box_
-              [alignTop]
-              ( vstack
-                  [ label "Assets" `styleBasic` [textSize headerSize, textCenter],
-                    separatorLine `styleBasic` [paddingH 4],
-                    spacer,
-                    vstack assetList
-                      `styleBasic` [padding 8, radius 6]
-                  ]
-              )
-              `styleBasic` [bgColor lightColor, radius 6, padding 4],
-          spacer,
-          boxShadow $
-            box
-              ( vstack
-                  [ label "Log" `styleBasic` [textSize headerSize, textCenter],
-                    separatorLine `styleBasic` [paddingH 4],
-                    spacer,
-                    scroll_ [wheelRate 40] (vstack (map (label . id) (m ^. mLogLines)))
-                      `styleBasic` [padding 8, radius 6, height 300]
-                  ]
-              )
-              `styleBasic` [bgColor lightColor, radius 6, padding 4]
-        ]
-        `styleBasic` [paddingT 4],
-      spacer,
-      boxShadow . box_ [expandContent] $
-        ( vstack
-            [ label "Metainformation" `styleBasic` [textSize headerSize, textCenter],
-              separatorLine `styleBasic` [paddingH 4],
+            ],
+          hstack
+            [ boxShadow $
+                box_
+                  [alignTop]
+                  ( vstack
+                      [ label "Assets" `styleBasic` [textSize headerSize, textCenter],
+                        separatorLine `styleBasic` [paddingH 4],
+                        spacer,
+                        vstack assetList
+                          `styleBasic` [padding 8, radius 6]
+                      ]
+                  )
+                  `styleBasic` [bgColor lightColor, radius 6, padding 4],
               spacer,
-              box (label (m ^. mMeta))
+              boxShadow $
+                box
+                  ( vstack
+                      [ label "Log" `styleBasic` [textSize headerSize, textCenter],
+                        separatorLine `styleBasic` [paddingH 4],
+                        spacer,
+                        scroll_ [wheelRate 40] (vstack (map (label . id) (m ^. mLogLines)))
+                          `styleBasic` [padding 8, radius 6, height 300]
+                      ]
+                  )
+                  `styleBasic` [bgColor lightColor, radius 6, padding 4]
             ]
-            `styleBasic` []
-        )
-          `styleBasic` [bgColor lightColor, padding 8, radius 6],
-      spacer,
-      scroll_ [wheelRate 40] $
-        vstack
-          [ boxShadow . box_ [expandContent] $
-              vstack
-                [ label "Screen Effects" `styleBasic` [textSize headerSize, textCenter],
-                  separatorLine `styleBasic` [padding 4],
+            `styleBasic` [paddingT 4],
+          spacer,
+          boxShadow . box_ [expandContent] $
+            ( vstack
+                [ label "Metainformation" `styleBasic` [textSize headerSize, textCenter],
+                  separatorLine `styleBasic` [paddingH 4],
                   spacer,
-                  buttonGrid
-                    6
-                    ( map
-                        behaviourButton
-                        [ minBound
-                          .. maxBound :: BehaviourType
-                        ]
-                    )
+                  box (label (m ^. mMeta))
                 ]
-                `styleBasic` [bgColor lightColor, padding 4, radius 6],
-            spacer,
-            boxShadow . box_ [expandContent] $
-              vstack
-                [ label "Shader Effects" `styleBasic` [textSize headerSize, textCenter],
-                  separatorLine `styleBasic` [padding 4],
-                  spacer,
-                  buttonGrid
-                    6
-                    ( map
-                        shaderButton
-                        [ minBound
-                          .. maxBound :: ShaderEffect
-                        ]
-                    )
-                ]
-                `styleBasic` [bgColor lightColor, padding 4, radius 6]
-          ]
-    ]
-    `styleBasic` [bgColor baseColor]
-  where
+                `styleBasic` []
+            )
+              `styleBasic` [bgColor lightColor, padding 8, radius 6]
+        ]
+        `styleBasic` [bgColor baseColor]
+    menu UIPaneConfiguration =
+      vstack
+        [ scroll_ [wheelRate 40] $
+            vstack
+              [ boxShadow . box_ [expandContent] $
+                  vstack
+                    [ label "Screen Effects" `styleBasic` [textSize headerSize, textCenter],
+                      separatorLine `styleBasic` [padding 4],
+                      spacer,
+                      buttonGrid
+                        4
+                        ( map
+                            behaviourButton
+                            [ minBound
+                              .. maxBound :: BehaviourType
+                            ]
+                        )
+                    ]
+                    `styleBasic` [bgColor lightColor, padding 4, radius 6],
+                spacer,
+                boxShadow . box_ [expandContent] $
+                  vstack
+                    [ label "Shader Effects" `styleBasic` [textSize headerSize, textCenter],
+                      separatorLine `styleBasic` [padding 4],
+                      spacer,
+                      buttonGrid
+                        4
+                        ( map
+                            shaderButton
+                            [ minBound
+                              .. maxBound :: ShaderEffect
+                            ]
+                        )
+                    ]
+                    `styleBasic` [bgColor lightColor, padding 4, radius 6]
+              ]
+        ]
+
     assetList =
       if null (m ^. mAssets)
         then [label "No assets available"]
@@ -236,24 +252,36 @@ buildUI _ m =
         Nothing -> label "No window is captured"
         Just t -> label t
 
+    menuButtons =
+      hstack
+        [ box mainUIbutton,
+          spacer,
+          box settingsButton
+        ]
+
     captureButton =
       case m ^. mCapturedWin of
         Nothing ->
-          button "Connect Application" EvConnectApplication
-            `styleBasic` [textSize 12]
+          button "Connect" EvConnectApplication
+            `styleBasic` [textSize 12, width 100, bgColor baseColor, height 32]
+            `styleHover` [bgColor darkColor]
         Just _ ->
-          button "Stop Capture" EvStopCapture
-            `styleBasic` [bgColor softRed, textSize 12]
-
-    toggleActiveCaptureButton =
-      button "Start Capture" EvStartCapture
-        `styleBasic` [textSize 12]
-        `nodeEnabled` (isJust $ m ^. mConn)
+          button "Disconnect" EvStopCapture
+            `styleBasic` [bgColor softRed, textSize 12, width 100, height 32]
+            `styleHover` [bgColor darkColor]
 
     toggleEventSourceButton =
-      button "Toggle Event Source" EvToggleES
-        `styleBasic` [textSize 12]
+      button "Toggle" EvToggleES
+        `styleBasic` [textSize 12, width 100, height 32]
         `nodeEnabled` (isJust $ m ^. mConn)
+
+    settingsButton =
+      button "Settings" (EvSetUI UIPaneConfiguration)
+        `styleBasic` [textSize 12]
+
+    mainUIbutton =
+      button "Overview" (EvSetUI UIPaneMain)
+        `styleBasic` [textSize 12]
 
 defaultLifetime :: Lifetime
 defaultLifetime = Limited 10
@@ -261,18 +289,18 @@ defaultLifetime = Limited 10
 behaviourButton :: BehaviourType -> WidgetNode CCModel CCEvent
 behaviourButton bt =
   button (T.pack $ show bt) (EvSendEffect (ERBehaviour bt defaultLifetime))
-    `styleBasic` [width 240, bgColor baseColor, paddingT 4]
+    `styleBasic` [width 200, bgColor baseColor, paddingT 4]
     `styleHover` [bgColor darkColor]
 
 shaderButton :: ShaderEffect -> WidgetNode CCModel CCEvent
 shaderButton se =
   button (T.pack $ show se) (EvSendEffect (ERShader se defaultLifetime))
-    `styleBasic` [width 240, bgColor baseColor, paddingT 4]
+    `styleBasic` [width 200, bgColor baseColor, paddingT 4]
     `styleHover` [bgColor darkColor]
 
 buttonGrid :: Int -> [WidgetNode CCModel CCEvent] -> WidgetNode CCModel CCEvent
 buttonGrid cols btns =
-  vstack (map (hstack . intersperse filler) (chunk cols btns)) `styleBasic` [padding 4]
+  box_ [alignCenter, alignMiddle] $ vstack (map (hstack . intersperse spacer) (chunk cols btns)) `styleBasic` [padding 4]
   where
     chunk _ [] = []
     chunk n xs =
@@ -296,7 +324,7 @@ lightColor :: Color
 lightColor = rgbHex "#2A2A2A" -- subtle separation layers / cards
 
 highlightColor :: Color
-highlightColor = rgbHex "#3A6EA5" -- cold steel-blue accent for focus/hover
+highlightColor = rgbHex "#3A6EA5" -- soft gold
 
 softRed :: Color
 softRed = rgbHex "#D35F5F" -- muted alert tone that fits the palette
@@ -329,7 +357,8 @@ handleEvent _ _ m = \case
   EvCapturedWindow stitle -> [Model (m & mCapturedWin .~ Just stitle)]
   EvSendEffect effReq -> [Task $ sendEffectRequest (m ^. mConn) effReq]
   EvToggleES -> [Task $ toggleEventStream (m ^. mConn)]
-  EvConnectionEstablished chan -> [Model (m & mConn ?~ chan)]
+  EvConnectionEstablished chan -> [Model (m & mConn ?~ chan), Event EvStartCapture]
+  EvSetUI pane -> [Model (m & mMenu .~ pane)]
   EvRefreshES -> []
   EvDisableAll -> []
   EvEnableAll -> []
