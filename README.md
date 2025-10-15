@@ -49,6 +49,12 @@ to backstab you again and again and again?
   * WhereAreMyGlasses -> Apply a blur filter
   * TakeTheWhitePill -> Lots of colours
   * ... any Shader is possible, so this list is extensible with ease
+ 
+## Some clips from my teststreams
+
+* [Somehow winning a ladder game of SC2](https://www.twitch.tv/nackterzeus/clip/AdventurousScaryJamDBstyle-Sa5V_-WFCR2cgnwT)
+* [(SEIZURE WARNING) being sabotaged while driving in Trackmania](https://www.twitch.tv/nackterzeus/clip/DeadChillyCoffeeGrammarKing-AoQDR1tPw4ngqRxm)
+* [Constantly flashbanged by a viewer while working on Hortures codebase](https://www.twitch.tv/nackterzeus/clip/RockyToughTriangleDogFace-4u3FZNz8oPuElIl8)
 
 ## Screenshots
 
