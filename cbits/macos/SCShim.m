@@ -222,48 +222,90 @@ static CGWindowID topWindowAt(CGPoint p) {
   return best;
 }
 
-int sc_pick_window(PickCB cb, void* user) {
-  // Wait for a clean press: ensure button up first
-  while (CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft))
-    usleep(1000);
+static inline void runOnMainSync(void (^block)(void)) {
+  if ([NSThread isMainThread]) { block(); }
+  else { dispatch_sync(dispatch_get_main_queue(), block); }
+}
 
-  // Now wait for press
-  while (!CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft))
-    usleep(1000);
+int sc_pick_window(PickCB cb, void *user) {
+  __block int rc = -1;
 
-  // On press, read global mouse location (top-left origin)
-  CGEventRef e = CGEventCreate(NULL);
-  if (!e) return -1;
-  CGPoint p = CGEventGetLocation(e);
-  CFRelease(e);
+  runOnMainSync(^{
+    if (NSApp == nil) [NSApplication sharedApplication];
+    [NSApp activateIgnoringOtherApps:YES];
 
-  CGWindowID wid = topWindowAt(p);
-  if (!wid) return -1;
+    NSError *err = nil;
+    SCShareableContent *content = fetchContent(&err);
+    if (!content) { rc = -1; return; }
 
-  CFNumberRef widNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &wid);
-  if (!widNum) return -1;
-
-  // Array of one CFNumber
-  const void* vals[1] = { widNum };
-  CFArrayRef one = CFArrayCreate(kCFAllocatorDefault, vals, 1, &kCFTypeArrayCallBacks);
-
-  // Query window description(s)
-  CFArrayRef info = one ? CGWindowListCreateDescriptionFromArray(one) : NULL;
-
-  char titleBuf[512] = {0};
-  if (info && CFArrayGetCount(info) > 0) {
-    CFDictionaryRef d = CFArrayGetValueAtIndex(info, 0);
-    CFTypeRef name = d ? CFDictionaryGetValue(d, kCGWindowName) : NULL;
-    if (name && CFGetTypeID(name) == CFStringGetTypeID()) {
-      CFStringGetCString((CFStringRef)name, titleBuf, sizeof(titleBuf), kCFStringEncodingUTF8);
+    NSMutableArray<SCWindow*> *wins = [NSMutableArray array];
+    pid_t selfPid = getpid();
+    for (SCWindow *w in content.windows) {
+      if (!w.isOnScreen) continue;
+      if (w.frame.size.width < 1 || w.frame.size.height < 1) continue;
+      if (w.owningApplication == nil) continue;
+      [wins addObject:w];
     }
-  }
+    if (wins.count == 0) { rc = -1; return; }
 
-  // Cleanup
-  if (info) CFRelease(info);
-  if (one)  CFRelease(one);
-  CFRelease(widNum);
+    [wins sortUsingComparator:^NSComparisonResult(SCWindow *a, SCWindow *b) {
+      NSString *an = a.owningApplication.applicationName ?: @"";
+      NSString *bn = b.owningApplication.applicationName ?: @"";
+      NSComparisonResult r = [an caseInsensitiveCompare:bn];
+      if (r != NSOrderedSame) return r;
+      NSString *at = a.title.length ? a.title : @"(Untitled)";
+      NSString *bt = b.title.length ? b.title : @"(Untitled)";
+      return [at caseInsensitiveCompare:bt];
+    }];
 
-  if (cb) cb((uint64_t)wid, titleBuf[0] ? titleBuf : "", user);
-  return 0;
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"Pick a window to capture";
+    alert.informativeText = @"Choose from currently visible windows.";
+    [alert addButtonWithTitle:@"Capture"];
+    [alert addButtonWithTitle:@"Cancel"];
+
+    NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0,0,460,26)
+                                                     pullsDown:NO];
+
+    for (SCWindow *w in wins) {
+      NSString *app = w.owningApplication.applicationName ?: @"";
+      NSString *title = w.title.length ? w.title : @"(Untitled)";
+      NSString *label = [NSString stringWithFormat:@"%@ — %@", app, title];
+      [popup addItemWithTitle:label];
+      NSMenuItem *item = popup.lastItem;
+      item.representedObject = @((uint64_t)w.windowID);
+    }
+
+    NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0,0,480,32)];
+    [container addSubview:popup];
+    alert.accessoryView = container;
+
+    // Make sure it’s on top
+    NSWindow *aw = alert.window;
+    aw.level = NSStatusWindowLevel;
+    aw.collectionBehavior |= NSWindowCollectionBehaviorCanJoinAllSpaces;
+    [aw center];
+    [aw makeKeyAndOrderFront:nil];
+    [aw orderFrontRegardless];
+    [NSApp activateIgnoringOtherApps:YES];
+
+    NSModalResponse resp = [alert runModal];
+    if (resp != NSAlertFirstButtonReturn) { rc = -1; return; }
+
+    NSMenuItem *sel = popup.selectedItem;
+    if (!sel || !sel.representedObject) { rc = -1; return; }
+
+    uint64_t wid = [(NSNumber*)sel.representedObject unsignedLongLongValue];
+
+    // Title fetching
+    SCWindow *chosen = nil;
+    for (SCWindow *w in wins) { if ((uint64_t)w.windowID == wid) { chosen = w; break; } }
+    NSString *title = chosen ? (chosen.title.length ? chosen.title : @"(Untitled)") : @"";
+    const char *cTitle = title.UTF8String ?: "";
+
+    if (cb) cb(wid, cTitle, user);
+    rc = 0;
+  });
+
+  return rc;
 }

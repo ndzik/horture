@@ -36,7 +36,6 @@ import Horture.Initializer
 import Horture.Loader
 import Horture.Loader.Asset (Asset)
 import Horture.Object
-import Horture.Scene (Scene (..))
 import Horture.Server.Env
 import Horture.Server.Protocol
 import Linear (V3 (V3))
@@ -205,14 +204,7 @@ _run fpsTvar evChan logChan mv enabledTVar preloadedImages = do
             _hortureInitializerEnvironmentGrabbedWin = mv,
             _hortureInitializerEnvironmentDefaultFont = defaultFont
           }
-      startScene =
-        def
-          { _shaders = [],
-            _screen =
-              def
-                { _behaviours = []
-                }
-          }
+      startScene = def
       action = Backend.initialize @'Channel startScene preloadedImages [] fpsTvar (Just logChan) evChan
   res <- runHortureInitializer env action
   killThread esTID

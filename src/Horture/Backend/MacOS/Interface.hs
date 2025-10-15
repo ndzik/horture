@@ -153,14 +153,6 @@ pickWindowMac = do
   cb <- mkPickCB $ \wid cstr _ -> do
     t <- T.pack <$> peekCString cstr
     putMVar mv (Just (fromIntegral wid, t))
-  print @String $ "Please pick a window (ESC to abort)"
+    print @T.Text $ "Picked window: " <> t
   r <- c_sc_pick_window cb nullPtr
-  if r == 0
-    then do
-      print @String $ "Window picked"
-      r <- takeMVar mv
-      print @String $ "Window picking finished"
-      pure r
-    else do
-      print @String $ "Window picking aborted"
-      pure Nothing
+  if r == 0 then takeMVar mv else pure Nothing

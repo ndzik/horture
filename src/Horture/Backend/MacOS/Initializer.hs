@@ -66,8 +66,8 @@ initialize ::
   Chan Event ->
   HortureInitializer l hdl ()
 initialize startScene loadedImages _loadedSounds frameCounter logChan evChan = do
-  glW <- liftIO initGLFW
   capHandle <- grabAnyWindow
+  glW <- liftIO initGLFW
 
   (rb, rc, title) <- startCapture capHandle
   when (rc /= 0) $
