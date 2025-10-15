@@ -17,9 +17,10 @@ module Horture
   )
 where
 
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
 import Control.Lens
-import Control.Monad (unless, void)
+import Control.Monad (unless, void, when)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Bifunctor
@@ -58,13 +59,14 @@ import System.Exit
 hortureName :: String
 hortureName = "horture"
 
+frameTime :: Float
+frameTime = 1 / 144 -- target 144 FPS upper limit
+
 -- | playScene plays the given scene in a Horture context.
 playScene :: forall m l hdl. (HortureEffects m hdl l) => Scene -> Horture m l hdl ()
 playScene s = do
   setTime 0
-  -- void . go 0 . Just $ s
-  -- void . withRecording . withAudio . go 0 . Just $ s
-  void . withRecording . go 0 . Just $ s
+  void . withAudio . withRecording . go 0 . Just $ s
   where
     go _ Nothing = do
       logInfo "horture stopped"
@@ -90,10 +92,10 @@ playScene s = do
                              logWarn "resetting scene & continuing..."
                              return $ Just s
                          )
-      -- deltaTime lt >>= \(timeSinceFrame, _) ->
-      --   when (timeSinceFrame < frameTime) $
-      --     liftIO . threadDelay . round $
-      --       (frameTime - timeSinceFrame) * 1000 * 1000
+      deltaTime lt >>= \(timeSinceFrame, _) ->
+        when (timeSinceFrame < frameTime) $
+          liftIO . threadDelay . round $
+            (frameTime - timeSinceFrame) * 1000 * 1000
       newTime <- getTime
       go newTime s
     handleHortureError (HE err) = logError . pack $ err
