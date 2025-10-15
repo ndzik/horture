@@ -183,23 +183,28 @@ fontFragmentShader =
   [r|
 #version 410
 in vec2 texCoord;
-uniform sampler2D fontTexture;
+uniform sampler2D fontTexture; // RG: R = fill, G = outline
 uniform float opacity = 1.0;
 uniform vec3  textColor  = vec3(1.0);
 uniform vec3  outlineCol = vec3(0.0);
 out vec4 frag_colour;
 
 void main() {
-  vec2 uv = vec2(texCoord.x, texCoord.y);
-  vec2 rg = texture(fontTexture, uv).rg;
-  float fill    = rg.r;
-  float outline = rg.g;
+  vec2 rg = texture(fontTexture, texCoord).rg;
+  float fill   = pow(rg.r, 1.3);
+  float stroke = pow(rg.g, 1.3);
 
-  float a   = max(fill, outline) * opacity;
-  if (a < 0.005) discard;
+  float outlineRing = max(stroke - fill, 0.0);
 
-  vec3 col = mix(outlineCol, textColor, fill);
-  frag_colour = vec4(col, a);
+  float alpha = clamp(max(fill, stroke), 0.0, 1.0);
+
+  float wFill   = fill;
+  float wStroke = outlineRing;
+  float mixT    = wFill / (wFill + wStroke + 1e-5);
+
+  vec3 rgb = mix(outlineCol, textColor, mixT);
+
+  frag_colour = vec4(rgb, alpha * opacity);
 }
   |]
 

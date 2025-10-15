@@ -22,8 +22,6 @@
 
 #import "audio_bridge.h"
 
-// --------------------------- Player ---------------------------
-
 @interface _AP : NSObject
 @property(nonatomic,strong) AVAudioEngine* eng;
 @property(nonatomic,strong) AVAudioPlayerNode* node;
@@ -151,8 +149,6 @@ int ap_play_pcm(APHandle* h, const void* bytes, int byteCount,
   });
   return rc;
 }
-
-// -------------------------- Recorder --------------------------
 
 @interface _AROut : NSObject <SCStreamOutput>
 @property(atomic, assign) double band0; // bass

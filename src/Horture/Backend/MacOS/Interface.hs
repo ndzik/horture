@@ -81,7 +81,6 @@ checkScreenPermission = (/= 0) <$> c_sc_preflight_screen
 requestScreenPermission :: IO Bool
 requestScreenPermission = (/= 0) <$> c_sc_request_screen
 
--- Pass Nothing to reset all ScreenCapture entries, or Just "io.alacritty" etc.
 resetScreenPermission :: Maybe String -> IO Int
 resetScreenPermission mBid =
   case mBid of

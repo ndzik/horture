@@ -64,7 +64,7 @@ static int bounds_for_window(uint64_t wid, SCRect* out) {
     if (!CGRectMakeWithDictionaryRepresentation(b, &r)) break;
 
     // r is in global screen space, origin at top-left (y down)
-    // Add a small inset so we don't fully occlude GPU-backed windows
+    // Adding a small inset so we don't fully occlude GPU-backed windows
     const int inset = 1;
     if (r.size.width > 2*inset && r.size.height > 2*inset) {
         out->x = (int)llround(r.origin.x) + inset;
@@ -264,7 +264,6 @@ int sc_pick_window(PickCB cb, void* user) {
   if (one)  CFRelease(one);
   CFRelease(widNum);
 
-  // Use titleBuf (stable C string)
   if (cb) cb((uint64_t)wid, titleBuf[0] ? titleBuf : "", user);
   return 0;
 }

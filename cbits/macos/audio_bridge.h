@@ -7,7 +7,6 @@ extern "C" {
 typedef struct APHandle APHandle; // player
 typedef struct ARHandle ARHandle; // recorder
 
-// -------- Player --------
 APHandle *ap_create(void);
 void ap_destroy(APHandle *);
 int ap_play_pcm(APHandle *, const void *bytes, int byteCount,
@@ -17,8 +16,7 @@ int ap_play_pcm(APHandle *, const void *bytes, int byteCount,
                 float gain);       // 0..1
 void ap_stop_all(APHandle *);
 
-// -------- Recorder (FFT of captured app/window) --------
-// windowID: same CGWindowID you already use. If 0, default to system audio
+// windowID: same CGWindowID we already use. If 0, default to system audio
 // fallback (mic).
 ARHandle *ar_create(void);
 void ar_destroy(ARHandle *);

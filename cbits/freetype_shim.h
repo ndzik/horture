@@ -32,7 +32,8 @@ void ftl_face_close(FTL_Face *face);
 
 // Render a Unicode codepoint to an 8-bit bitmap + metrics.
 // Returns 1 on success, 0 on failure (glyph missing etc).
-int ftl_render_glyph(FTL_Face *face, uint32_t codepoint, FTL_Glyph *out);
+int ftl_render_glyph(FTL_Face *face, uint32_t codepoint, int outline_px,
+                     FTL_Glyph *out);
 
 // Free out->pixels allocated by ftl_render_glyph.
 void ftl_free_glyph(FTL_Glyph *g);
