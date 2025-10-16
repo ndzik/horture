@@ -15,7 +15,11 @@ such events, but what if you want to go a step further?
 
 ## Video with a debug build
 
-https://github.com/user-attachments/assets/d85e1490-f7be-4ef7-87d8-3c375a46356a
+<p align="center">
+  <a href="https://youtu.be/H_6QbFuItvA">
+    <img src="https://img.youtube.com/vi/H_6QbFuItvA/0.jpg" alt="Watch the video" width="600">
+  </a>
+</p>
 
 ## Horture's goal
 
