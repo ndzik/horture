@@ -26,6 +26,9 @@ source-repository-package
   location: https://github.com/ndzik/bindings-GLFW.git
   tag: 3152e71b596d09c644bb6168902384bd6db9346d
 
+package bindings-GLFW
+  flags: +ExposeNative
+
 -- bindings-GLFW low level GLFW bindings update to GLFW-3.4.
 source-repository-package
   type: git
