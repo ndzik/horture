@@ -189,11 +189,9 @@ applySceneShaders fft t scene = do
 
   liftIO $ framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D pingTexture 0
 
-  -- We also need to make sure the viewport is set correctly for the first copy.
-  capturedDim <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
-  liftIO $ GL.viewport $= (Position 0 0, uncurry Size capturedDim)
-  fbs <- asks (^. glWin) >>= liftIO . GLFW.getFramebufferSize
-  liftIO $ print $ "Framebuffer size: " ++ show fbs
+  -- -- We also need to make sure the viewport is set correctly for the first copy.
+  -- capturedDim <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
+  -- liftIO $ GL.viewport $= (Position 0 0, uncurry Size capturedDim)
 
   activeTexture $= TextureUnit 0
   textureBinding Texture2D $= Just readTexture
