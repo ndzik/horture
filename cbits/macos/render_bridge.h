@@ -20,9 +20,13 @@ typedef struct {
 } RBFrame;
 
 // Lifecycle + capture.
-RB *rb_create(void);
-int rb_start_capture(unsigned long long window_id, RB *rb, char *title_buf,
-                     size_t title_cap); // non-blocking start
+RB *rb_create_window(void);
+RB *rb_create_display(void);
+int rb_start_capture_window(unsigned long long window_id, RB *rb,
+                            char *title_buf, size_t title_cap);
+int rb_start_capture_display(unsigned long long display_id,
+                             void *overlay_nswindow, RB *rb, char *title_buf,
+                             size_t title_cap);
 void rb_stop_capture(RB *rb);
 void rb_destroy(RB *rb);
 

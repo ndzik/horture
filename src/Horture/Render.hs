@@ -25,6 +25,7 @@ import Data.Text (Text, unpack)
 import Foreign hiding (rotate, void)
 import Graphics.GLUtil.Camera3D as Util hiding (orientation)
 import Graphics.Rendering.OpenGL as GL hiding (get, lookAt, rotate, scale)
+import qualified Graphics.UI.GLFW as GLFW
 import Horture.Asset
 import Horture.Audio
 import Horture.Character
@@ -187,6 +188,13 @@ applySceneShaders fft t scene = do
   pongTexture <- asks (^. screenProg . pongTextureObject)
 
   liftIO $ framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D pingTexture 0
+
+  -- We also need to make sure the viewport is set correctly for the first copy.
+  capturedDim <- liftIO . (forBoth fromIntegral <$>) . readTVarIO =<< asks (^. dim)
+  liftIO $ GL.viewport $= (Position 0 0, uncurry Size capturedDim)
+  fbs <- asks (^. glWin) >>= liftIO . GLFW.getFramebufferSize
+  liftIO $ print $ "Framebuffer size: " ++ show fbs
+
   activeTexture $= TextureUnit 0
   textureBinding Texture2D $= Just readTexture
   currentProgram $= Just identityP

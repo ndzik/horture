@@ -22,7 +22,6 @@ static inline void runOnMainSync(void (^block)(void)) {
 }
 
 @implementation _RBOut
-// no @synthesize, no @property
 - (void)dealloc {
     CVPixelBufferRef prev =
         atomic_exchange_explicit(&latest, (CVPixelBufferRef)NULL, memory_order_acq_rel);
@@ -66,9 +65,15 @@ static SCShareableContent* fetchContent(NSError** outErr) {
   return content;
 }
 
-RB* rb_create(void) {
+RB* rb_create_window(void) {
   RB* rb = (RB*)calloc(1, sizeof(RB));
   rb->gap_px = 1;
+  return rb;
+}
+
+RB* rb_create_display(void) {
+  RB* rb = (RB*)calloc(1, sizeof(RB));
+  rb->gap_px = 0;
   return rb;
 }
 
@@ -91,7 +96,7 @@ void rb_destroy(RB* rb) {
   free(rb);
 }
 
-int rb_start_capture(unsigned long long window_id, RB* rb, char* title_buf, size_t title_cap) {
+int rb_start_capture_window(unsigned long long window_id, RB* rb, char* title_buf, size_t title_cap) {
   if (!rb || !title_buf || title_cap == 0) return -1;
   __block int rc = 0;
   runOnMainSync(^{
@@ -170,7 +175,7 @@ int rb_poll_frame(RB* rb, RBFrame* out) {
   CVPixelBufferRef pb = atomic_exchange_explicit(&rb->out->latest, (CVPixelBufferRef)NULL, memory_order_acq_rel);
   if (!pb) return 0;
 
-  const int g = 1;
+  const int g = rb->gap_px;
   size_t w0 = CVPixelBufferGetWidth(pb);
   size_t h0 = CVPixelBufferGetHeight(pb);
   OSType fmt = CVPixelBufferGetPixelFormatType(pb);
@@ -267,3 +272,106 @@ int rb_upload_to_bound_texture(RB* rb, const RBFrame* fr) {
 }
 
 void rb_set_gap(RB* rb, int px) { if (rb) rb->gap_px = px; }
+
+static NSString* rb_displayName(CGDirectDisplayID did) {
+  for (NSScreen *s in [NSScreen screens]) {
+    NSNumber *num = s.deviceDescription[@"NSScreenNumber"];
+    if (num && num.unsignedIntValue == did) {
+      if (@available(macOS 10.15, *)) {
+        if ([s respondsToSelector:@selector(localizedName)] && s.localizedName.length)
+          return s.localizedName;
+      }
+      break;
+    }
+  }
+  return @"Display";
+}
+
+int rb_start_capture_display(unsigned long long display_id,
+                             void *overlay_nswindow,
+                             RB *rb,
+                             char *title_buf,
+                             size_t title_cap)
+{
+  if (!rb || !title_buf || title_cap == 0 || !overlay_nswindow) return -1;
+
+  __block int rc = 0;
+  runOnMainSync(^{
+    NSError *err = nil;
+    SCShareableContent *content = fetchContent(&err);
+    if (!content) { rc = -2; return; }
+
+
+    CGDirectDisplayID did = (CGDirectDisplayID)display_id;
+
+    // Find SCDisplay by id
+    SCDisplay *target = nil;
+    for (SCDisplay *d in content.displays) {
+      if ((uint64_t)d.displayID == (uint64_t)display_id) { target = d; break; }
+    }
+    if (!target) { rc = -3; return; }
+
+    // Build a human title
+    NSString *title = rb_displayName(did);
+    if (title.length == 0) title = @"Display";
+    // copy to out
+    BOOL ok = [title getCString:title_buf maxLength:title_cap encoding:NSUTF8StringEncoding];
+    if (!ok) {
+      NSData *d = [title dataUsingEncoding:NSUTF8StringEncoding] ?: [NSData data];
+      size_t n = MIN((size_t)d.length, title_cap ? title_cap - 1 : 0);
+      memcpy(title_buf, d.bytes, n);
+      title_buf[n] = 0;
+    }
+
+    // Dimensions
+    CGDisplayModeRef mode = CGDisplayCopyDisplayMode(did);
+    // We make sure to get pixel dimensions, otherwise backing scale may make
+    // things complicated and require special care in the GL upload path.
+    size_t pxW = CGDisplayModeGetPixelWidth(mode);
+    size_t pxH = CGDisplayModeGetPixelHeight(mode);
+    if (mode) CFRelease(mode);
+    if (pxW <= 0 || pxH <= 0) {
+      CGSize sz = CGDisplayScreenSize(did);
+      CGRect b = CGDisplayBounds(did);
+      pxW = (NSInteger)CGRectGetWidth(b);
+      pxH = (NSInteger)CGRectGetHeight(b);
+    }
+    if (pxW <= 0 || pxH <= 0) { rc = -4; return; }
+
+    NSArray<SCWindow*> *exclude = nil;
+    NSWindow *ow = (__bridge NSWindow *)overlay_nswindow;
+    CGWindowID ownID = (CGWindowID)ow.windowNumber;
+    // Map to SCWindow in current content
+    for (SCWindow *w in content.windows) {
+      if ((CGWindowID)w.windowID == ownID) { exclude = @[w]; break; }
+    }
+
+    // Content filter for the display
+    SCContentFilter *filter = nil;
+    filter = [[SCContentFilter alloc] initWithDisplay:target excludingWindows:exclude];
+
+    // Stream config
+    SCStreamConfiguration *cfg = [SCStreamConfiguration new];
+    cfg.pixelFormat = kCVPixelFormatType_32BGRA;
+    cfg.width  = pxW;
+    cfg.height = pxH;
+    cfg.showsCursor = NO;
+    cfg.capturesAudio = NO;
+
+    printf("rb: display %llu -> %zux%zu\n", (uint64_t)display_id, (size_t)pxW, (size_t)pxH);
+
+    _RBOut *out = [_RBOut new];
+    rb->out = out;
+
+    SCStream *stream = [[SCStream alloc] initWithFilter:filter configuration:cfg delegate:nil];
+    rb->stream = stream;
+    if (!stream) { rb->out = nil; rc = -5; return; }
+
+    dispatch_queue_t q = dispatch_queue_create("rb.sc.stream", DISPATCH_QUEUE_SERIAL);
+    if (![stream addStreamOutput:out type:SCStreamOutputTypeScreen sampleHandlerQueue:q error:&err]) {
+      rb->stream = nil; rb->out = nil; rc = -6; return;
+    }
+    [stream startCaptureWithCompletionHandler:^(__unused NSError* e){}];
+  });
+  return rc;
+}

@@ -2,11 +2,11 @@ module Main (main) where
 
 import Data.Default
 import Horture.Authorize
--- import Horture.CommandCenter.CommandCenter
+import Horture.Backend.Types (CaptureType (..))
 import Horture.CommandCenter.GUI (runCommandCenterUI)
 import Horture.Config
 import Horture.Path
-import Horture.Server (startServer)
+import Horture.Server (ServerCfg (..), startServer)
 import Options.Applicative
 import System.Exit (exitFailure)
 
@@ -43,7 +43,8 @@ data HortureParams = HortureParams
     _mock :: !Bool,
     _authorize :: !Bool,
     _debug :: !Bool,
-    _server :: !Bool
+    _server :: !Bool,
+    _captureTarget :: !CaptureType
   }
   deriving (Show)
 
@@ -81,10 +82,27 @@ cmdParser =
           <> showDefault
           <> help "Run the horture capture server instead of the client."
       )
+    <*> option
+      captureTypeReader
+      ( long "capture-target"
+          <> short 'c'
+          <> metavar "CAPTURE-TARGET"
+          <> help "Capture target, either 'display' or 'window'."
+          <> showDefault
+          <> value CaptureWindow
+          <> completer (listCompleter ["display", "window"])
+      )
+
+captureTypeReader :: ReadM CaptureType
+captureTypeReader = eitherReader $ \s ->
+  case s of
+    "display" -> Right CaptureDisplay
+    "window" -> Right CaptureWindow
+    _ -> Left "Capture target must be either 'display' or 'window'."
 
 handleParams :: HortureParams -> IO ()
-handleParams (HortureParams _ _ _ _ True) = startServer def
-handleParams (HortureParams fp mockMode wantAuth isDebug _) =
+handleParams (HortureParams _ _ _ _ True captureType) = startServer def {scCaptureTarget = captureType}
+handleParams (HortureParams fp mockMode wantAuth isDebug _ _) =
   resolvePath fp >>= parseHortureClientConfig >>= \case
     Nothing -> do
       if isDebug

@@ -1,4 +1,7 @@
-module Horture.Backend.MacOS.Initializer (initialize) where
+module Horture.Backend.MacOS.Initializer
+  ( initialize,
+  )
+where
 
 import Control.Concurrent (newEmptyMVar, putMVar)
 import Control.Concurrent.Chan.Synchronous
@@ -19,6 +22,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import Horture
 import Horture.Audio
 import Horture.Backend.MacOS.Interface
+import Horture.Backend.Types
 import Horture.Error
 import Horture.Event
 import Horture.Horture
@@ -26,7 +30,7 @@ import Horture.Initializer
 import Horture.Loader.Asset
 import Horture.Logging
 import Horture.Program
-import Horture.RenderBridge (RB, c_rb_create, c_rb_destroy, c_rb_start, c_rb_stop)
+import Horture.RenderBridge (RB, c_rb_create_display, c_rb_create_window, c_rb_destroy, c_rb_start_display, c_rb_start_window, c_rb_stop)
 import Horture.Scene hiding (assets)
 import Horture.State
 import Horture.WindowGrabber
@@ -35,7 +39,7 @@ instance
   (CaptureHandle ~ hdl, HortureLogger (HortureInitializer l hdl)) =>
   WindowGrabber hdl (HortureInitializer l hdl)
   where
-  grabAnyWindow = do
+  grabAnyWindow CaptureWindow = do
     liftIO pickWindowMac >>= \case
       Nothing -> throwError (WindowEnvironmentInitializationErr "user aborted")
       Just (wid, title) -> do
@@ -43,14 +47,49 @@ instance
           CaptureHandle
             { chStop = pure (),
               chTitle = title,
-              chWinId = wid
+              chWinId = (wid, CaptureWindow)
+            }
+  grabAnyWindow CaptureDisplay = do
+    liftIO pickDisplayMac >>= \case
+      Nothing -> throwError (WindowEnvironmentInitializationErr "user aborted")
+      Just (did, title) -> do
+        pure
+          CaptureHandle
+            { chStop = pure (),
+              chTitle = title,
+              chWinId = (did, CaptureDisplay)
             }
 
-startCapture :: CaptureHandle -> HortureInitializer l hdl (Ptr RB, CInt, Text)
-startCapture capHandle = do
-  rb <- liftIO c_rb_create
+instance
+  (CaptureHandle ~ hdl, HortureLogger (HortureInitializer l hdl)) =>
+  WindowManager hdl (HortureInitializer l hdl)
+  where
+  setupWindowOverlay glfwWindow = do
+    nswin <- liftIO $ GLFW.getCocoaWindow glfwWindow
+    when (nswin == nullPtr) $
+      throwError $
+        WindowEnvironmentInitializationErr "GLFW.getCocoaWindow returned nullPtr"
+
+    liftIO $ c_setup_overlay nswin 1
+
+startCapture :: GLFW.Window -> CaptureType -> CaptureHandle -> HortureInitializer l hdl (Ptr RB, CInt, Text)
+startCapture glW CaptureDisplay capHandle = do
+  nsWindow <- liftIO $ GLFW.getCocoaWindow glW
+  when (nsWindow == nullPtr) $
+    throwError $
+      WindowEnvironmentInitializationErr "GLFW.getCocoaWindow returned nullPtr"
+  liftIO $ print @Text "Starting display capture"
+  rb <- liftIO c_rb_create_display
   (rc, title) <- liftIO $ allocaBytes 512 $ \buf -> do
-    rc <- c_rb_start (fromIntegral $ chWinId capHandle) rb buf 512
+    rc <- c_rb_start_display (fromIntegral . fst . chWinId $ capHandle) nsWindow rb buf 512
+    title <- T.pack <$> peekCString buf
+    pure (rc, title)
+  return (rb, rc, title)
+startCapture _ CaptureWindow capHandle = do
+  liftIO $ print @Text "Starting window capture"
+  rb <- liftIO c_rb_create_window
+  (rc, title) <- liftIO $ allocaBytes 512 $ \buf -> do
+    rc <- c_rb_start_window (fromIntegral . fst . chWinId $ capHandle) rb buf 512
     title <- T.pack <$> peekCString buf
     pure (rc, title)
   return (rb, rc, title)
@@ -58,6 +97,7 @@ startCapture capHandle = do
 initialize ::
   forall l hdl.
   (CaptureHandle ~ hdl, HortureLogger (HortureInitializer l hdl)) =>
+  CaptureType ->
   Scene ->
   [(FilePath, Asset)] ->
   [(FilePath, Asset)] ->
@@ -65,11 +105,13 @@ initialize ::
   Maybe (Chan Text) ->
   Chan Event ->
   HortureInitializer l hdl ()
-initialize startScene loadedImages _loadedSounds frameCounter logChan evChan = do
-  capHandle <- grabAnyWindow
+initialize captureType startScene loadedImages _loadedSounds frameCounter logChan evChan = do
+  capHandle <- grabAnyWindow captureType
   glW <- liftIO initGLFW
 
-  (rb, rc, title) <- startCapture capHandle
+  setupWindowOverlay glW
+
+  (rb, rc, title) <- startCapture glW captureType capHandle
   when (rc /= 0) $
     throwError $
       WindowEnvironmentInitializationErr ("c_rb_start failed: " ++ show rc)

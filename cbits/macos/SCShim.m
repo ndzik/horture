@@ -4,6 +4,7 @@
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CoreVideo.h>
 #import <AppKit/AppKit.h>
+#import <Cocoa/Cocoa.h>
 
 static SCStream *gStream = nil;
 static id gOut = nil;
@@ -86,6 +87,35 @@ static int bounds_for_window(uint64_t wid, SCRect* out) {
 
 int sc_get_window_rect(uint64_t wid, SCRect* out) {
   return bounds_for_window(wid, out);
+}
+
+
+int sc_get_display_rect(uint64_t display_id, SCRect* out) {
+  if (!out) return -1;
+
+  CGDirectDisplayID did = (CGDirectDisplayID)display_id;
+
+  // Validate the display id
+  uint32_t cnt = 0;
+  if (CGGetOnlineDisplayList(0, NULL, &cnt) != kCGErrorSuccess) return -2;
+  if (cnt == 0) return -3;
+
+  CGDirectDisplayID list[32];
+  uint32_t n = MIN(cnt, (uint32_t)(sizeof(list)/sizeof(list[0])));
+  if (CGGetOnlineDisplayList(n, list, &cnt) != kCGErrorSuccess) return -4;
+
+  bool found = false;
+  for (uint32_t i = 0; i < cnt; ++i) {
+    if (list[i] == did) { found = true; break; }
+  }
+  if (!found) return -5;
+
+  // Report pixel size; anchor at (0,0) (top-left origin for your API)
+  out->x = 0;
+  out->y = 0;
+  out->w = (int)CGDisplayPixelsWide(did);
+  out->h = (int)CGDisplayPixelsHigh(did);
+  return 0;
 }
 
 @interface _SCOut : NSObject <SCStreamOutput>
@@ -227,6 +257,89 @@ static inline void runOnMainSync(void (^block)(void)) {
   else { dispatch_sync(dispatch_get_main_queue(), block); }
 }
 
+int sc_pick_application(PickCB cb, void *user) {
+  __block int rc = -1;
+
+  runOnMainSync(^{
+    if (NSApp == nil) [NSApplication sharedApplication];
+    [NSApp activateIgnoringOtherApps:YES];
+
+    NSError *err = nil;
+    SCShareableContent *content = fetchContent(&err);
+    if (!content) { rc = -1; return; }
+
+    // Build candidate list (exclude our own process)
+    pid_t selfPid = getpid();
+    NSMutableArray<SCRunningApplication*> *apps = [NSMutableArray array];
+    for (SCRunningApplication *a in content.applications) {
+      if (a.processID == selfPid) continue;
+      // Optional: skip background-only processes
+      if (a.applicationName.length == 0) continue;
+      [apps addObject:a];
+    }
+    if (apps.count == 0) { rc = -1; return; }
+
+    // Sort by app name
+    [apps sortUsingComparator:^NSComparisonResult(SCRunningApplication *a, SCRunningApplication *b) {
+      NSString *an = a.applicationName ?: @"";
+      NSString *bn = b.applicationName ?: @"";
+      return [an caseInsensitiveCompare:bn];
+    }];
+
+    // UI
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"Pick an application to capture";
+    alert.informativeText = @"Fullscreen apps are supported.";
+    [alert addButtonWithTitle:@"Capture"];
+    [alert addButtonWithTitle:@"Cancel"];
+
+    NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0,0,460,26)
+                                                     pullsDown:NO];
+
+    for (SCRunningApplication *a in apps) {
+      NSString *name = a.applicationName ?: @"(Unnamed App)";
+      // Show bundle id as hint if available
+      NSString *hint = a.bundleIdentifier ?: @"";
+      NSString *label = hint.length ? [NSString stringWithFormat:@"%@ — %@", name, hint] : name;
+      [popup addItemWithTitle:label];
+      NSMenuItem *item = popup.lastItem;
+      item.representedObject = @( (uint64_t)a.processID ); // PID as ID
+    }
+
+    NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0,0,480,32)];
+    [container addSubview:popup];
+    alert.accessoryView = container;
+
+    // Make the modal sit on top and visible across Spaces
+    NSWindow *aw = alert.window;
+    aw.level = NSStatusWindowLevel;
+    aw.collectionBehavior |= NSWindowCollectionBehaviorCanJoinAllSpaces;
+    [aw center];
+    [aw makeKeyAndOrderFront:nil];
+    [aw orderFrontRegardless];
+    [NSApp activateIgnoringOtherApps:YES];
+
+    NSModalResponse resp = [alert runModal];
+    if (resp != NSAlertFirstButtonReturn) { rc = -1; return; }
+
+    NSMenuItem *sel = popup.selectedItem;
+    if (!sel || !sel.representedObject) { rc = -1; return; }
+
+    uint64_t pid = [(NSNumber*)sel.representedObject unsignedLongLongValue];
+
+    // Find chosen app to get a stable title (name)
+    SCRunningApplication *chosen = nil;
+    for (SCRunningApplication *a in apps) { if ((uint64_t)a.processID == pid) { chosen = a; break; } }
+    NSString *title = chosen ? (chosen.applicationName ?: @"") : @"";
+    const char *cTitle = title.UTF8String ?: "";
+
+    if (cb) cb(pid, cTitle, user);
+    rc = 0;
+  });
+
+  return rc;
+}
+
 int sc_pick_window(PickCB cb, void *user) {
   __block int rc = -1;
 
@@ -304,6 +417,105 @@ int sc_pick_window(PickCB cb, void *user) {
     const char *cTitle = title.UTF8String ?: "";
 
     if (cb) cb(wid, cTitle, user);
+    rc = 0;
+  });
+
+  return rc;
+}
+
+void setup_overlay(void* nswindow, int passthrough) {
+  NSWindow *w = (__bridge NSWindow *)nswindow;
+  if (!w) return;
+  [w setLevel:NSFloatingWindowLevel];
+  [w setCollectionBehavior:
+     NSWindowCollectionBehaviorCanJoinAllSpaces |
+     NSWindowCollectionBehaviorFullScreenAuxiliary |
+     NSWindowCollectionBehaviorTransient];
+  if (passthrough) [w setIgnoresMouseEvents:YES];
+  [w setHidesOnDeactivate:NO];
+}
+
+
+static NSString* nameForDisplay(CGDirectDisplayID did) {
+  for (NSScreen *s in [NSScreen screens]) {
+    NSNumber *num = s.deviceDescription[@"NSScreenNumber"];
+    if (num && num.unsignedIntValue == did) {
+      if (@available(macOS 10.15, *)) {
+        if ([s respondsToSelector:@selector(localizedName)]) {
+          NSString *n = s.localizedName;
+          if (n.length) return n;
+        }
+      }
+      return @"Display";
+    }
+  }
+  return @"Display";
+}
+
+int sc_pick_display(PickCB cb, void *user) {
+  __block int rc = -1;
+
+  runOnMainSync(^{
+    if (NSApp == nil) [NSApplication sharedApplication];
+    [NSApp activateIgnoringOtherApps:YES];
+
+    NSError *err = nil;
+    SCShareableContent *content = fetchContent(&err);
+    if (!content) { rc = -1; return; }
+
+    NSArray<SCDisplay*> *displays = content.displays;
+    if (displays.count == 0) { rc = -1; return; }
+
+    // Build popup list
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"Pick a display to capture";
+    alert.informativeText = @"Choose one of the available displays.";
+    [alert addButtonWithTitle:@"Capture"];
+    [alert addButtonWithTitle:@"Cancel"];
+
+    NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0,0,480,26)
+                                                     pullsDown:NO];
+
+    for (SCDisplay *d in displays) {
+      CGDirectDisplayID did = d.displayID; // stable numeric id
+      NSString *dispName = nameForDisplay(did);
+      // Include resolution & scale if available
+      CGFloat scale = 1.0;
+      for (NSScreen *s in [NSScreen screens]) {
+        NSNumber *num = s.deviceDescription[@"NSScreenNumber"];
+        if (num && num.unsignedIntValue == did) { scale = s.backingScaleFactor ?: 1.0; break; }
+      }
+      NSString *label = [NSString stringWithFormat:@"%@ — %dx%d @%.1fx",
+                         dispName, (int)d.width, (int)d.height, (double)scale];
+      [popup addItemWithTitle:label];
+      popup.lastItem.representedObject = @((uint64_t)did);
+    }
+
+    NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0,0,500,32)];
+    [container addSubview:popup];
+    alert.accessoryView = container;
+
+    // Show alert above everything (incl. overlay)
+    NSWindow *aw = alert.window;
+    aw.level = NSStatusWindowLevel;
+    aw.collectionBehavior |= NSWindowCollectionBehaviorCanJoinAllSpaces |
+                             NSWindowCollectionBehaviorTransient;
+    [aw center];
+    [aw makeKeyAndOrderFront:nil];
+    [aw orderFrontRegardless];
+    [NSApp activateIgnoringOtherApps:YES];
+
+    NSModalResponse resp = [alert runModal];
+    if (resp != NSAlertFirstButtonReturn) { rc = -1; return; }
+
+    NSMenuItem *sel = popup.selectedItem;
+    if (!sel || !sel.representedObject) { rc = -1; return; }
+
+    uint64_t did = [(NSNumber*)sel.representedObject unsignedLongLongValue];
+    NSString *title = sel.title ?: @"Display";
+    const char *cTitle = title.UTF8String ?: "";
+
+    if (cb) cb(did, cTitle, user);
     rc = 0;
   });
 

@@ -27,6 +27,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Horture.Audio.Player.Player (Sound (GeneratedSound), flashbangPeep)
 import qualified Horture.Backend as Backend
+import Horture.Backend.Types (CaptureType (..))
 import Horture.Behaviour
 import Horture.Effect (Effect (AddScreenBehaviour, AddShaderEffect), ShaderEffect (Flashbang))
 import Horture.Event
@@ -48,17 +49,18 @@ import UnliftIO.Process (CreateProcess (..), ProcessHandle, createProcess, proc)
 
 data ServerCfg = ServerCfg
   { scHost :: String,
-    scPort :: Int
+    scPort :: Int,
+    scCaptureTarget :: CaptureType
   }
 
 instance Default ServerCfg where
-  def = ServerCfg "127.0.0.1" 9198
+  def = ServerCfg "127.0.0.1" 9198 CaptureWindow
 
 enqueue :: Chan CCReply -> CCReply -> IO ()
 enqueue chan msg = writeChan chan msg
 
 startServer :: ServerCfg -> IO ()
-startServer (ServerCfg host port) = do
+startServer (ServerCfg host port captureType) = do
   hortureTID <- myThreadId
   logChan <- newChan @Text
   writerPumpChan <- newChan @CCReply
@@ -72,7 +74,7 @@ startServer (ServerCfg host port) = do
       Left _ -> pure []
       Right pli -> pure pli
   void . forkIO $ runServer fpsTvar evChan writerPumpChan hortureTID logChan mv esEnabled
-  _run fpsTvar evChan logChan mv esEnabled preloadedImages
+  _run captureType fpsTvar evChan logChan mv esEnabled preloadedImages
   where
     runServer fpsTvar evChan writerPumpChan tid logChan mv enabledTvar = do
       let env =
@@ -192,8 +194,8 @@ fpsTicker fpsTVar conn = go 0
       WS.sendTextData conn (encode (RFPS $ fromIntegral fps))
       go currentFrameCount
 
-_run :: TVar Int -> Chan Event -> Chan Text -> MVar Text -> TVar Bool -> [(FilePath, Asset)] -> IO ()
-_run fpsTvar evChan logChan mv enabledTVar preloadedImages = do
+_run :: CaptureType -> TVar Int -> Chan Event -> Chan Text -> MVar Text -> TVar Bool -> [(FilePath, Asset)] -> IO ()
+_run captureType fpsTvar evChan logChan mv enabledTVar preloadedImages = do
   let timeout = round $ (1.0 * 1000.0 * 1000.0 :: Double)
       images = map fst preloadedImages
   esTID <- forkIO $ hortureLocalEventSource timeout evChan images enabledTVar
@@ -205,7 +207,7 @@ _run fpsTvar evChan logChan mv enabledTVar preloadedImages = do
             _hortureInitializerEnvironmentDefaultFont = defaultFont
           }
       startScene = def
-      action = Backend.initialize @'Channel startScene preloadedImages [] fpsTvar (Just logChan) evChan
+      action = Backend.initialize @'Channel captureType startScene preloadedImages [] fpsTvar (Just logChan) evChan
   res <- runHortureInitializer env action
   killThread esTID
   print res

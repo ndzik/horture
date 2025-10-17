@@ -28,6 +28,7 @@ import Data.Text (Text, pack)
 import Graphics.Vty hiding (Event)
 import Graphics.Vty.Platform.Unix (mkVty)
 import Horture.Backend as Backend
+import Horture.Backend.Types (CaptureType (..))
 import Horture.Behaviour (identityDelta)
 import Horture.Command
 import Horture.CommandCenter.Event
@@ -366,7 +367,7 @@ grabHorture = do
             { _screen = def,
               _shaders = []
             }
-        action = Backend.initialize @'Channel startScene pli pls frameCounter (Just logChan) evChan
+        action = Backend.initialize @'Channel CaptureWindow startScene pli pls frameCounter (Just logChan) evChan
     runHortureInitializer env action >>= \case
       Left err -> logError . pack . show $ err
       Right _ -> return ()

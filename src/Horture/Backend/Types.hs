@@ -4,6 +4,7 @@ module Horture.Backend.Types
     Source (..),
     Frame (..),
     Capture (..),
+    CaptureType (..),
   )
 where
 
@@ -34,3 +35,5 @@ data Capture = Capture
   { listWindows :: IO [(WindowId, Text)],
     startStream :: Source -> (Frame -> IO ()) -> IO (IO ()) -- returns a stop action
   }
+
+data CaptureType = CaptureDisplay | CaptureWindow deriving (Show, Eq)

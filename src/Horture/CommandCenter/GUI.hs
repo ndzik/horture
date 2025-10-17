@@ -13,6 +13,7 @@ import Data.List (intersperse)
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
+import Horture.Backend.Types (CaptureType (..))
 import Horture.Effect (ShaderEffect)
 import Horture.Object (BehaviourType, Lifetime (Limited))
 import Horture.Server
@@ -68,7 +69,7 @@ data CCEvent
   | EvAppendLog Text
   | EvConnectionEstablished (Chan CCCommand)
   | EvSetAssets [FilePath]
-  | EvConnectApplication
+  | EvConnectApplication CaptureType
   | EvStartCapture
   | EvCapturedWindow Text
   | EvSendEffect EffectRequest
@@ -138,7 +139,9 @@ buildUI _ m =
       vstack
         [ hstack
             [ spacer,
-              box captureButton,
+              box captureWindowButton,
+              spacer,
+              box captureDisplayButton,
               spacer,
               box toggleEventSourceButton,
               filler,
@@ -259,10 +262,21 @@ buildUI _ m =
           box settingsButton
         ]
 
-    captureButton =
+    captureWindowButton =
       case m ^. mCapturedWin of
         Nothing ->
-          button "Connect" EvConnectApplication
+          button "Connect Window" (EvConnectApplication CaptureWindow)
+            `styleBasic` [textSize 12, width 100, bgColor baseColor, height 32]
+            `styleHover` [bgColor darkColor]
+        Just _ ->
+          button "Disconnect" EvStopCapture
+            `styleBasic` [bgColor softRed, textSize 12, width 100, height 32]
+            `styleHover` [bgColor darkColor]
+
+    captureDisplayButton =
+      case m ^. mCapturedWin of
+        Nothing ->
+          button "Connect Display" (EvConnectApplication CaptureDisplay)
             `styleBasic` [textSize 12, width 100, bgColor baseColor, height 32]
             `styleHover` [bgColor darkColor]
         Just _ ->
@@ -348,7 +362,7 @@ handleEvent _ _ m = \case
   EvSetAssets as -> [Model (m & mAssets .~ as & mSelAsset .~ 0)]
   EvTickFPS fps -> [Model (m & mFPS .~ fps)]
   EvAppendLog t -> [Model (m & mLogLines %~ (\xs -> take 500 (t : xs)))]
-  EvConnectApplication -> [Producer connectCaptureServer]
+  EvConnectApplication ct -> [Producer $ connectCaptureServer ct]
   EvStartCapture -> [Task $ startCapturing (m ^. mConn)]
   EvStopCapture ->
     [ Task (stopCaptureServer $ m ^. mConn),
@@ -390,13 +404,15 @@ stopCaptureServer (Just chan) = do
   writeChan chan CmdStopCapture
   pure (EvAppendLog "Sent stop command to capture server")
 
-connectCaptureServer :: (CCEvent -> IO ()) -> IO ()
-connectCaptureServer sendMsg = do
+connectCaptureServer :: CaptureType -> (CCEvent -> IO ()) -> IO ()
+connectCaptureServer ct sendMsg = do
   exe <- hortureExePath
   void $ stopCaptureServer Nothing
   print $ "Starting capture server: " <> exe
   sendMsg $ EvAppendLog ("Starting capture server...")
-  void $ spawnServerProcess exe ["--server"]
+  case ct of
+    CaptureWindow -> void $ spawnServerProcess exe ["--server", "--capture-target", "window"]
+    CaptureDisplay -> void $ spawnServerProcess exe ["--server", "--capture-target", "display"]
   cmdChan <- newChan
   waitUntilUp 10 >>= \case
     False -> sendMsg (EvAppendLog "Failed to start capture server")

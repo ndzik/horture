@@ -3,9 +3,11 @@
 module Horture.RenderBridge
   ( RB,
     RBFrame (..),
-    c_rb_create,
+    c_rb_create_window,
+    c_rb_create_display,
     c_rb_destroy,
-    c_rb_start,
+    c_rb_start_window,
+    c_rb_start_display,
     c_rb_stop,
     c_rb_poll,
     c_rb_release,
@@ -45,11 +47,15 @@ instance Storable RBFrame where
     where
       ptrSize = sizeOf (nullPtr :: Ptr ())
 
-foreign import ccall safe "rbridge.h rb_create" c_rb_create :: IO (Ptr RB)
+foreign import ccall safe "rbridge.h rb_create_window" c_rb_create_window :: IO (Ptr RB)
+
+foreign import ccall safe "rbridge.h rb_create_display" c_rb_create_display :: IO (Ptr RB)
 
 foreign import ccall safe "rbridge.h rb_destroy" c_rb_destroy :: Ptr RB -> IO ()
 
-foreign import ccall safe "rbridge.h rb_start_capture" c_rb_start :: CULong -> Ptr RB -> CString -> CSize -> IO CInt
+foreign import ccall safe "rbridge.h rb_start_capture_window" c_rb_start_window :: CULong -> Ptr RB -> CString -> CSize -> IO CInt
+
+foreign import ccall safe "rbridge.h rb_start_capture_display" c_rb_start_display :: CULong -> Ptr () -> Ptr RB -> CString -> CSize -> IO CInt
 
 foreign import ccall safe "rbridge.h rb_stop_capture" c_rb_stop :: Ptr RB -> IO ()
 

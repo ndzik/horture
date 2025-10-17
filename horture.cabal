@@ -38,6 +38,7 @@ library horture-lib
     exposed-modules:        Horture
                             , Horture.Authorize
                             , Horture.Backend
+                            , Horture.Backend.Types
                             , Horture.Initializer.Initializer
                             , Horture.Initializer.Environment
                             , Horture.Path
@@ -79,7 +80,6 @@ library horture-lib
 
     -- Modules included in this library but not exported.
     other-modules:          Horture.EventSource.EventSource
-                            , Horture.Backend.Types
                             , Horture.Audio.MacOS
                             , Horture.Audio.Recorder
                             , Horture.Audio.Recorder.Horture
